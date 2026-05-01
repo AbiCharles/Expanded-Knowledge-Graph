@@ -1,0 +1,117 @@
+id: SC-PP-007
+title: "New supplier onboarding"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-ops"
+actor_id: "agent-procurement-51"
+operator_role: { label: "Operator", name: "buyer.kpatel" }
+reviewer_role: { label: "Reviewer", name: "procurement.lead.amorales" }
+autonomous: false
+
+action_type: "onboard_vendor"
+action_payload:
+  vendor_candidate_id: "VC-99812"
+  candidate_name: "Hemlock Precision Castings Ltd"
+  category: "tier1_castings"
+  country: "DE"
+  estimated_annual_spend: "USD 1.2M"
+  requested_by: "agent-procurement-51"
+
+teams_headline: "New vendor onboarding · Hemlock Precision"
+execute_message: >-
+  The agent will begin onboarding for <strong>Hemlock Precision Castings</strong>.
+  Banking, tax, and contracting workflows will start with an initial volume cap of 15% of category.
+
+match_keywords: ["onboard", "supplier", "vendor", "hemlock", "casting", "tier-1", "tier1"]
+interpreted_as: "onboard Hemlock Precision Castings as a tier-1 supplier"
+clarifying_question: >-
+  Just to confirm — onboard <strong>Hemlock Precision Castings Ltd</strong>
+  (DUNS 884-552-119, Germany) as a tier-1 castings supplier for the EU region,
+  with an estimated annual spend of <code>$1.2M</code>.<br><br>
+  Per policy, no agent can autonomously onboard a vendor — this will go to the procurement
+  category manager for approval. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Procurement category manager approved the onboarding.</strong> Hemlock Precision
+    Castings authorized for tier-1 castings (EU). Initial volume cap set at 15% of category.
+    Onboarding workflow continues with banking, tax, and contracting steps.
+  reject: >-
+    <strong>Procurement category manager rejected the onboarding.</strong> Reason given:
+    <em>"{rationale}"</em><br><br>Need to resubmit addressing this concern before re-review.
+  request_more_info: >-
+    <strong>Procurement category manager needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review with these added queries.
+
+rationale_reasons:
+  reject:
+    - "Insufficient capacity assessment for a tier-1 supplier role."
+    - "ESG score is below threshold for new strategic vendors."
+    - "Category gap doesn't justify the single-source onboarding risk."
+  request_more_info:
+    - "Need a manufacturing capability audit from a qualified third party."
+    - "Need reference customer interviews — at least three current accounts."
+    - "Need quality system documentation (ISO 9001 audit report)."
+
+stages:
+  agent_intake:
+    binder: "ProcurementPolicyAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-ONBOARD-2026"
+        uri: "kf.tcs/policy/POL-PP-ONBOARD-2026"
+        title: "Vendor onboarding policy"
+        payload: "All new vendors require human onboarding workflow. No autonomous onboarding by agents."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-procurement-51"
+        uri: "iam.tcs/actors/agent-procurement-51"
+        title: "Actor scope"
+        payload: "Scopes: sourcing.read, sourcing.propose · max_commitment $500k"
+  proposal:
+    binder: "VendorOnboardingProposalBinder/1.0"
+    facts:
+      - source: "external:dnb"
+        ontology_type: "VendorCandidate"
+        id: "VC-99812"
+        uri: "dnb.com/duns/884-552-119"
+        title: "Hemlock Precision Castings Ltd"
+        payload: "DUNS verified · founded 1987 · 240 employees · DE registered · ISO 9001/14001"
+      - source: "external:credit"
+        ontology_type: "FinancialRisk"
+        id: "FR-VC-99812"
+        uri: "creditrisk.tcs/VC-99812"
+        title: "Financial risk score"
+        payload: "Score 78/100 · LOW risk · D&B PAYDEX 79 · current ratio 2.1"
+      - source: "external:esg"
+        ontology_type: "ESGScore"
+        id: "ESG-VC-99812"
+        uri: "esg.tcs/VC-99812"
+        title: "ESG / sustainability"
+        payload: "Score 71/100 · ABOVE threshold · carbon-neutral commitment 2030"
+  review:
+    binder: "VendorOnboardingReviewBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "SOP"
+        id: "SOP-PP-ONBOARD-002"
+        uri: "kf.tcs/sop/SOP-PP-ONBOARD-002"
+        title: "Vendor onboarding SOP"
+        payload: "Verify D&B · Validate ESG · Approve category fit · Set initial volume cap"
+      - source: "erp:vendor_master"
+        ontology_type: "CategoryGap"
+        id: "CG-tier1_castings-EU"
+        uri: "erp.tcs/category-gaps/tier1_castings-EU"
+        title: "Category coverage gap"
+        payload: "EU tier-1 castings: 1 active vendor · sole-source risk identified Q1 2026"
+
+outcomes:
+  approve:
+    headline: "Approved — vendor onboarding authorized"
+    detail: "Procurement category manager approved Hemlock Precision Castings for tier-1 castings (EU). Initial volume cap set at 15% of category. Onboarding workflow continues with banking, tax, and contracting steps."
+  reject:
+    headline: "Rejected — onboarding declined"
+    detail: "Onboarding denied. Reviewer flagged insufficient capacity assessment; agent must resubmit with manufacturing capability audit before re-review."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requested manufacturing capability audit and reference customer interviews before proceeding. ReviewBinder will re-run with additional queries; case loops back to review."

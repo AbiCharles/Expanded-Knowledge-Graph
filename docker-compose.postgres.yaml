@@ -1,0 +1,23 @@
+# Optional local Postgres for testing the postgres connector.
+#
+#   docker compose -f docker-compose.postgres.yaml up -d
+#   psql "postgresql://hitl:hitl@localhost:5432/governance" -f backend/data/seed_postgres.sql
+#
+# Then in the UI's Data sources modal, add a postgres source with DSN:
+#   postgresql://hitl:hitl@localhost:5432/governance
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hitl-postgres
+    environment:
+      POSTGRES_USER: hitl
+      POSTGRES_PASSWORD: hitl
+      POSTGRES_DB: governance
+    ports:
+      - "5432:5432"
+    volumes:
+      - hitl-pg-data:/var/lib/postgresql/data
+
+volumes:
+  hitl-pg-data:

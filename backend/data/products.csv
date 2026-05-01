@@ -1,0 +1,16 @@
+product_id,name,eccn,hts,description,category,unit_cost
+P-EL-9001,Encryption Module Mk II,5A002,8517.62.00,Hardware AES-256 encryption module with FIPS 140-3 cert,electronics,2150
+P-EL-9002,Optical Transceiver 400G,EAR99,8517.70.00,400G QSFP-DD pluggable optical transceiver,electronics,1840
+P-EL-9003,FPGA Dev Board,3A001,8542.39.00,Xilinx Versal AI development platform,electronics,4275
+P-CH-2210,Capacitor 4.7uF,EAR99,8532.24.00,Ceramic SMD capacitor 4.7uF 25V X7R,passives,0.04
+P-CH-2211,Capacitor 10uF,EAR99,8532.24.00,Ceramic SMD capacitor 10uF 25V X7R,passives,0.06
+P-MC-7100,Tier-1 cast housing,EAR99,8487.90.00,Aluminium die-cast enclosure 200x150x80mm,castings,42
+P-MC-7101,Tier-1 cast bracket,EAR99,8302.49.60,Steel investment cast bracket,castings,18
+P-MC-7102,Hydraulic manifold,EAR99,8487.90.00,Multi-port aluminium hydraulic manifold,castings,310
+P-SW-3001,Embedded Linux OS,EAR99,4901.10.00,Custom embedded Linux distribution license,software,0
+P-SW-3002,Cybersecurity SDK,5D002,4901.10.00,Cryptographic SDK for embedded systems,software,0
+P-PK-4500,Industrial robotic arm,2B001,8479.50.00,6-axis industrial robotic arm 25kg payload,machinery,42500
+P-PK-4501,CNC milling head,2B001,8459.61.00,5-axis CNC milling head with auto tool change,machinery,68000
+P-PW-1801,Lithium battery pack,EAR99,8507.60.00,Lithium-ion battery pack 48V 100Ah,power,1290
+P-PW-1802,Solar panel module,EAR99,8541.43.00,Monocrystalline silicon PV module 450W,power,178
+P-SN-5001,Industrial IoT gateway,5A992,8517.62.00,Edge gateway with cellular + LoRaWAN,sensors,690

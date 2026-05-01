@@ -1,0 +1,58 @@
+sources:
+- id: products_csv
+  kind: csv
+  path: backend/data/products.csv
+  ontology_type: Product
+  id_field: product_id
+  title_field: name
+  summary_template: "ECCN {eccn} \xB7 HTS {hts} \xB7 {description}"
+  default: true
+  description: Sample product master data (15 rows incl. P-EL-9001 encryption module)
+- id: sanctions_csv
+  kind: csv
+  path: backend/data/sanctions_sdn_sample.csv
+  ontology_type: SanctionedEntity
+  id_field: ent_id
+  title_field: name
+  summary_template: "{programs} \xB7 {sdn_type} \xB7 {country} \xB7 added {first_seen}"
+  default: true
+  description: Synthetic OFAC-style SDN list (~30 entries, schema-compatible with
+    the real feed)
+- id: governance_sqlite
+  kind: sqlite
+  path: backend/data/governance.sqlite
+  queries:
+    PriorOverride: "SELECT case_id AS id,\n       'Prior case ' || case_id AS title,\n\
+      \       outcome || ' \u2014 ' || rationale || ' (decided by ' || decided_by\
+      \ || ' on ' || decided_at || ')' AS summary\nFROM prior_cases\nWHERE scenario_id\
+      \ = :scenario_id\nORDER BY decided_at DESC\nLIMIT :max_results\n"
+  sample_filter:
+    scenario_id: SC-TC-007
+  default: true
+  description: 'Governance audit store: prior reviewer decisions, indexed by scenario_id'
+- id: public_jsonplaceholder
+  kind: http
+  base_url: https://jsonplaceholder.typicode.com
+  paths:
+    DemoPost: /posts/{id}
+  default: true
+  description: "Public test API (https://jsonplaceholder.typicode.com) \u2014 confirms\
+    \ HTTP connector works without keys"
+- id: policy_corpus
+  kind: vector_store
+  folder: backend/data/policy_corpus/
+  index_path: backend/data/policy_corpus.npz
+  ontology_type: PolicyExcerpt
+  top_k: 3
+  embed_model: text-embedding-3-small
+  default: true
+  description: Vector store over 5 policy/SOP markdown excerpts; semantic retrieval
+    via OpenAI embeddings
+- id: outcome_stats
+  kind: sqlite
+  path: backend/data/governance.sqlite
+  queries:
+    OutcomeStat: 'SELECT outcome AS id, outcome AS title, COUNT(*) AS summary FROM
+      prior_cases GROUP BY outcome LIMIT :max_results
+
+      '

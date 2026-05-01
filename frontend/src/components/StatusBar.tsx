@@ -1,0 +1,73 @@
+import { CaseFull } from "../types";
+
+interface Props {
+  active: CaseFull | null;
+  role: "operator" | "reviewer";
+  onOpenDataSources: () => void;
+}
+
+export function StatusBar({ active, role, onOpenDataSources }: Props) {
+  let stage = "Idle";
+  if (active) {
+    if (active.phase === "awaiting_clarification") stage = "Clarifying";
+    else if (active.phase === "binding") stage = "Binding";
+    else if (active.phase === "review_ready") stage = "Awaiting Review";
+    else if (active.phase === "reviewing") stage = "Deciding";
+    else if (active.phase === "complete") {
+      if (active.decision_kind === "approve") stage = "Executed";
+      else if (active.decision_kind === "reject") stage = "Aborted";
+      else if (active.decision_kind === "request_more_info") stage = "Loop";
+      else if (active.decision_kind === "auto_execute") stage = "Auto-executed";
+    }
+  }
+
+  const operator = active?.scenario?.operator_role;
+  const reviewer = active?.scenario?.reviewer_role;
+  const pillRole = role === "reviewer" ? reviewer : operator;
+  const ticketDisplay = active && active.lineage.find((l) => l.action === "submitted")?.detail || "—";
+
+  return (
+    <div className="statusbar">
+      <div className="brand">
+        <div className="brand-mark">
+          <em>tcs</em>agentic<em>·</em>hitl
+        </div>
+        <div className="brand-tag">Knowledge Context Framework</div>
+      </div>
+
+      <div className="status-meta">
+        <div className="field">
+          <div className="label">Case</div>
+          <div className="value">{active ? active.case_id : "—"}</div>
+        </div>
+        <div className="field">
+          <div className="label">Stage</div>
+          <div className="value live">{stage}</div>
+        </div>
+        <div className="field">
+          <div className="label">Transport</div>
+          <div className="value">async</div>
+        </div>
+        <div className="field">
+          <div className="label">Ticket</div>
+          <div className="value dim">
+            {(ticketDisplay && ticketDisplay.match(/async-[a-f0-9]+/)?.[0]) || "—"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <button className="statusbar-action" onClick={onOpenDataSources}>
+          Data sources
+        </button>
+        <div className={`role-pill${role === "reviewer" ? " reviewer" : ""}`}>
+          <div className="role-dot" />
+          <div className="role-text">
+            <div className="role-label">{pillRole?.label || "Operator"}</div>
+            <div className="role-name">{pillRole?.name || "planner.tgupta"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

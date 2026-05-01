@@ -1,0 +1,55 @@
+%%{init: {'theme':'base','themeVariables':{
+  'primaryColor':'#1F3864','primaryTextColor':'#FFFFFF','primaryBorderColor':'#1F3864',
+  'lineColor':'#2E75B6','secondaryColor':'#D5E8F0','tertiaryColor':'#F4F8FB',
+  'fontFamily':'Arial','fontSize':'14px'
+}}}%%
+flowchart LR
+    subgraph KF["Knowledge sources"]
+        KFG["KF Knowledge Graph"]
+        KFO["KF Ontology"]
+        MD["Master & reference data<br/>(ERP / Contracts / IAM)"]
+        GH["Governance history<br/>(prior decisions, guardrail results)"]
+    end
+
+    subgraph FLOW["HITL flow (Kevin's diagram)"]
+        direction LR
+        A((Agent)) --> P[Proposes Action]
+        P --> R{HITL Review}
+        R -->|Approve| EX[Agent Executes]
+        R -->|Reject| AB[Agent Aborts]
+    end
+
+    subgraph CTX["KnowledgeContext envelope"]
+        direction TB
+        S1["StageContext: agent_intake<br/>policy, actor scope"]
+        S2["StageContext: proposal<br/>action-bound facts"]
+        S3["StageContext: review<br/>SOPs, prior cases, guardrail evidence"]
+        S4["LineageEvents (append-only)"]
+    end
+
+    KF -.->|resolve| RES[KnowledgeResolver]
+    RES -.->|bind| AB1[AgentIntakeBinder]
+    RES -.->|bind| PB[ProposalBinder]
+    RES -.->|bind| RB[ReviewBinder]
+
+    AB1 --> S1
+    PB --> S2
+    RB --> S3
+
+    S1 -.feeds.-> A
+    S2 -.feeds.-> P
+    S3 -.feeds.-> R
+
+    R -->|decision + rationale| DEC[ReviewDecision]
+    DEC -.appended.-> S4
+    A & P & R & EX & AB -.events.-> S4
+
+    classDef src fill:#D5E8F0,stroke:#1F3864,color:#1F3864
+    classDef stage fill:#F4F8FB,stroke:#2E75B6,color:#1F3864
+    classDef flow fill:#1F3864,stroke:#1F3864,color:#FFFFFF
+    classDef ctx fill:#FFFFFF,stroke:#2E75B6,color:#1F3864,stroke-dasharray:4 2
+
+    class KFG,KFO,MD,GH src
+    class A,P,R,EX,AB flow
+    class RES,AB1,PB,RB stage
+    class S1,S2,S3,S4 ctx

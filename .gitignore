@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Generated caches (vector embeddings, operator uploads)
+backend/data/*.npz
+backend/data/uploads/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp

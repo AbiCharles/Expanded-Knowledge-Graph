@@ -1,0 +1,70 @@
+id: SC-LN-STATUS-009
+title: "Shipment status lookup"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "shipment_status_lookup"
+action_payload:
+  shipment_id: "S-700499"
+  query_type: "live_status"
+  scope: "logistics.read"
+
+match_keywords: ["eta", "status", "where is", "track", "shipment status", "current status", "s-700499", "look up"]
+interpreted_as: "look up the current status and ETA on shipment S-700499"
+clarifying_question: >-
+  Just to confirm — you want the current status and ETA on shipment <code>S-700499</code>
+  (Singapore → Rotterdam, 8 pallets).<br><br>
+  This is a read-only query within my <code>logistics.read</code> scope; per policy
+  <code>GR-LN-AUTO-001</code>, no human review is required. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-001"
+auto_approval_reason: "Read-only logistics query within agent scope. Policy GR-LN-AUTO-001 permits autonomous status checks."
+closing_message: >-
+  Done — the status query was auto-approved by <code>GR-LN-AUTO-001</code> (read-only within
+  my scope).<br><br><strong>Shipment S-700499</strong>: ETA now <strong>Apr 30</strong>
+  (was Apr 28). Vessel MV NORDIC CRYSTAL · 12 nm off Rotterdam · port congestion LOW. No action required.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-READONLY-2026"
+        uri: "kf.tcs/policy/POL-LN-READONLY-2026"
+        title: "Read-only logistics policy"
+        payload: "Read-only queries (status, ETA, lane data) are autonomous within logistics.read scope. No human review required."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this query: logistics.read only"
+  proposal:
+    binder: "ShipmentLookupProposalBinder/1.0"
+    facts:
+      - source: "tms:shipments"
+        ontology_type: "Shipment"
+        id: "S-700499"
+        uri: "tms.tcs/shipments/S-700499"
+        title: "Shipment record"
+        payload: "Origin Singapore · Dest Rotterdam · 8 pallets · cust order #ORD-44291 · ocean booking"
+      - source: "tms:tracking"
+        ontology_type: "LiveTrack"
+        id: "TRK-S-700499"
+        uri: "tms.tcs/tracking/TRK-S-700499"
+        title: "Live tracking"
+        payload: "Vessel MV NORDIC CRYSTAL · IMO 9876123 · current position 12 nm off Rotterdam · ETA Apr 30 04:00 UTC"
+      - source: "tms:port_status"
+        ontology_type: "PortCongestion"
+        id: "PORT-NLRTM-2026-0501"
+        uri: "tms.tcs/ports/NLRTM"
+        title: "Rotterdam congestion"
+        payload: "Berth wait 0.4d · congestion LOW · operations normal"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — status retrieved"
+    detail: "ETA confirmed as Apr 30 (was Apr 28). Vessel MV NORDIC CRYSTAL is 12 nm off Rotterdam · port congestion LOW. No action required."

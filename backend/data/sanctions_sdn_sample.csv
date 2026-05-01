@@ -1,0 +1,31 @@
+ent_id,name,sdn_type,programs,country,address,first_seen,reason
+SDN-9001,Sanctioned Pharma Holdings,entity,IRAN-EO13599,IR,Tehran,2024-03-12,OFAC SDN listing for Iran sanctions
+SDN-9002,Volga Maritime LLC,entity,RUSSIA-EO14024,RU,Saint Petersburg,2024-04-08,Russia maritime sanctions
+SDN-9003,Eastland Trading Co,entity,DPRK,KP,Pyongyang,2023-11-15,DPRK proliferation network
+SDN-9004,Crimson Light Industries,entity,SDGT,SY,Damascus,2024-01-22,Specially Designated Global Terrorist
+SDN-9005,Nordstar Aviation FZE,entity,RUSSIA-EO14024,AE,Dubai,2024-05-30,Russia aviation sanctions
+SDN-9006,Caspian Petrochem,entity,IRAN,IR,Bandar Abbas,2024-02-18,Iranian petroleum sector
+SDN-9007,Black Sea Shipping Group,entity,RUSSIA-EO14024,RU,Sochi,2024-06-11,Russian shipping
+SDN-9008,Lotus Bank Cyprus Branch,entity,RUSSIA-EO14024,CY,Limassol,2024-07-22,Russian financial network
+SDN-9009,Oryx Tech Solutions,entity,IRAN,AE,Sharjah,2024-08-04,Iranian procurement front
+SDN-9010,Hera Logistics S.A.,entity,VENEZUELA,PA,Panama City,2024-09-15,PEP-related shell company
+SDN-9011,Ahmadi Babak,individual,IRAN,IR,Tehran,2024-03-12,Director of Sanctioned Pharma Holdings
+SDN-9012,Kuznetsov Oleg,individual,RUSSIA-EO14024,RU,Moscow,2024-04-09,Owner of Volga Maritime LLC
+SDN-9013,Park Ji-young,individual,DPRK,KP,Pyongyang,2023-11-15,DPRK procurement officer
+SDN-9014,Al-Hassan Rami,individual,SDGT,SY,Aleppo,2024-01-22,SDGT-listed individual
+SDN-9015,Karimov Sergei,individual,RUSSIA-EO14024,RU,Vladivostok,2024-06-12,Sanctioned shipping executive
+SDN-9016,Pyramid Trading FZE,entity,IRAN,AE,Dubai,2024-10-02,Iranian sanctions evasion
+SDN-9017,Atlas Construction LLC,entity,SYRIA,SY,Latakia,2024-09-28,Syrian regime-linked entity
+SDN-9018,Northern Star Cargo,entity,DPRK,RU,Vladivostok,2024-08-19,DPRK cargo network
+SDN-9019,GreenMile Holdings,entity,VENEZUELA,VE,Caracas,2024-07-04,Sanctioned holding company
+SDN-9020,Ferrum Steel Trading,entity,RUSSIA-EO14024,KZ,Almaty,2024-11-15,Sanctions evasion routing
+SDN-9021,Mehrabi Reza,individual,IRAN,IR,Isfahan,2024-09-30,Iranian missile program
+SDN-9022,Solntsev Vadim,individual,RUSSIA-EO14024,RU,Saint Petersburg,2024-10-15,Russian oligarch
+SDN-9023,Chen Wei,individual,DPRK,CN,Dandong,2024-04-22,DPRK financial facilitator
+SDN-9024,Hassani Maryam,individual,IRAN,DE,Berlin,2024-12-01,Iranian dual-use procurement
+SDN-9025,Albatross Charters,entity,RUSSIA-EO14024,RU,Sochi,2024-12-18,Russian aviation charters
+SDN-9026,Gold Coast Brokers,entity,VENEZUELA,DO,Santo Domingo,2024-11-28,Venezuela oil-for-cash
+SDN-9027,Sapphire Marine Services,entity,IRAN,OM,Muscat,2025-01-10,Iranian oil tanker servicing
+SDN-9028,Vega Industrial,entity,RUSSIA-EO14024,UZ,Tashkent,2025-01-22,Russian dual-use rerouting
+SDN-9029,Neptune Shipping JSC,entity,DPRK,KP,Wonsan,2024-06-30,DPRK ship-to-ship transfers
+SDN-9030,Saharan Mining Corp,entity,SUDAN,SD,Khartoum,2025-02-08,Sudan-related sanctions

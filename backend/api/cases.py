@@ -1,0 +1,345 @@
+"""Case lifecycle endpoints."""
+from __future__ import annotations
+
+import asyncio
+import json
+import uuid
+from typing import Any, Optional
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
+
+from .. import orchestrator
+from ..state import AppState, CaseRecord
+
+router = APIRouter(tags=["cases"])
+
+
+# =============================================================================
+# Request / response shapes
+# =============================================================================
+class CreateCaseIn(BaseModel):
+    prompt: str
+
+
+class CandidateOut(BaseModel):
+    scenario_id: str
+    title: str
+    confidence: float
+
+
+class CreateCaseOut(BaseModel):
+    case_id: str
+    scenario_id: Optional[str]
+    interpreted_as: str
+    clarifying_question: str
+    confidence: float
+    candidates: list[CandidateOut] = []
+
+
+class ReplayIn(BaseModel):
+    decision: str  # "approve" | "reject" | "request_more_info"
+
+
+class RelinkIn(BaseModel):
+    scenario_id: str
+
+
+# =============================================================================
+# Routes
+# =============================================================================
+@router.post("/cases", response_model=CreateCaseOut)
+async def create_case(payload: CreateCaseIn, request: Request) -> CreateCaseOut:
+    """Operator typed a prompt. Run LLM classification, return clarifier."""
+    state: AppState = request.app.state.app_state
+    interpreted = await state.agent_runtime.interpret_prompt(payload.prompt)
+
+    case_id = f"case-{uuid.uuid4().hex[:10]}"
+    candidates_payload = [c.model_dump() for c in interpreted.candidates]
+    # phase: we keep "awaiting_clarification" as long as we have at least one
+    # candidate to suggest — the UI shows top-K buttons when confidence is low.
+    has_candidates = bool(interpreted.scenario_id) or bool(candidates_payload)
+    record = CaseRecord(
+        case_id=case_id,
+        prompt=payload.prompt,
+        scenario_id=interpreted.scenario_id,
+        interpreted_as=interpreted.interpreted_as,
+        clarifying_question=interpreted.clarifying_question,
+        confidence=interpreted.confidence,
+        candidates=candidates_payload,
+        phase="awaiting_clarification" if has_candidates else "cancelled",
+    )
+    state.cases[case_id] = record
+    return CreateCaseOut(
+        case_id=case_id,
+        scenario_id=interpreted.scenario_id,
+        interpreted_as=interpreted.interpreted_as,
+        clarifying_question=interpreted.clarifying_question,
+        confidence=interpreted.confidence,
+        candidates=[CandidateOut(**c) for c in candidates_payload],
+    )
+
+
+@router.post("/cases/{case_id}/confirm")
+async def confirm_case(case_id: str, request: Request) -> dict:
+    """Operator confirmed; kick off the full pipeline as a background task."""
+    state: AppState = request.app.state.app_state
+    case = state.cases.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    if case.phase != "awaiting_clarification":
+        raise HTTPException(status_code=409, detail=f"case is in phase {case.phase!r}")
+    asyncio.create_task(orchestrator.run_case(state, case))
+    return {"case_id": case_id, "phase": case.phase}
+
+
+@router.post("/cases/{case_id}/relink")
+async def relink_case(case_id: str, payload: RelinkIn, request: Request) -> dict:
+    """Re-link a case to a different scenario the operator picked from top-K.
+
+    Only allowed in `awaiting_clarification` — once binding starts, the case
+    is committed. Updates interpreted_as / clarifying_question to reflect the
+    new scenario's defaults.
+    """
+    state: AppState = request.app.state.app_state
+    case = state.cases.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    if case.phase != "awaiting_clarification":
+        raise HTTPException(status_code=409, detail=f"case is in phase {case.phase!r}")
+    sc = state.scenarios.get(payload.scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="unknown scenario_id")
+    case.scenario_id = sc["id"]
+    case.interpreted_as = sc.get("interpreted_as", "")
+    case.clarifying_question = sc.get("clarifying_question", "")
+    return {
+        "case_id": case_id,
+        "scenario_id": case.scenario_id,
+        "interpreted_as": case.interpreted_as,
+        "clarifying_question": case.clarifying_question,
+    }
+
+
+@router.delete("/cases/{case_id}")
+async def delete_case(case_id: str, request: Request) -> dict:
+    """Permanently remove a case from memory.
+
+    If the case has a pending review ticket, cancel it first.
+    Sibling references on other cases are cleaned up.
+    """
+    state: AppState = request.app.state.app_state
+    case = state.cases.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    # Cancel any open ticket so transport state stays consistent
+    if case.ticket_id and case.phase in ("review_ready", "reviewing"):
+        try:
+            state.transport.cancel(case.ticket_id, reason="case deleted")
+        except Exception:
+            pass
+        if case.decision_event is not None and not case.decision_event.is_set():
+            case.decision_event.set()
+    # Close the SSE stream if still open
+    try:
+        await state.bus.close(case_id)
+    except Exception:
+        pass
+    # Clean sibling references on other cases
+    for other in state.cases.values():
+        other.sibling_case_ids = [s for s in other.sibling_case_ids if s != case_id]
+    state.cases.pop(case_id, None)
+    return {"case_id": case_id, "deleted": True}
+
+
+@router.delete("/cases")
+async def delete_completed_cases(request: Request, phase: str = "complete") -> dict:
+    """Bulk-clear cases by phase. Default removes all completed cases."""
+    state: AppState = request.app.state.app_state
+    valid_phases = {"complete", "cancelled"}
+    if phase not in valid_phases:
+        raise HTTPException(
+            status_code=400,
+            detail=f"phase must be one of {sorted(valid_phases)} (got {phase!r})",
+        )
+    to_remove = [c.case_id for c in state.cases.values() if c.phase == phase]
+    for cid in to_remove:
+        # Reuse the per-case path so sibling cleanup + SSE closure stay consistent
+        await delete_case(cid, request)
+    return {"phase": phase, "removed": to_remove, "count": len(to_remove)}
+
+
+@router.post("/cases/{case_id}/cancel")
+async def cancel_case(case_id: str, request: Request) -> dict:
+    state: AppState = request.app.state.app_state
+    case = state.cases.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    case.phase = "cancelled"
+    await state.bus.close(case_id)
+    return {"case_id": case_id, "phase": case.phase}
+
+
+@router.post("/cases/{case_id}/replay")
+async def replay_case(case_id: str, payload: ReplayIn, request: Request) -> dict:
+    """Start a sibling case that runs the same scenario but with a forced
+    reviewer decision."""
+    state: AppState = request.app.state.app_state
+    original = state.cases.get(case_id)
+    if original is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    if original.scenario_id is None:
+        raise HTTPException(status_code=400, detail="original case has no scenario")
+    if payload.decision not in ("approve", "reject", "request_more_info"):
+        raise HTTPException(status_code=400, detail="invalid decision")
+
+    new_id = f"case-{uuid.uuid4().hex[:10]}"
+    new_case = CaseRecord(
+        case_id=new_id,
+        prompt=original.prompt,
+        scenario_id=original.scenario_id,
+        interpreted_as=original.interpreted_as,
+        clarifying_question=None,
+        phase="binding",
+        sibling_case_ids=[case_id, *original.sibling_case_ids],
+        replay_decision=payload.decision,
+    )
+    state.cases[new_id] = new_case
+
+    # Wire siblings on related cases
+    for cid in new_case.sibling_case_ids:
+        c = state.cases.get(cid)
+        if c is not None and new_id not in c.sibling_case_ids:
+            c.sibling_case_ids.append(new_id)
+
+    # Auto-confirm — replays don't show the clarifying step
+    asyncio.create_task(orchestrator.run_case(state, new_case))
+    asyncio.create_task(_auto_decide_replay(state, new_case))
+    return {"case_id": new_id, "scenario_id": new_case.scenario_id}
+
+
+async def _auto_decide_replay(state: AppState, case: CaseRecord) -> None:
+    """For replays: wait until the case reaches review_ready, then file the
+    forced decision automatically. Picks the first quick-pick reason from the
+    scenario YAML so the timing matches the original case as closely as
+    possible."""
+    while case.phase not in ("review_ready", "complete", "cancelled"):
+        await asyncio.sleep(0.1)
+    if case.phase != "review_ready" or not case.replay_decision:
+        return
+    scenario = state.scenarios.require(case.scenario_id)  # type: ignore[arg-type]
+
+    rationale = ""
+    if case.replay_decision != "approve":
+        reasons = scenario.get("rationale_reasons", {}).get(case.replay_decision, [])
+        rationale = reasons[0] if reasons else f"Replay rationale ({case.replay_decision})."
+
+    # Reuse the decision-recording path
+    from .decisions import record_decision_internal
+    await record_decision_internal(
+        state=state,
+        case=case,
+        decision=case.replay_decision,
+        reviewer_id=scenario.get("reviewer_role", {}).get("name", "replay-reviewer"),
+        rationale=rationale or "",
+        follow_up=None,
+    )
+
+
+@router.get("/cases")
+async def list_cases(request: Request) -> list[dict]:
+    state: AppState = request.app.state.app_state
+    rows: list[dict] = []
+    for c in state.cases.values():
+        rows.append(_case_summary(c))
+    return rows
+
+
+@router.get("/cases/{case_id}")
+async def get_case(case_id: str, request: Request) -> dict:
+    state: AppState = request.app.state.app_state
+    case = state.cases.get(case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="case not found")
+    return _case_full(state, case)
+
+
+@router.get("/cases/{case_id}/events")
+async def case_events(case_id: str, request: Request):
+    """SSE stream of events for one case."""
+    state: AppState = request.app.state.app_state
+    if case_id not in state.cases:
+        raise HTTPException(status_code=404, detail="case not found")
+
+    async def event_generator():
+        async for event in state.bus.stream(case_id):
+            if await request.is_disconnected():
+                break
+            yield {"event": event.kind, "data": json.dumps(event.data, default=str)}
+
+    return EventSourceResponse(event_generator())
+
+
+# =============================================================================
+# Serializers
+# =============================================================================
+def _case_summary(c: CaseRecord) -> dict:
+    return {
+        "case_id": c.case_id,
+        "prompt": c.prompt,
+        "scenario_id": c.scenario_id,
+        "phase": c.phase,
+        "decision_kind": c.decision_kind,
+        "interpreted_as": c.interpreted_as,
+        "clarifying_question": c.clarifying_question,
+        "confidence": c.confidence,
+        "candidates": c.candidates,
+        "sibling_case_ids": c.sibling_case_ids,
+        "replay_decision": c.replay_decision,
+    }
+
+
+def _case_full(state: AppState, c: CaseRecord) -> dict:
+    out = _case_summary(c)
+    out["stages"] = []
+    out["lineage"] = []
+    out["closing_message"] = c.closing_message
+    scenario = state.scenarios.get(c.scenario_id) if c.scenario_id else None
+    if scenario:
+        out["scenario"] = {
+            "id": scenario["id"],
+            "title": scenario["title"],
+            "domain": scenario["domain"],
+            "autonomous": bool(scenario.get("autonomous")),
+            "operator_role": scenario.get("operator_role"),
+            "reviewer_role": scenario.get("reviewer_role"),
+            "teams_channel": scenario.get("teams_channel"),
+            "teams_headline": scenario.get("teams_headline"),
+            "execute_message": scenario.get("execute_message"),
+            "rationale_reasons": scenario.get("rationale_reasons", {}),
+            "outcomes": scenario.get("outcomes", {}),
+            "auto_approval_guardrail": scenario.get("auto_approval_guardrail"),
+            "auto_approval_reason": scenario.get("auto_approval_reason"),
+        }
+    if c.ctx is not None:
+        out["stages"] = [
+            {
+                "stage": stage.value,
+                "binder": sc.bound_by,
+                "facts": [
+                    {
+                        "source": f.ref.source,
+                        "ontology_type": f.ref.ontology_type,
+                        "id": f.ref.id,
+                        "uri": f.ref.uri,
+                        "title": f.payload.get("title"),
+                        "summary": f.payload.get("summary"),
+                    }
+                    for f in sc.facts
+                ],
+            }
+            for stage, sc in c.ctx.stages.items()
+        ]
+        out["lineage"] = [ev.model_dump(mode="json") for ev in c.ctx.lineage]
+    return out

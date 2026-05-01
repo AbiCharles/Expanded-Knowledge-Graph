@@ -1,0 +1,73 @@
+id: SC-PP-AUTO-014
+title: "Reorder point adjustment — within autonomous envelope"
+domain: "Planning & Procurement"
+autonomous: true
+actor_id: "agent-procurement-51"
+operator_role: { label: "Operator", name: "buyer.kpatel" }
+
+action_type: "set_reorder_point"
+action_payload:
+  sku_id: "SKU-EL-2210"
+  reorder_point_old: 150
+  reorder_point_new: 200
+  delta_pct: 33.3
+  scope: "sourcing.update_params"
+
+match_keywords: ["reorder point", "reorder", "min stock", "reorder threshold", "sku-el-2210", "set reorder", "rop"]
+interpreted_as: "update the reorder point on SKU-EL-2210 to 200 units"
+clarifying_question: >-
+  Just to confirm — set the reorder point for <code>SKU-EL-2210</code> (capacitor, 4.7µF)
+  from <strong>150</strong> to <strong>200</strong> units (+33%).<br><br>
+  This is within my autonomous parameter range (≤ ±50%); per policy <code>GR-PP-AUTO-002</code>,
+  no human review is required. Proceed?
+
+auto_approval_guardrail: "GR-PP-AUTO-002"
+auto_approval_reason: "Parameter change 150→200 (+33%) within ±50% autonomous envelope. Policy GR-PP-AUTO-002 permits autonomous reorder-point adjustments below the threshold."
+closing_message: >-
+  Done — reorder point on <strong>SKU-EL-2210</strong> updated from
+  <strong>150 → 200 units</strong>.<br><br>The change was auto-approved by
+  <code>GR-PP-AUTO-002</code> (within ±50% envelope). Next purchase trigger fires when on-hand
+  inventory drops below 200.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-AUTO-PARAMS-2026"
+        uri: "kf.tcs/policy/POL-PP-AUTO-PARAMS-2026"
+        title: "Autonomous parameter envelope"
+        payload: "Reorder point, safety stock, and lot-size adjustments within ±50% of current value are autonomous. Larger changes require human review."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-procurement-51"
+        uri: "iam.tcs/actors/agent-procurement-51"
+        title: "Actor scope"
+        payload: "Scopes: sourcing.read, sourcing.propose, sourcing.update_params · this action: sourcing.update_params"
+  proposal:
+    binder: "ReorderPointProposalBinder/1.0"
+    facts:
+      - source: "erp:item_master"
+        ontology_type: "SKU"
+        id: "SKU-EL-2210"
+        uri: "erp.tcs/items/SKU-EL-2210"
+        title: "SKU master"
+        payload: "Capacitor 4.7µF · category passives · current reorder point 150 · safety stock 80 · lead time 21d"
+      - source: "planning:demand"
+        ontology_type: "DemandHistory"
+        id: "DH-SKU-EL-2210-Q1"
+        uri: "planning.tcs/demand/SKU-EL-2210"
+        title: "Recent demand"
+        payload: "Q1 2026 average 9.4/day · trending up · forecast Q2 11.2/day · 21d lead → buffer should be ≥235"
+      - source: "governance:guardrail_results"
+        ontology_type: "GuardrailResult"
+        id: "GR-PP-AUTO-002-CHK"
+        uri: "governance.tcs/results/GR-PP-AUTO-002-CHK"
+        title: "GR-PP-AUTO-002 evaluation"
+        payload: "PASS · delta 33.3% within ±50% envelope · scope sourcing.update_params confirmed · proceed autonomously"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — reorder point updated"
+    detail: "SKU-EL-2210 reorder point: 150 → 200 units. The next purchase trigger will fire when on-hand inventory drops below 200."
