@@ -16,6 +16,7 @@ from .api.cases import router as cases_router
 from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
+from .api.metrics import router as metrics_router
 from .api.scenarios import router as scenarios_router
 from .auth import ensure_default_admin
 from .config import get_settings
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(scenarios_router, prefix="/api")
     app.include_router(datasources_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")
+    app.include_router(metrics_router, prefix="/api")
 
     @app.get("/api/health")
     def health():

@@ -6,6 +6,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
 import { LineagePanel } from "./components/LineagePanel";
 import { DataSourcesModal } from "./components/DataSourcesModal";
+import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
 import {
@@ -28,7 +29,8 @@ type ModalState =
   | { kind: "compare"; cases: [CaseFull, CaseFull] }
   | { kind: "datasources" }
   | { kind: "scenarios-help" }
-  | { kind: "edit-scenario"; scenarioId: string };
+  | { kind: "edit-scenario"; scenarioId: string }
+  | { kind: "metrics" };
 
 export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioRow[]>([]);
@@ -255,6 +257,7 @@ export default function App() {
         onLogout={onLogout}
         onOpenDataSources={() => setModal({ kind: "datasources" })}
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
+        onOpenMetrics={() => setModal({ kind: "metrics" })}
       />
       <div className="main">
         <Console
@@ -309,6 +312,9 @@ export default function App() {
           onClose={() => setModal({ kind: "none" })}
           onSaved={() => api.listScenarios().then(setScenarios).catch(console.error)}
         />
+      )}
+      {modal.kind === "metrics" && (
+        <MetricsDashboard onClose={() => setModal({ kind: "none" })} />
       )}
     </>
   );

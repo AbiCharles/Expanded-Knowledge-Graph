@@ -253,6 +253,19 @@ export async function getScenario(scenarioId: string): Promise<any> {
   );
 }
 
+export interface MetricsSummary {
+  scope: string;
+  totals: { all_cases: number; complete: number; in_progress: number };
+  cases_by_status: { phase: string; count: number }[];
+  decisions_by_scenario: { scenario_id: string; approve: number; reject: number; request_more_info: number; auto_execute: number; in_progress: number }[];
+  cases_per_day: { date: string; count: number }[];
+  top_rejection_reasons: { reason: string; count: number }[];
+}
+
+export async function getMetrics(): Promise<MetricsSummary> {
+  return jsonOrThrow(await authedFetch("/api/metrics/summary"));
+}
+
 export interface AutofillSuggestion {
   source: "llm" | "fallback";
   match_keywords: string[];

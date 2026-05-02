@@ -1840,6 +1840,210 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* ---------- Metrics dashboard ---------- */
+.metrics-modal {
+  width: 720px;
+  max-width: 95vw;
+  max-height: 90vh;
+  background: white;
+  border-radius: 8px;
+  box-shadow: var(--shadow-deep);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cardIn 320ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.metrics-loading {
+  padding: 30px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.metrics-body {
+  padding: 16px 22px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.metrics-scope {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.metrics-scope code {
+  background: var(--paper-warm);
+  padding: 0 5px;
+  border-radius: 2px;
+  color: var(--navy);
+}
+.metrics-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.metrics-tile {
+  background: var(--paper-warm);
+  border-left: 2px solid var(--cyan);
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+.metrics-tile-value {
+  font-family: 'Fraunces', serif;
+  font-size: 24px;
+  font-weight: 500;
+  font-variation-settings: "opsz" 60;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.metrics-tile-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.metrics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.metrics-section-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.metrics-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--paper-deep);
+}
+.metrics-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-style: italic;
+  background: var(--paper-warm);
+  border-radius: 4px;
+}
+.metrics-bar-rows,
+.metrics-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metrics-bar-row,
+.metrics-stack-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.metrics-bar-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.metrics-bar-track {
+  background: var(--paper-warm);
+  border-radius: 3px;
+  height: 18px;
+  overflow: hidden;
+}
+.metrics-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 280ms ease;
+}
+.metrics-bar-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink);
+  text-align: right;
+}
+.metrics-stack-track {
+  background: var(--paper-warm);
+  border-radius: 3px;
+  height: 18px;
+  overflow: hidden;
+  display: flex;
+}
+.metrics-stack-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: white;
+  text-shadow: 0 0 2px rgba(0,0,0,0.3);
+  min-width: 0;
+}
+.metrics-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
+.metrics-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.metrics-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.metrics-sparkline {
+  width: 100%;
+  height: 120px;
+  background: var(--paper-warm);
+  border-radius: 4px;
+}
+.metrics-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metrics-reason {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--paper-warm);
+  border-left: 2px solid var(--crimson);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.metrics-reason-count {
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  color: var(--crimson);
+  min-width: 28px;
+}
+.metrics-reason-text {
+  color: var(--ink);
+}
+
 /* ---------- Login screen ---------- */
 .login-shell {
   min-height: 100vh;

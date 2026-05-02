@@ -8,9 +8,10 @@ interface Props {
   onLogout: () => void;
   onOpenDataSources: () => void;
   onOpenScenariosHelp: () => void;
+  onOpenMetrics: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onOpenScenariosHelp }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onOpenScenariosHelp, onOpenMetrics }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -61,6 +62,13 @@ export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onO
       </div>
 
       <div style={{ display: "flex", alignItems: "center" }}>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onOpenMetrics}
+          title="Live metrics dashboard"
+        >
+          Metrics
+        </button>
         <button
           className="statusbar-action statusbar-action-quiet"
           onClick={onOpenScenariosHelp}

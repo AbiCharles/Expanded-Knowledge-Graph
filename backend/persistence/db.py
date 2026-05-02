@@ -36,6 +36,9 @@ class CaseRow(Base):
     prompt = Column(Text, nullable=False)
     # Owner — null for cases created before auth was on (treated as system-owned).
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # The framework's internal KnowledgeContext.case_id; lineage events are
+    # keyed by this. Indexed so we can JOIN cases ↔ lineage_events for metrics.
+    framework_case_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     payload = Column(JSON, nullable=False)  # full CaseRecord dict
@@ -85,12 +88,17 @@ class Database:
         ALTER TABLE ADD COLUMN is non-destructive; we run it once and ignore
         the duplicate-column error on subsequent boots."""
         from sqlalchemy import text
-        with self._engine.connect() as conn:
-            try:
-                conn.execute(text("ALTER TABLE cases ADD COLUMN user_id INTEGER"))
-                conn.commit()
-            except Exception:
-                conn.rollback()
+        for stmt in [
+            "ALTER TABLE cases ADD COLUMN user_id INTEGER",
+            "ALTER TABLE cases ADD COLUMN framework_case_id TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_cases_framework_case_id ON cases(framework_case_id)",
+        ]:
+            with self._engine.connect() as conn:
+                try:
+                    conn.execute(text(stmt))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
 
     @property
     def engine(self) -> Engine:

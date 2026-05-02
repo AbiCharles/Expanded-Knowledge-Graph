@@ -109,6 +109,7 @@ class PersistentCaseStore:
                 decision_kind=rec.decision_kind,
                 prompt=rec.prompt,
                 user_id=rec.user_id,
+                framework_case_id=rec.framework_case_id,
                 payload=payload,
             )
             stmt = stmt.on_conflict_do_update(
@@ -119,6 +120,7 @@ class PersistentCaseStore:
                     "decision_kind": rec.decision_kind,
                     "prompt": rec.prompt,
                     "user_id": rec.user_id,
+                    "framework_case_id": rec.framework_case_id,
                     "payload": payload,
                 },
             )
