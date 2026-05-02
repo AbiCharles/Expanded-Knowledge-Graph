@@ -1,5 +1,7 @@
-// Thin fetch wrappers. All paths are relative — Vite proxies /api → :8000 in dev.
+// Thin fetch wrappers. All paths are relative — Vite proxies /api → :8001 in dev.
+// Every call goes through authedFetch which attaches the bearer token.
 
+import { authedFetch } from "./auth";
 import {
   CaseFull,
   CaseSummary,
@@ -20,20 +22,20 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
 }
 
 export async function listScenarios(): Promise<ScenarioRow[]> {
-  return jsonOrThrow(await fetch("/api/scenarios"));
+  return jsonOrThrow(await authedFetch("/api/scenarios"));
 }
 
 export async function listCases(): Promise<CaseSummary[]> {
-  return jsonOrThrow(await fetch("/api/cases"));
+  return jsonOrThrow(await authedFetch("/api/cases"));
 }
 
 export async function getCase(caseId: string): Promise<CaseFull> {
-  return jsonOrThrow(await fetch(`/api/cases/${caseId}`));
+  return jsonOrThrow(await authedFetch(`/api/cases/${caseId}`));
 }
 
 export async function createCase(prompt: string): Promise<CreateCaseResponse> {
   return jsonOrThrow(
-    await fetch("/api/cases", {
+    await authedFetch("/api/cases", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ prompt }),
@@ -43,25 +45,25 @@ export async function createCase(prompt: string): Promise<CreateCaseResponse> {
 
 export async function confirmCase(caseId: string): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/cases/${caseId}/confirm`, { method: "POST" })
+    await authedFetch(`/api/cases/${caseId}/confirm`, { method: "POST" })
   );
 }
 
 export async function cancelCase(caseId: string): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/cases/${caseId}/cancel`, { method: "POST" })
+    await authedFetch(`/api/cases/${caseId}/cancel`, { method: "POST" })
   );
 }
 
 export async function deleteCase(caseId: string): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/cases/${caseId}`, { method: "DELETE" })
+    await authedFetch(`/api/cases/${caseId}`, { method: "DELETE" })
   );
 }
 
 export async function clearCases(phase: "complete" | "cancelled" = "complete"): Promise<{ count: number }> {
   return jsonOrThrow(
-    await fetch(`/api/cases?phase=${phase}`, { method: "DELETE" })
+    await authedFetch(`/api/cases?phase=${phase}`, { method: "DELETE" })
   );
 }
 
@@ -72,7 +74,7 @@ export async function relinkCase(caseId: string, scenarioId: string): Promise<{
   clarifying_question: string;
 }> {
   return jsonOrThrow(
-    await fetch(`/api/cases/${caseId}/relink`, {
+    await authedFetch(`/api/cases/${caseId}/relink`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ scenario_id: scenarioId }),
@@ -82,7 +84,7 @@ export async function relinkCase(caseId: string, scenarioId: string): Promise<{
 
 export async function replayCase(caseId: string, decision: DecisionKind): Promise<{ case_id: string }> {
   return jsonOrThrow(
-    await fetch(`/api/cases/${caseId}/replay`, {
+    await authedFetch(`/api/cases/${caseId}/replay`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ decision }),
@@ -91,7 +93,7 @@ export async function replayCase(caseId: string, decision: DecisionKind): Promis
 }
 
 export async function listQueue(): Promise<QueueRow[]> {
-  return jsonOrThrow(await fetch("/api/decisions/queue"));
+  return jsonOrThrow(await authedFetch("/api/decisions/queue"));
 }
 
 export async function postDecision(
@@ -99,7 +101,7 @@ export async function postDecision(
   args: { decision: DecisionKind; reviewer_id: string; rationale: string; follow_up?: string | null }
 ): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/decisions/${ticketId}`, {
+    await authedFetch(`/api/decisions/${ticketId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),
@@ -111,18 +113,18 @@ export async function postDecision(
 // Data sources
 // =============================================================================
 export async function listDataSources(): Promise<DataSourceRow[]> {
-  return jsonOrThrow(await fetch("/api/data-sources"));
+  return jsonOrThrow(await authedFetch("/api/data-sources"));
 }
 
 export async function testDataSource(id: string): Promise<{ ok: boolean; sample_facts: SampleFact[] }> {
   return jsonOrThrow(
-    await fetch(`/api/data-sources/${id}/test`, { method: "POST" })
+    await authedFetch(`/api/data-sources/${id}/test`, { method: "POST" })
   );
 }
 
 export async function deleteDataSource(id: string): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/data-sources/${id}`, { method: "DELETE" })
+    await authedFetch(`/api/data-sources/${id}`, { method: "DELETE" })
   );
 }
 
@@ -143,7 +145,7 @@ export async function uploadCsv(args: {
   fd.append("title_field", args.title_field);
   fd.append("summary_template", args.summary_template);
   if (args.description) fd.append("description", args.description);
-  const resp = await fetch("/api/data-sources/upload", { method: "POST", body: fd });
+  const resp = await authedFetch("/api/data-sources/upload", { method: "POST", body: fd });
   return jsonOrThrow(resp);
 }
 
@@ -154,7 +156,7 @@ export async function addDataSource(args: {
   config: Record<string, unknown>;
 }): Promise<{ id: string }> {
   return jsonOrThrow(
-    await fetch("/api/data-sources", {
+    await authedFetch("/api/data-sources", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),
@@ -164,7 +166,7 @@ export async function addDataSource(args: {
 
 export async function testPostgres(dsn: string): Promise<{ ok: boolean; message: string }> {
   return jsonOrThrow(
-    await fetch("/api/data-sources/test-postgres", {
+    await authedFetch("/api/data-sources/test-postgres", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ dsn }),
@@ -184,7 +186,7 @@ export async function runQuery(
   sourceId: string,
   args: { sql: string; params?: Record<string, unknown>; limit?: number }
 ): Promise<RunQueryResult> {
-  const resp = await fetch(`/api/data-sources/${sourceId}/run-query`, {
+  const resp = await authedFetch(`/api/data-sources/${sourceId}/run-query`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sql: args.sql, params: args.params ?? {}, limit: args.limit ?? 50 }),
@@ -212,7 +214,7 @@ export interface SaveScenarioArgs {
 
 export async function saveScenario(args: SaveScenarioArgs): Promise<{ scenario_id: string }> {
   return jsonOrThrow(
-    await fetch("/api/scenarios", {
+    await authedFetch("/api/scenarios", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),
@@ -222,7 +224,7 @@ export async function saveScenario(args: SaveScenarioArgs): Promise<{ scenario_i
 
 export async function deleteScenario(scenarioId: string): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/scenarios/${scenarioId}`, { method: "DELETE" })
+    await authedFetch(`/api/scenarios/${scenarioId}`, { method: "DELETE" })
   );
 }
 
@@ -237,7 +239,7 @@ export interface EditScenarioArgs {
 
 export async function editScenario(scenarioId: string, args: EditScenarioArgs): Promise<void> {
   await jsonOrThrow(
-    await fetch(`/api/scenarios/${scenarioId}`, {
+    await authedFetch(`/api/scenarios/${scenarioId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),
@@ -247,7 +249,7 @@ export async function editScenario(scenarioId: string, args: EditScenarioArgs): 
 
 export async function getScenario(scenarioId: string): Promise<any> {
   return jsonOrThrow(
-    await fetch(`/api/scenarios/${scenarioId}`)
+    await authedFetch(`/api/scenarios/${scenarioId}`)
   );
 }
 
@@ -266,7 +268,7 @@ export async function autofillScenario(args: {
   ontology_type?: string;
 }): Promise<AutofillSuggestion> {
   return jsonOrThrow(
-    await fetch("/api/scenarios/autofill", {
+    await authedFetch("/api/scenarios/autofill", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),

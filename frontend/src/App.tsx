@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import * as api from "./api";
+import { AuthUser, clearAuth, fetchMe, getUser } from "./auth";
 import { Console } from "./components/Console";
+import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
 import { LineagePanel } from "./components/LineagePanel";
 import { DataSourcesModal } from "./components/DataSourcesModal";
@@ -35,6 +37,33 @@ export default function App() {
   const [active, setActive] = useState<CaseFull | null>(null);
   const [role, setRole] = useState<"operator" | "reviewer">("operator");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  const [user, setUser] = useState<AuthUser | null>(getUser());
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Validate the cached token on mount; expire it if the server says so.
+  useEffect(() => {
+    if (!user) {
+      setAuthChecked(true);
+      return;
+    }
+    fetchMe().then((u) => {
+      if (!u) {
+        clearAuth();
+        setUser(null);
+      } else {
+        setUser(u);
+      }
+      setAuthChecked(true);
+    });
+  }, []);
+
+  const onLogout = () => {
+    clearAuth();
+    setUser(null);
+    setActiveId(null);
+    setActive(null);
+    setCases([]);
+  };
 
   // -------------------------------------------------------------------------
   // Initial load
@@ -210,11 +239,20 @@ export default function App() {
       active.phase === "review_ready" ||
       active.phase === "reviewing");
 
+  if (!authChecked) {
+    return <div className="login-shell"><div className="login-card">Loading…</div></div>;
+  }
+  if (!user) {
+    return <LoginScreen onAuth={(u) => setUser(u)} />;
+  }
+
   return (
     <>
       <StatusBar
         active={active}
         role={role}
+        user={user}
+        onLogout={onLogout}
         onOpenDataSources={() => setModal({ kind: "datasources" })}
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
       />

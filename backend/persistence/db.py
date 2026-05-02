@@ -34,6 +34,8 @@ class CaseRow(Base):
     phase = Column(String, nullable=False, index=True)
     decision_kind = Column(String, nullable=True, index=True)
     prompt = Column(Text, nullable=False)
+    # Owner — null for cases created before auth was on (treated as system-owned).
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     payload = Column(JSON, nullable=False)  # full CaseRecord dict
@@ -76,6 +78,19 @@ class Database:
             connect_args={"check_same_thread": False},
         )
         Base.metadata.create_all(self._engine)
+        self._micro_migrate()
+
+    def _micro_migrate(self) -> None:
+        """Add columns we've introduced after the original schema. SQLite's
+        ALTER TABLE ADD COLUMN is non-destructive; we run it once and ignore
+        the duplicate-column error on subsequent boots."""
+        from sqlalchemy import text
+        with self._engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE cases ADD COLUMN user_id INTEGER"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
     @property
     def engine(self) -> Engine:

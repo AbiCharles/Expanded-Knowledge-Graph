@@ -25,6 +25,7 @@ class CaseRecord:
     scenario_id: Optional[str]
     interpreted_as: Optional[str]
     clarifying_question: Optional[str]
+    user_id: Optional[int] = None  # owner; None for legacy cases pre-auth
     confidence: float = 0.0
     candidates: list[dict] = field(default_factory=list)  # [{scenario_id, title, confidence}]
     phase: str = "awaiting_clarification"

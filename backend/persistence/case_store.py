@@ -36,6 +36,7 @@ def _record_to_payload(rec: CaseRecord) -> dict:
         "scenario_id": rec.scenario_id,
         "interpreted_as": rec.interpreted_as,
         "clarifying_question": rec.clarifying_question,
+        "user_id": rec.user_id,
         "confidence": rec.confidence,
         "candidates": rec.candidates,
         "phase": rec.phase,
@@ -57,6 +58,7 @@ def _payload_to_record(payload: dict) -> CaseRecord:
         scenario_id=payload.get("scenario_id"),
         interpreted_as=payload.get("interpreted_as"),
         clarifying_question=payload.get("clarifying_question"),
+        user_id=payload.get("user_id"),
         confidence=float(payload.get("confidence", 0.0)),
         candidates=list(payload.get("candidates", []) or []),
         phase=payload.get("phase", "complete"),
@@ -106,6 +108,7 @@ class PersistentCaseStore:
                 phase=rec.phase,
                 decision_kind=rec.decision_kind,
                 prompt=rec.prompt,
+                user_id=rec.user_id,
                 payload=payload,
             )
             stmt = stmt.on_conflict_do_update(
@@ -115,6 +118,7 @@ class PersistentCaseStore:
                     "phase": rec.phase,
                     "decision_kind": rec.decision_kind,
                     "prompt": rec.prompt,
+                    "user_id": rec.user_id,
                     "payload": payload,
                 },
             )

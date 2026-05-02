@@ -1,13 +1,16 @@
+import { AuthUser } from "../auth";
 import { CaseFull } from "../types";
 
 interface Props {
   active: CaseFull | null;
   role: "operator" | "reviewer";
+  user: AuthUser;
+  onLogout: () => void;
   onOpenDataSources: () => void;
   onOpenScenariosHelp: () => void;
 }
 
-export function StatusBar({ active, role, onOpenDataSources, onOpenScenariosHelp }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onOpenScenariosHelp }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -72,9 +75,17 @@ export function StatusBar({ active, role, onOpenDataSources, onOpenScenariosHelp
           <div className="role-dot" />
           <div className="role-text">
             <div className="role-label">{pillRole?.label || "Operator"}</div>
-            <div className="role-name">{pillRole?.name || "planner.tgupta"}</div>
+            <div className="role-name">{pillRole?.name || user.display_name || user.username}</div>
           </div>
         </div>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onLogout}
+          title={`Signed in as ${user.username} · click to log out`}
+          style={{ marginLeft: 8, marginRight: 0 }}
+        >
+          {user.username} · log out
+        </button>
       </div>
     </div>
   );

@@ -11,11 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from tcs_hitl_context import FakeLLMClient, build_llm_client_from_env
 
 from .agent_runtime import AgentRuntime
+from .api.auth import router as auth_router
 from .api.cases import router as cases_router
 from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
 from .api.scenarios import router as scenarios_router
+from .auth import ensure_default_admin
 from .config import get_settings
 from .datasources import DataSourceRegistry
 from .persistence import get_database
@@ -41,6 +43,7 @@ async def lifespan(app: FastAPI):
 
     db_path = project_root / "backend" / "data" / "app.sqlite"
     database = get_database(db_path)
+    ensure_default_admin(database)
 
     # Build the LLM client from env. If keys are missing for the requested
     # provider, fall back to FakeLLMClient so the UI still runs (with keyword
@@ -81,6 +84,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth_router, prefix="/api")
     app.include_router(cases_router, prefix="/api")
     app.include_router(decisions_router, prefix="/api")
     app.include_router(scenarios_router, prefix="/api")

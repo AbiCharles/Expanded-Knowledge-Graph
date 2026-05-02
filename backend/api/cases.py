@@ -6,11 +6,12 @@ import json
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from .. import orchestrator
+from ..auth import CurrentUser, current_user
 from ..state import AppState, CaseRecord
 
 router = APIRouter(tags=["cases"])
@@ -50,7 +51,11 @@ class RelinkIn(BaseModel):
 # Routes
 # =============================================================================
 @router.post("/cases", response_model=CreateCaseOut)
-async def create_case(payload: CreateCaseIn, request: Request) -> CreateCaseOut:
+async def create_case(
+    payload: CreateCaseIn,
+    request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> CreateCaseOut:
     """Operator typed a prompt. Run LLM classification, return clarifier."""
     state: AppState = request.app.state.app_state
     interpreted = await state.agent_runtime.interpret_prompt(payload.prompt)
@@ -66,6 +71,7 @@ async def create_case(payload: CreateCaseIn, request: Request) -> CreateCaseOut:
         scenario_id=interpreted.scenario_id,
         interpreted_as=interpreted.interpreted_as,
         clarifying_question=interpreted.clarifying_question,
+        user_id=user.id,
         confidence=interpreted.confidence,
         candidates=candidates_payload,
         phase="awaiting_clarification" if has_candidates else "cancelled",
@@ -81,13 +87,24 @@ async def create_case(payload: CreateCaseIn, request: Request) -> CreateCaseOut:
     )
 
 
-@router.post("/cases/{case_id}/confirm")
-async def confirm_case(case_id: str, request: Request) -> dict:
-    """Operator confirmed; kick off the full pipeline as a background task."""
-    state: AppState = request.app.state.app_state
+def _own_case_or_403(state: AppState, case_id: str, user: CurrentUser) -> CaseRecord:
+    """Look up a case; 404 if missing, 403 if it isn't the caller's case
+    (admins can see everything)."""
     case = state.cases.get(case_id)
     if case is None:
         raise HTTPException(status_code=404, detail="case not found")
+    if user.role != "admin" and case.user_id is not None and case.user_id != user.id:
+        raise HTTPException(status_code=403, detail="not your case")
+    return case
+
+
+@router.post("/cases/{case_id}/confirm")
+async def confirm_case(
+    case_id: str, request: Request, user: CurrentUser = Depends(current_user)
+) -> dict:
+    """Operator confirmed; kick off the full pipeline as a background task."""
+    state: AppState = request.app.state.app_state
+    case = _own_case_or_403(state, case_id, user)
     if case.phase != "awaiting_clarification":
         raise HTTPException(status_code=409, detail=f"case is in phase {case.phase!r}")
     asyncio.create_task(orchestrator.run_case(state, case))
@@ -95,7 +112,10 @@ async def confirm_case(case_id: str, request: Request) -> dict:
 
 
 @router.post("/cases/{case_id}/relink")
-async def relink_case(case_id: str, payload: RelinkIn, request: Request) -> dict:
+async def relink_case(
+    case_id: str, payload: RelinkIn, request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> dict:
     """Re-link a case to a different scenario the operator picked from top-K.
 
     Only allowed in `awaiting_clarification` — once binding starts, the case
@@ -103,9 +123,7 @@ async def relink_case(case_id: str, payload: RelinkIn, request: Request) -> dict
     new scenario's defaults.
     """
     state: AppState = request.app.state.app_state
-    case = state.cases.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="case not found")
+    case = _own_case_or_403(state, case_id, user)
     if case.phase != "awaiting_clarification":
         raise HTTPException(status_code=409, detail=f"case is in phase {case.phase!r}")
     sc = state.scenarios.get(payload.scenario_id)
@@ -124,16 +142,16 @@ async def relink_case(case_id: str, payload: RelinkIn, request: Request) -> dict
 
 
 @router.delete("/cases/{case_id}")
-async def delete_case(case_id: str, request: Request) -> dict:
+async def delete_case(
+    case_id: str, request: Request, user: CurrentUser = Depends(current_user)
+) -> dict:
     """Permanently remove a case from memory.
 
     If the case has a pending review ticket, cancel it first.
     Sibling references on other cases are cleaned up.
     """
     state: AppState = request.app.state.app_state
-    case = state.cases.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="case not found")
+    case = _own_case_or_403(state, case_id, user)
     # Cancel any open ticket so transport state stays consistent
     if case.ticket_id and case.phase in ("review_ready", "reviewing"):
         try:
@@ -157,8 +175,13 @@ async def delete_case(case_id: str, request: Request) -> dict:
 
 
 @router.delete("/cases")
-async def delete_completed_cases(request: Request, phase: str = "complete") -> dict:
-    """Bulk-clear cases by phase. Default removes all completed cases."""
+async def delete_completed_cases(
+    request: Request,
+    user: CurrentUser = Depends(current_user),
+    phase: str = "complete",
+) -> dict:
+    """Bulk-clear cases by phase. Default removes all completed cases owned
+    by the current user (admins clear across all users)."""
     state: AppState = request.app.state.app_state
     valid_phases = {"complete", "cancelled"}
     if phase not in valid_phases:
@@ -166,19 +189,21 @@ async def delete_completed_cases(request: Request, phase: str = "complete") -> d
             status_code=400,
             detail=f"phase must be one of {sorted(valid_phases)} (got {phase!r})",
         )
-    to_remove = [c.case_id for c in state.cases.values() if c.phase == phase]
+    to_remove = [
+        c.case_id for c in state.cases.values()
+        if c.phase == phase and (user.role == "admin" or c.user_id is None or c.user_id == user.id)
+    ]
     for cid in to_remove:
-        # Reuse the per-case path so sibling cleanup + SSE closure stay consistent
-        await delete_case(cid, request)
+        await delete_case(cid, request, user)
     return {"phase": phase, "removed": to_remove, "count": len(to_remove)}
 
 
 @router.post("/cases/{case_id}/cancel")
-async def cancel_case(case_id: str, request: Request) -> dict:
+async def cancel_case(
+    case_id: str, request: Request, user: CurrentUser = Depends(current_user)
+) -> dict:
     state: AppState = request.app.state.app_state
-    case = state.cases.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="case not found")
+    case = _own_case_or_403(state, case_id, user)
     case.phase = "cancelled"
     state.cases.save(case)
     await state.bus.close(case_id)
@@ -186,13 +211,14 @@ async def cancel_case(case_id: str, request: Request) -> dict:
 
 
 @router.post("/cases/{case_id}/replay")
-async def replay_case(case_id: str, payload: ReplayIn, request: Request) -> dict:
+async def replay_case(
+    case_id: str, payload: ReplayIn, request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> dict:
     """Start a sibling case that runs the same scenario but with a forced
     reviewer decision."""
     state: AppState = request.app.state.app_state
-    original = state.cases.get(case_id)
-    if original is None:
-        raise HTTPException(status_code=404, detail="case not found")
+    original = _own_case_or_403(state, case_id, user)
     if original.scenario_id is None:
         raise HTTPException(status_code=400, detail="original case has no scenario")
     if payload.decision not in ("approve", "reject", "request_more_info"):
@@ -205,6 +231,7 @@ async def replay_case(case_id: str, payload: ReplayIn, request: Request) -> dict
         scenario_id=original.scenario_id,
         interpreted_as=original.interpreted_as,
         clarifying_question=None,
+        user_id=user.id,
         phase="binding",
         sibling_case_ids=[case_id, *original.sibling_case_ids],
         replay_decision=payload.decision,
@@ -252,20 +279,25 @@ async def _auto_decide_replay(state: AppState, case: CaseRecord) -> None:
 
 
 @router.get("/cases")
-async def list_cases(request: Request) -> list[dict]:
+async def list_cases(
+    request: Request, user: CurrentUser = Depends(current_user)
+) -> list[dict]:
     state: AppState = request.app.state.app_state
     rows: list[dict] = []
     for c in state.cases.values():
+        # Admins see everything; everyone else only their own + legacy unowned
+        if user.role != "admin" and c.user_id is not None and c.user_id != user.id:
+            continue
         rows.append(_case_summary(c))
     return rows
 
 
 @router.get("/cases/{case_id}")
-async def get_case(case_id: str, request: Request) -> dict:
+async def get_case(
+    case_id: str, request: Request, user: CurrentUser = Depends(current_user)
+) -> dict:
     state: AppState = request.app.state.app_state
-    case = state.cases.get(case_id)
-    if case is None:
-        raise HTTPException(status_code=404, detail="case not found")
+    case = _own_case_or_403(state, case_id, user)
     return _case_full(state, case)
 
 
