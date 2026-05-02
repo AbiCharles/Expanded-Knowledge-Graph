@@ -29,6 +29,24 @@ OPENAI_MODEL=gpt-4o-mini
 CORS_ORIGINS=https://hitl.your-domain.com
 ```
 
+### Azure OpenAI
+
+Flip `LLM_PROVIDER=azure` and set:
+
+```bash
+AZURE_OPENAI_API_KEY=<key>
+AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com
+AZURE_OPENAI_API_VERSION=2024-10-21
+AZURE_OPENAI_DEPLOYMENT=<your-chat-deployment-name>
+# Optional — only required if you use vector-store data sources:
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT=<your-embeddings-deployment-name>
+```
+
+`AZURE_OPENAI_DEPLOYMENT` is the chat deployment (typically a GPT-4 family
+model). `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` is a *separate* deployment of
+an embeddings model (e.g. `text-embedding-3-small`); without it the vector
+store skips embedding and `resolve()` returns empty — chat keeps working.
+
 For transient local runs where you really don't want to set a secret
 (e.g. spinning up a one-off container to inspect the schema), export
 `HITL_ALLOW_DEFAULT_SECRET=1`. The app boots with a loud warning that

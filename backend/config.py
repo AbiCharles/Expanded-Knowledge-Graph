@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_KEY: str = ""
     AZURE_OPENAI_ENDPOINT: str = ""
     AZURE_OPENAI_API_VERSION: str = "2024-10-21"
-    AZURE_OPENAI_DEPLOYMENT: str = ""
+    AZURE_OPENAI_DEPLOYMENT: str = ""           # chat-completions deployment
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = ""  # embeddings deployment (vector store)
 
     # Server
     CORS_ORIGINS: str = "http://localhost:5173"

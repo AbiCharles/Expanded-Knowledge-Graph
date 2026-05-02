@@ -51,10 +51,27 @@ async def lifespan(app: FastAPI):
 
     project_root = Path(__file__).resolve().parent.parent
     sources_yaml = project_root / "backend" / "data" / "sources.yaml"
+    # Wire Azure embeddings only when LLM_PROVIDER=azure AND a separate
+    # embedding deployment is configured. Without it, vector sources fall back
+    # to OPENAI_API_KEY (if set) or skip embedding entirely.
+    azure_embedding_config = None
+    if (
+        settings.LLM_PROVIDER == "azure"
+        and settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        and settings.AZURE_OPENAI_API_KEY
+        and settings.AZURE_OPENAI_ENDPOINT
+    ):
+        azure_embedding_config = {
+            "api_key": settings.AZURE_OPENAI_API_KEY,
+            "endpoint": settings.AZURE_OPENAI_ENDPOINT,
+            "api_version": settings.AZURE_OPENAI_API_VERSION,
+            "deployment": settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+        }
     data_sources = DataSourceRegistry.from_yaml(
         storage_path=sources_yaml,
         project_root=project_root,
         openai_api_key=settings.OPENAI_API_KEY or None,
+        azure_embedding_config=azure_embedding_config,
     )
 
     db_path = project_root / "backend" / "data" / "app.sqlite"

@@ -3,14 +3,16 @@
 At registration time the resolver:
   1. Reads every `.txt`/`.md` file in `folder/`.
   2. Splits each into ~500-char chunks (paragraph-aware).
-  3. Calls OpenAI's embeddings endpoint once per chunk in batches.
+  3. Calls the embeddings endpoint once per chunk in batches.
   4. Persists `(chunks, embeddings, mtime_signature)` to `index_path` (.npz).
 
 `resolve()` embeds the query (uses `filters['query']`) and returns the top-k
 most-similar chunks as KnowledgeFacts with `confidence` set from cosine score.
 
-Falls back to empty results when the LLM is FakeLLMClient (no key) — logs
-a warning instead of crashing.
+Supports both public OpenAI and Azure OpenAI for embeddings. Pick by passing
+`openai_api_key=...` (public) or `azure_config={api_key, endpoint, api_version,
+deployment}` (Azure) — Azure wins if both are provided. With neither, chunks
+are indexed without embeddings; `resolve()` returns `[]` and logs a warning.
 
 Example source spec:
 
@@ -77,6 +79,7 @@ class VectorStoreResolver:
         embed_model: str = "text-embedding-3-small",
         llm: Optional[LLMClient] = None,
         openai_api_key: Optional[str] = None,
+        azure_config: Optional[dict] = None,
     ):
         self.name = source_id
         self._folder = folder
@@ -89,8 +92,33 @@ class VectorStoreResolver:
         self._signature: Optional[str] = None
         # We use the openai SDK directly for embeddings (LLMClient only does completions)
         self._api_key = openai_api_key
+        # Azure embeddings config: {api_key, endpoint, api_version, deployment}.
+        # When set, takes precedence over `openai_api_key`.
+        self._azure_config = azure_config
         # Build / load on init (cheap — at most one folder scan)
         self._build_or_load()
+
+    def _make_embed_client(self) -> tuple[Optional[object], Optional[str]]:
+        """Return (sync embeddings client, model_or_deployment_name).
+
+        Azure wins when configured (operator pointed the app at an Azure
+        environment). Falls back to public OpenAI when only that key is set.
+        Returns (None, None) when neither is configured — caller skips the
+        embedding step and the resolver returns [] until creds are added.
+        """
+        cfg = self._azure_config or {}
+        if cfg.get("api_key") and cfg.get("endpoint") and cfg.get("deployment"):
+            from openai import AzureOpenAI
+            client = AzureOpenAI(
+                api_key=cfg["api_key"],
+                azure_endpoint=cfg["endpoint"],
+                api_version=cfg.get("api_version") or "2024-10-21",
+            )
+            return client, cfg["deployment"]
+        if self._api_key:
+            from openai import OpenAI
+            return OpenAI(api_key=self._api_key), self._embed_model
+        return None, None
 
     # -------------------------------------------------------------------------
     # Index lifecycle
@@ -134,9 +162,12 @@ class VectorStoreResolver:
             chunks = chunks[:_MAX_CHUNKS]
         self._chunks = chunks
 
-        if not self._api_key:
+        client, model = self._make_embed_client()
+        if client is None:
             log.warning(
-                "vector_store %s: no OpenAI key, %d chunks indexed without embeddings",
+                "vector_store %s: no embeddings credentials, %d chunks indexed "
+                "without embeddings (set OPENAI_API_KEY or "
+                "AZURE_OPENAI_EMBEDDING_DEPLOYMENT to enable retrieval)",
                 self.name, len(chunks),
             )
             self._signature = sig
@@ -144,10 +175,8 @@ class VectorStoreResolver:
 
         # Embed in one batch
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self._api_key)
             resp = client.embeddings.create(
-                model=self._embed_model,
+                model=model,
                 input=[c["text"] for c in chunks],
             )
             self._embeddings = np.array([d.embedding for d in resp.data], dtype=np.float32)
@@ -180,10 +209,15 @@ class VectorStoreResolver:
         if not q:
             return []
         # Embed the query
+        client, model = self._make_embed_client()
+        if client is None:
+            log.info(
+                "vector_store %s: no embeddings credentials at query time; returning empty",
+                self.name,
+            )
+            return []
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=self._api_key)
-            resp = client.embeddings.create(model=self._embed_model, input=[q])
+            resp = client.embeddings.create(model=model, input=[q])
             qv = np.array(resp.data[0].embedding, dtype=np.float32)
         except Exception as exc:  # noqa: BLE001
             log.warning("vector_store %s: query embed failed: %s", self.name, exc)

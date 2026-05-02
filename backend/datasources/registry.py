@@ -54,8 +54,12 @@ class DataSourceRegistry:
         self._project_root = project_root
         self._specs: dict[str, DataSourceSpec] = {}
         self._resolvers: dict[str, KnowledgeResolver] = {}
-        # Optional API key passed through to vector resolvers that need it
+        # Embedding credentials passed through to vector resolvers. One of:
+        #   _openai_api_key            — public OpenAI
+        #   _azure_embedding_config    — {api_key, endpoint, api_version, deployment}
+        # Azure wins when both are set (operator on Azure usually means *only* Azure).
         self._openai_api_key: Optional[str] = None
+        self._azure_embedding_config: Optional[dict] = None
         # Set by AppState wiring so register/remove can sync auto-scenarios.
         # Optional and lazy-imported to avoid a circular dep at module load.
         self._on_register_callback: Optional[Any] = None
@@ -79,9 +83,11 @@ class DataSourceRegistry:
         storage_path: Path,
         project_root: Path,
         openai_api_key: Optional[str] = None,
+        azure_embedding_config: Optional[dict] = None,
     ) -> "DataSourceRegistry":
         reg = cls(storage_path=storage_path, project_root=project_root)
         reg._openai_api_key = openai_api_key
+        reg._azure_embedding_config = azure_embedding_config
         if storage_path.exists():
             data = yaml.safe_load(storage_path.read_text()) or {}
             for entry in data.get("sources", []):
@@ -151,6 +157,7 @@ class DataSourceRegistry:
                 top_k=int(cfg.get("top_k", 3)),
                 embed_model=cfg.get("embed_model", "text-embedding-3-small"),
                 openai_api_key=self._openai_api_key,
+                azure_config=self._azure_embedding_config,
             )
         raise ResolverError(f"unknown source kind: {spec.kind!r}")
 
