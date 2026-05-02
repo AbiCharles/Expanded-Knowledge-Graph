@@ -768,6 +768,35 @@ body {
   border-color: var(--navy-deep);
 }
 .scenario-edit-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.scenario-edit-remove {
+  font-family: 'Outfit', sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 8px 14px !important;
+  background: white !important;
+  color: var(--crimson) !important;
+  border: 1px solid rgba(179,58,58,0.3) !important;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.scenario-edit-remove:hover:not(:disabled) {
+  background: var(--crimson) !important;
+  color: white !important;
+  border-color: var(--crimson) !important;
+}
+.scenario-edit-builtin-note {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 7px 12px;
+  background: var(--paper-warm);
+  color: var(--ink-muted);
+  border-radius: 4px;
+  cursor: help;
+  align-self: center;
+}
 
 .composer {
   padding: 12px 16px 16px;

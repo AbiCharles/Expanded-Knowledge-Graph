@@ -74,6 +74,33 @@ export function ScenarioEditModal({
     }
   };
 
+  const remove = async () => {
+    if (!detail) return;
+    if (!confirm(
+      `Remove scenario "${detail.title}"?\n\n` +
+      `This will delete the scenario YAML from disk and remove the chip from ` +
+      `the operator console. Cannot be undone.`
+    )) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteScenario(scenarioId);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Built-in scenarios (SC-TC-*, SC-PP-*, SC-LN-*) are protected at the
+  // backend; their YAMLs are committed to the repo. Auto- and Custom- can
+  // be removed.
+  const isRemovable = detail
+    ? scenarioId.startsWith("SC-AUTO-") || scenarioId.startsWith("SC-CUSTOM-")
+    : false;
+
   return (
     <div
       className="modal-backdrop"
@@ -128,6 +155,24 @@ export function ScenarioEditModal({
             </div>
 
             <div className="scenario-edit-actions">
+              {isRemovable ? (
+                <button
+                  className="scenario-edit-remove"
+                  onClick={remove}
+                  disabled={busy}
+                  title="Permanently remove this scenario"
+                >
+                  Remove this scenario
+                </button>
+              ) : (
+                <span
+                  className="scenario-edit-builtin-note"
+                  title="Built-in scenarios are committed to the repo. Edit or delete the YAML in backend/scenarios/ to remove."
+                >
+                  Built-in · YAML in repo
+                </span>
+              )}
+              <span style={{ flex: 1 }} />
               <button onClick={onClose}>Cancel</button>
               <button className="primary" onClick={save} disabled={busy || !title.trim()}>
                 {busy ? "Saving…" : "Save changes"}

@@ -543,12 +543,62 @@ If the form's defaults don't fit (you need HITL, or richer structure), hand-auth
 
 ## Lifecycle
 
-- **Built-in scenarios** (`SC-TC-*`, `SC-PP-*`, `SC-LN-*`) — committed to the
-  repo. Cannot be deleted via the API.
-- **Auto-scenarios** (`SC-AUTO-<source_id>`) — created automatically when an
-  operator-registered data source is added. Removed when the source is removed.
-- **Custom scenarios** (`SC-CUSTOM-<slug>`) — created via "Save as scenario".
-  Persist in `backend/scenarios/` until explicitly deleted via the API.
+Three kinds of scenarios coexist in the chip list. They differ in how they
+get there, who can edit them, and how they're removed.
 
-All three types appear in the operator console's chip list and can be invoked
-the same way.
+### Built-in scenarios — `SC-TC-*`, `SC-PP-*`, `SC-LN-*`
+
+Hand-authored YAMLs committed to the repo at
+[`backend/scenarios/`](../backend/scenarios/). Loaded once at uvicorn
+startup. **Read-mostly:** the in-app pencil lets you edit titles, keywords,
+and clarifiers, and changes persist to disk; the structural fields
+(`stages`, `action_type`, `autonomous`) stay locked because changing them
+mid-flight risks breaking running cases.
+
+The chip's edit modal does **not** offer a Remove button for built-ins — to
+delete one, remove its YAML file and restart uvicorn. This is intentional:
+built-ins represent the canonical, version-controlled scenario catalogue.
+
+### Auto-scenarios — `SC-AUTO-<source_id>`
+
+Created automatically by [`backend/auto_scenario.py`](../backend/auto_scenario.py)
+when an operator-registered data source is added. They're autonomous (no
+human review), use the framework's `data.read` scope, and bind facts from
+their source via the `queries:` block. The chip text and match_keywords are
+derived from the source id.
+
+**Two ways to remove an auto-scenario:**
+
+1. **Delete the source.** When you remove a source from the Data sources
+   modal, its `SC-AUTO-<id>` scenario is removed at the same time
+   (`_on_source_remove` hook in
+   [`backend/datasources/registry.py`](../backend/datasources/registry.py)).
+   This is the usual path: keep source and chip in lockstep.
+
+2. **Delete just the chip via the edit modal.** Click the pencil on the
+   chip → **Remove this scenario** at the bottom of the modal. The source
+   stays registered (still queryable via the playground), but the chip
+   disappears from the operator console. Use this when you want the source
+   for ad-hoc queries but don't want operators to invoke it through the
+   agent runtime.
+
+### Custom scenarios — `SC-CUSTOM-<slug>`
+
+Created via the **Save as scenario** form in the Query playground (or the
+`POST /api/scenarios` endpoint directly). They're autonomous, run a saved
+SQL query against a registered source, and persist in `backend/scenarios/`
+as YAML.
+
+**Removed via the edit modal**: pencil → **Remove this scenario**. Or via
+the API: `DELETE /api/scenarios/SC-CUSTOM-<slug>`. The YAML file is
+deleted; the operator-console chip disappears.
+
+### Quick reference
+
+| Action | Built-in | Auto | Custom |
+|---|---|---|---|
+| Edit title / keywords / clarifier in UI | ✅ | ✅ | ✅ |
+| Edit structural fields in UI | ❌ (edit YAML) | ❌ | ❌ |
+| Remove via Edit modal | ❌ | ✅ | ✅ |
+| Remove via API DELETE | ❌ (`400`) | ✅ | ✅ |
+| Removed automatically with its source | n/a | ✅ | ❌ |

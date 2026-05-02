@@ -607,27 +607,58 @@ function Lifecycle() {
   return (
     <>
       <h3>Three kinds of scenario</h3>
+      <p>
+        Three sources of scenarios coexist in the chip list. They differ in
+        how they get there, who can edit them, and how they're removed.
+      </p>
+
+      <h4>Built-in — <code>SC-TC-*</code>, <code>SC-PP-*</code>, <code>SC-LN-*</code></h4>
+      <p>
+        Hand-authored YAMLs committed to the repo at{" "}
+        <code>backend/scenarios/</code>. Loaded once at uvicorn startup.
+      </p>
+      <ul>
+        <li><strong>Editable in the UI</strong> for title / keywords / clarifier (changes persist to YAML).</li>
+        <li><strong>Cannot be removed via the UI</strong> — the Remove button is disabled. To delete one, remove its YAML file and restart uvicorn.</li>
+        <li>Represents the canonical, version-controlled scenario catalogue.</li>
+      </ul>
+
+      <h4>Auto — <code>SC-AUTO-&lt;source_id&gt;</code></h4>
+      <p>
+        Created automatically when an operator-registered data source is added
+        (CSV upload, Add SQLite/Postgres/HTTP/vector). Autonomous, bound to the
+        source's <code>queries:</code> block, with derived match_keywords.
+      </p>
+      <p>Two ways to remove:</p>
+      <ol>
+        <li><strong>Delete the source.</strong> The chip is removed at the same time. Usual path.</li>
+        <li><strong>Delete the chip only.</strong> Click the pencil on the chip → <strong>Remove this scenario</strong>. The source stays registered (still queryable in the playground), but the chip disappears.</li>
+      </ol>
+
+      <h4>Custom — <code>SC-CUSTOM-&lt;slug&gt;</code></h4>
+      <p>
+        Created via the <strong>Save as scenario</strong> form in the Query
+        playground. Autonomous, runs your saved SQL against the source, persists
+        in <code>backend/scenarios/</code> as YAML.
+      </p>
+      <ul>
+        <li><strong>Removed via the edit modal:</strong> pencil → <strong>Remove this scenario</strong>.</li>
+        <li><strong>Or via the API:</strong> <code>DELETE /api/scenarios/SC-CUSTOM-&lt;slug&gt;</code>.</li>
+      </ul>
+
+      <h3>Quick reference</h3>
       <table className="help-fields">
-        <thead><tr><th>Type</th><th>id pattern</th><th>Lifecycle</th></tr></thead>
+        <thead>
+          <tr><th>Action</th><th>Built-in</th><th>Auto</th><th>Custom</th></tr>
+        </thead>
         <tbody>
-          <tr>
-            <td><strong>Built-in</strong></td>
-            <td><code>SC-TC-*</code>, <code>SC-PP-*</code>, <code>SC-LN-*</code></td>
-            <td>Committed to the repo. Cannot be deleted via the API.</td>
-          </tr>
-          <tr>
-            <td><strong>Auto</strong></td>
-            <td><code>SC-AUTO-&lt;source_id&gt;</code></td>
-            <td>Created automatically when an operator-registered source is added. Removed when the source is removed.</td>
-          </tr>
-          <tr>
-            <td><strong>Custom</strong></td>
-            <td><code>SC-CUSTOM-&lt;slug&gt;</code></td>
-            <td>Created via "Save as scenario" in the Query playground. Persist in <code>backend/scenarios/</code> until deleted.</td>
-          </tr>
+          <tr><td>Edit title / keywords / clarifier in UI</td><td>✅</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Edit structural fields in UI</td><td>❌ (edit YAML)</td><td>❌</td><td>❌</td></tr>
+          <tr><td>Remove via Edit modal</td><td>❌</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Remove via API <code>DELETE</code></td><td>❌ (400)</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Removed automatically with its source</td><td>n/a</td><td>✅</td><td>❌</td></tr>
         </tbody>
       </table>
-      <p>All three appear in the operator console's chip list and can be invoked the same way.</p>
 
       <h3>Adding a custom YAML by hand</h3>
       <ol>
