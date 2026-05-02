@@ -1,9 +1,17 @@
-"""SQLAlchemy engine + schema."""
+"""SQLAlchemy engine + schema for cases, lineage events, and users.
+
+One SQLite file at ``backend/data/app.sqlite``. The engine, the
+declarative ``Base``, and three ORM row classes are defined here.
+``get_database(path)`` is the lazy singleton callers use at runtime.
+"""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from sqlalchemy import (
     JSON,
@@ -73,7 +81,19 @@ class UserRow(Base):
 
 
 class Database:
+    """Thin wrapper around a single SQLAlchemy engine + session factory.
+
+    One instance per process. Initialised at app startup with the path to
+    the SQLite file; subsequent code uses ``get_database()`` to access the
+    same singleton.
+    """
+
     def __init__(self, path: Path):
+        """Open the SQLite file at ``path``, create tables, run migrations.
+
+        ``check_same_thread=False`` is required for FastAPI's threadpool —
+        each request can run on a different worker thread.
+        """
         self._path = path
         self._engine: Engine = create_engine(
             f"sqlite:///{path}",
@@ -83,10 +103,23 @@ class Database:
         Base.metadata.create_all(self._engine)
         self._micro_migrate()
 
+    @property
+    def engine(self) -> Engine:
+        """Underlying SQLAlchemy engine — exposed for advanced callers."""
+        return self._engine
+
+    def session(self) -> Session:
+        """New session bound to this engine. Use as a context manager."""
+        return Session(self._engine, expire_on_commit=False)
+
     def _micro_migrate(self) -> None:
-        """Add columns we've introduced after the original schema. SQLite's
-        ALTER TABLE ADD COLUMN is non-destructive; we run it once and ignore
-        the duplicate-column error on subsequent boots."""
+        """Add columns we've introduced after the original schema.
+
+        SQLite's ``ALTER TABLE ADD COLUMN`` is non-destructive; we run each
+        statement once and roll back the duplicate-column / duplicate-index
+        errors on subsequent boots. Real Alembic migrations would be
+        overkill for this single-file demo.
+        """
         from sqlalchemy import text
         for stmt in [
             "ALTER TABLE cases ADD COLUMN user_id INTEGER",
@@ -97,15 +130,10 @@ class Database:
                 try:
                     conn.execute(text(stmt))
                     conn.commit()
-                except Exception:
+                except Exception as exc:  # noqa: BLE001
+                    # Expected on subsequent boots ("duplicate column" / etc.)
+                    log.debug("micro-migrate %r already applied: %s", stmt, exc)
                     conn.rollback()
-
-    @property
-    def engine(self) -> Engine:
-        return self._engine
-
-    def session(self) -> Session:
-        return Session(self._engine, expire_on_commit=False)
 
 
 _singleton: Optional[Database] = None
@@ -122,5 +150,9 @@ def get_database(path: Optional[Path] = None) -> Database:
 
 
 def reset_database_for_tests() -> None:
+    """Drop the singleton so the next ``get_database(path)`` call rebinds.
+
+    Used only by tests; never call this from request-handling code.
+    """
     global _singleton
     _singleton = None

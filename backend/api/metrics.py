@@ -102,7 +102,7 @@ def metrics_summary(request: Request, user: CurrentUser = Depends(current_user))
             select(func.count(CaseRow.case_id))
             .where(*([CaseRow.user_id == user.id] if not is_admin else []))
         ).scalar() or 0
-        complete_count = sum(1 for k, v in phase_counts.items() if k == "complete") and phase_counts.get("complete", 0)
+        complete_count = phase_counts.get("complete", 0)
         in_progress = sum(v for k, v in phase_counts.items() if k not in ("complete", "cancelled"))
 
     return {

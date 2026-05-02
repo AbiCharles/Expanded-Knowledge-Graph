@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from typing import Any, Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -21,16 +24,26 @@ router = APIRouter(tags=["cases"])
 # Request / response shapes
 # =============================================================================
 class CreateCaseIn(BaseModel):
+    """Body for POST /api/cases — operator's natural-language request."""
+
     prompt: str
 
 
 class CandidateOut(BaseModel):
+    """One ranked classifier candidate returned by `interpret_prompt`.
+
+    Surfaces in CreateCaseOut.candidates so the UI can offer "Did you mean…?"
+    alternatives when the top match has low confidence.
+    """
+
     scenario_id: str
     title: str
     confidence: float
 
 
 class CreateCaseOut(BaseModel):
+    """Response for POST /api/cases — the new case + the agent's interpretation."""
+
     case_id: str
     scenario_id: Optional[str]
     interpreted_as: str
@@ -40,10 +53,14 @@ class CreateCaseOut(BaseModel):
 
 
 class ReplayIn(BaseModel):
+    """Body for POST /api/cases/{id}/replay — forced decision for the new case."""
+
     decision: str  # "approve" | "reject" | "request_more_info"
 
 
 class RelinkIn(BaseModel):
+    """Body for POST /api/cases/{id}/relink — switch to a different scenario."""
+
     scenario_id: str
 
 
@@ -152,19 +169,20 @@ async def delete_case(
     """
     state: AppState = request.app.state.app_state
     case = _own_case_or_403(state, case_id, user)
-    # Cancel any open ticket so transport state stays consistent
+    # Best-effort cleanup. Both calls below can fail with transport errors
+    # (e.g. ticket already collected) or stream-already-closed errors; in
+    # both cases the right thing is to log and continue with the delete.
     if case.ticket_id and case.phase in ("review_ready", "reviewing"):
         try:
             state.transport.cancel(case.ticket_id, reason="case deleted")
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.warning("transport.cancel failed for %s: %s", case.ticket_id, exc)
         if case.decision_event is not None and not case.decision_event.is_set():
             case.decision_event.set()
-    # Close the SSE stream if still open
     try:
         await state.bus.close(case_id)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        log.warning("bus.close failed for %s: %s", case_id, exc)
     # Clean sibling references on other cases
     for other in state.cases.values():
         if case_id in other.sibling_case_ids:
@@ -367,8 +385,9 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
             persisted = state.lineage.history(c.framework_case_id)
             if persisted:
                 out["lineage"] = [ev.model_dump(mode="json") for ev in persisted]
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            # Lineage is best-effort here — the case still renders without it
+            log.warning("lineage history fetch failed for %s: %s", c.case_id, exc)
     if c.ctx is not None:
         out["stages"] = [
             {

@@ -1,6 +1,7 @@
 """Scenario catalog endpoints — used by the frontend to populate suggested chips."""
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Optional
 
@@ -102,12 +103,12 @@ _VALID_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$")
 
 
 class SaveScenarioIn(BaseModel):
-    """Save-from-playground request body.
+    """Body for POST /api/scenarios — save-from-playground request.
 
     Builds an autonomous lookup scenario around an arbitrary SQL query the
-    operator has been iterating in the Query playground. Almost every field has
-    a sensible default — the only required field is `data_source` (which the
-    UI knows from context).
+    operator has been iterating in the Query playground. Almost every field
+    has a sensible default — only ``data_source``, ``title``, and ``sql``
+    are strictly required.
     """
     scenario_id: Optional[str] = None  # auto-generated from title if omitted
     title: str
@@ -193,7 +194,6 @@ async def autofill_scenario(payload: AutofillIn, request: Request) -> dict:
         raw = await state.llm.complete(
             system=_AUTOFILL_SYSTEM, user=user_msg, response_format="json", temperature=0.4,
         )
-        import json
         parsed = json.loads(raw)
         return {
             "source": "llm",
@@ -258,8 +258,12 @@ def save_scenario(payload: SaveScenarioIn, request: Request) -> dict:
 
 
 class EditScenarioIn(BaseModel):
-    """Editable fields on any scenario — we don't allow changing stages,
-    action_type, or autonomous since those affect running behaviour."""
+    """Body for PATCH /api/scenarios/{id} — editable fields only.
+
+    Stages, action_type, and autonomous are intentionally locked because
+    changing them mid-flight risks breaking running cases. All fields here
+    are optional; only the ones provided in the request get updated.
+    """
     title: Optional[str] = None
     match_keywords: Optional[list[str]] = None
     interpreted_as: Optional[str] = None

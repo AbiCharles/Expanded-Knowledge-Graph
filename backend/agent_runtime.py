@@ -76,6 +76,19 @@ Respond with strict JSON only, matching this schema:
 
 
 class AgentRuntime:
+    """Wraps the LLM with two structured calls used during case intake.
+
+    1. ``interpret_prompt(text)`` — classify which scenario the operator's
+       prompt matches and produce a paraphrase + clarifying question.
+    2. ``draft_action(scenario)`` — instantiate the framework's
+       ``AgentAction`` from the scenario's declared template payload.
+
+    The runtime degrades gracefully when ``LLMClient.name == "fake"``:
+    classification falls back to keyword matching against each scenario's
+    ``match_keywords``. This lets the demo run end-to-end with no
+    credentials.
+    """
+
     def __init__(self, *, llm: LLMClient, scenarios: ScenarioRegistry):
         self.llm = llm
         self.scenarios = scenarios
@@ -206,6 +219,14 @@ class AgentRuntime:
     # scenario's declared template; a real agent would fill it from the prompt.
     # -------------------------------------------------------------------------
     def draft_action(self, scenario: dict[str, Any]) -> AgentAction:
+        """Build the framework ``AgentAction`` for this scenario.
+
+        Pins ``__scenario_id__`` into the payload so binders downstream can
+        look up the same scenario when they need to read its declared facts
+        or queries. In a fuller agent this would also call the LLM to fill
+        scenario-specific fields from the operator's prompt; for the demo
+        the YAML's ``action_payload`` template is used as-is.
+        """
         action_id = f"ACT-{uuid.uuid4().hex[:10].upper()}"
         payload = dict(scenario.get("action_payload", {}))
         # Pin the scenario id so the proposal/review binders can pick the right fixture.

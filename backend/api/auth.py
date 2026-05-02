@@ -19,18 +19,26 @@ router = APIRouter(tags=["auth"], prefix="/auth")
 
 
 class RegisterIn(BaseModel):
+    """Body for POST /api/auth/register — self-service signup."""
+
     username: str = Field(min_length=2, max_length=64)
     password: str = Field(min_length=4, max_length=128)
     display_name: str | None = None
 
 
 class TokenOut(BaseModel):
+    """Response for register + login — JWT plus a small user summary the
+    frontend caches in localStorage."""
+
     access_token: str
     token_type: str = "bearer"
     user: dict
 
 
 class MeOut(BaseModel):
+    """Response for GET /api/auth/me — used by the frontend to validate
+    a cached token at app load."""
+
     id: int
     username: str
     role: str
@@ -38,6 +46,9 @@ class MeOut(BaseModel):
 
 
 class ChangePasswordIn(BaseModel):
+    """Body for POST /api/auth/change-password — requires the current
+    password as a defence against session hijack."""
+
     current_password: str
     new_password: str = Field(min_length=4, max_length=128)
 
