@@ -7,15 +7,19 @@ type ParamRow = { key: string; value: string };
 export function QueryModal({
   source,
   onClose,
+  onScenarioSaved,
 }: {
   source: DataSourceRow;
   onClose: () => void;
+  onScenarioSaved?: () => void;
 }) {
   const [sql, setSql] = useState(starterSqlFor(source));
   const [params, setParams] = useState<ParamRow[]>(starterParamsFor(source));
   const [limit, setLimit] = useState(50);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<api.RunQueryResult | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [savedAs, setSavedAs] = useState<string | null>(null);
 
   const run = async () => {
     setBusy(true);
@@ -114,7 +118,148 @@ export function QueryModal({
           </div>
 
           {result && <ResultPanel result={result} />}
+
+          {savedAs && (
+            <div className="query-saved-banner">
+              ✓ Saved as scenario <code>{savedAs}</code>. The chip is in the operator console — close this modal to use it.
+            </div>
+          )}
+
+          {result?.ok && !saveOpen && !savedAs && (
+            <button
+              className="query-save-toggle"
+              onClick={() => setSaveOpen(true)}
+            >
+              + Save this query as a scenario
+            </button>
+          )}
+
+          {saveOpen && !savedAs && (
+            <SaveScenarioForm
+              source={source}
+              sql={sql}
+              params={params}
+              onCancel={() => setSaveOpen(false)}
+              onSaved={(sid) => {
+                setSavedAs(sid);
+                setSaveOpen(false);
+                onScenarioSaved?.();
+              }}
+            />
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Save-as-scenario sub-form
+// =============================================================================
+function SaveScenarioForm({
+  source,
+  sql,
+  params,
+  onCancel,
+  onSaved,
+}: {
+  source: DataSourceRow;
+  sql: string;
+  params: ParamRow[];
+  onCancel: () => void;
+  onSaved: (scenarioId: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [keywords, setKeywords] = useState("");
+  const [clarifier, setClarifier] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [ontology, setOntology] = useState(
+    (source.config_summary?.ontology_type as string | undefined) ||
+    (source.config_summary?.ontology_types as string[] | undefined)?.[0] ||
+    "Record"
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!title.trim()) {
+      setError("title is required");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const obj: Record<string, unknown> = {};
+      for (const p of params) {
+        if (p.key.trim()) obj[p.key.trim()] = p.value;
+      }
+      const result = await api.saveScenario({
+        title: title.trim(),
+        data_source: source.id,
+        ontology_type: ontology,
+        sql,
+        params: obj,
+        match_keywords: keywords
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+        clarifying_question: clarifier.trim() || undefined,
+        suggested_prompt: prompt.trim() || undefined,
+      });
+      onSaved(result.scenario_id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="query-save-form">
+      <div className="query-save-header">Save as scenario</div>
+      <label>Title (required)
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Outcome counts by scenario"
+        />
+      </label>
+      <label>Suggested prompt (chip text)
+        <input
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="e.g. Show me outcome counts"
+        />
+      </label>
+      <label>Match keywords (comma-separated)
+        <input
+          value={keywords}
+          onChange={(e) => setKeywords(e.target.value)}
+          placeholder="e.g. outcome, count, stats"
+        />
+      </label>
+      <label>Clarifying question (optional)
+        <textarea
+          value={clarifier}
+          onChange={(e) => setClarifier(e.target.value)}
+          rows={2}
+          placeholder="What the agent asks before running. HTML allowed."
+        />
+      </label>
+      <label>Ontology type
+        <input value={ontology} onChange={(e) => setOntology(e.target.value)} />
+      </label>
+      <div className="query-save-help">
+        The saved scenario is autonomous (read-only · no human review). It runs
+        the SQL above against <code>{source.id}</code>. Edit the SQL or params
+        in the playground first, then save.
+      </div>
+      {error && <div className="query-save-error">{error}</div>}
+      <div className="query-save-actions">
+        <button onClick={onCancel}>Cancel</button>
+        <button className="primary" disabled={busy || !title.trim()} onClick={submit}>
+          {busy ? "Saving…" : "Save scenario"}
+        </button>
       </div>
     </div>
   );

@@ -242,7 +242,10 @@ export default function App() {
         <CompareModal cases={modal.cases} onClose={() => setModal({ kind: "none" })} />
       )}
       {modal.kind === "datasources" && (
-        <DataSourcesModal onClose={() => setModal({ kind: "none" })} />
+        <DataSourcesModal
+          onClose={() => setModal({ kind: "none" })}
+          onScenariosChanged={() => api.listScenarios().then(setScenarios).catch(console.error)}
+        />
       )}
     </>
   );

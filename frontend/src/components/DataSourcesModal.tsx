@@ -5,7 +5,13 @@ import { QueryModal } from "./QueryModal";
 
 type AddMode = null | "csv" | "http" | "sqlite" | "postgres";
 
-export function DataSourcesModal({ onClose }: { onClose: () => void }) {
+export function DataSourcesModal({
+  onClose,
+  onScenariosChanged,
+}: {
+  onClose: () => void;
+  onScenariosChanged?: () => void;
+}) {
   const [rows, setRows] = useState<DataSourceRow[]>([]);
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [samples, setSamples] = useState<Record<string, SampleFact[]>>({});
@@ -42,6 +48,8 @@ export function DataSourcesModal({ onClose }: { onClose: () => void }) {
     try {
       await api.deleteDataSource(id);
       await refresh();
+      // Removing a source also tears down its SC-AUTO-* scenario.
+      onScenariosChanged?.();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -138,7 +146,11 @@ export function DataSourcesModal({ onClose }: { onClose: () => void }) {
         {addMode === "postgres" && <AddPostgresForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
       </div>
       {queryOpenFor && (
-        <QueryModal source={queryOpenFor} onClose={() => setQueryOpenFor(null)} />
+        <QueryModal
+          source={queryOpenFor}
+          onClose={() => setQueryOpenFor(null)}
+          onScenarioSaved={() => onScenariosChanged?.()}
+        />
       )}
     </div>
   );

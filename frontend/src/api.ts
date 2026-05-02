@@ -195,3 +195,33 @@ export async function runQuery(
   }
   return resp.json();
 }
+
+export interface SaveScenarioArgs {
+  scenario_id?: string;
+  title: string;
+  description?: string;
+  data_source: string;
+  ontology_type?: string;
+  sql: string;
+  params?: Record<string, unknown>;
+  match_keywords?: string[];
+  clarifying_question?: string;
+  closing_message?: string;
+  suggested_prompt?: string;
+}
+
+export async function saveScenario(args: SaveScenarioArgs): Promise<{ scenario_id: string }> {
+  return jsonOrThrow(
+    await fetch("/api/scenarios", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function deleteScenario(scenarioId: string): Promise<void> {
+  await jsonOrThrow(
+    await fetch(`/api/scenarios/${scenarioId}`, { method: "DELETE" })
+  );
+}

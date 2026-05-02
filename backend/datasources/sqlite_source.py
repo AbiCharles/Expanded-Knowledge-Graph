@@ -122,6 +122,29 @@ class SqliteResolver:
                     pass
         return []
 
+    def resolve_sql(
+        self, *, sql: str, ontology_type: str, params: dict[str, Any], max_results: int = 50
+    ) -> list[KnowledgeFact]:
+        """Run arbitrary SQL and convert rows to KnowledgeFacts.
+
+        Used by binders when a scenario has a `sql_override` on its query block
+        — i.e. the operator saved a one-off query as a scenario via the
+        playground rather than via a sources.yaml query entry.
+        """
+        bind: dict[str, Any] = {**(params or {})}
+        bind.setdefault("max_results", max_results)
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(sql, bind)
+                rows = [dict(r) for r in cursor.fetchmany(max_results)]
+        except sqlite3.Error:
+            return []
+        # Prefer id/title/summary aliases (same convention as the registered
+        # query path); fall back to raw-row formatting if those are missing.
+        if rows and all(k in rows[0] for k in ("id", "title", "summary")):
+            return [self._row_to_fact(r, ontology_type) for r in rows]
+        return [self._raw_row_to_fact(r, ontology_type) for r in rows]
+
     def run_query(
         self, sql: str, params: dict[str, Any], limit: int = 100
     ) -> dict[str, Any]:

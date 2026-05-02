@@ -77,7 +77,18 @@ def _facts_from_stage(
         queries_issued.append(kq)
         try:
             resolver = sources.require(source_id)
-            new_facts = resolver.resolve(kq)
+            sql_override = q.get("sql_override")
+            if sql_override and hasattr(resolver, "resolve_sql"):
+                # Operator-saved scenario: run the saved SQL directly rather
+                # than the source's registered query.
+                new_facts = resolver.resolve_sql(  # type: ignore[attr-defined]
+                    sql=sql_override,
+                    ontology_type=kq.ontology_type,
+                    params=kq.filters,
+                    max_results=kq.max_results,
+                )
+            else:
+                new_facts = resolver.resolve(kq)
             facts.extend(new_facts)
             log.info(
                 "binder query → %s.%s returned %d fact(s)",

@@ -125,6 +125,27 @@ class PostgresResolver:
                 log.warning("PostgresResolver %s sample (meta-probe) failed: %s", self.name, exc)
         return []
 
+    def resolve_sql(
+        self, *, sql: str, ontology_type: str, params: dict[str, Any], max_results: int = 50
+    ) -> list[KnowledgeFact]:
+        """Run arbitrary SQL and convert rows to KnowledgeFacts. See SqliteResolver
+        for the full rationale."""
+        bind: dict[str, Any] = {**(params or {})}
+        bind.setdefault("max_results", max_results)
+        translated = _to_psycopg_sql(sql)
+        try:
+            with psycopg.connect(self._dsn, connect_timeout=5) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(translated, bind)
+                    cols = [c.name for c in cur.description] if cur.description else []
+                    rows = [dict(zip(cols, row)) for row in cur.fetchmany(max_results)]
+        except psycopg.Error as exc:
+            log.warning("PostgresResolver %s resolve_sql failed: %s", self.name, exc)
+            return []
+        if rows and all(k in rows[0] for k in ("id", "title", "summary")):
+            return [self._row_to_fact(r, ontology_type) for r in rows]
+        return [self._raw_row_to_fact(r, ontology_type) for r in rows]
+
     def run_query(
         self, sql: str, params: dict[str, Any], limit: int = 100
     ) -> dict[str, Any]:
