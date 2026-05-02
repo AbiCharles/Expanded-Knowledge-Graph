@@ -2,9 +2,9 @@
 
 Hardening notes (2026-Q2):
 
-- ``JWT_SECRET`` must be set explicitly. The default sentinel
-  ``"dev-secret-change-me-in-production"`` is rejected at startup unless
-  ``HITL_ALLOW_DEFAULT_SECRET=1`` is also set (dev-only escape hatch).
+- ``JWT_SECRET`` defaults to a placeholder when not set. We log a loud
+  warning at startup so the operator knows to set their own secret
+  before any real deployment, but boot is not blocked.
 - Tokens carry a ``jti`` claim (random uuid) and are revocable via the
   ``RevokedTokenStore``. The ``/auth/logout`` endpoint adds the current
   token's jti; ``current_user`` rejects revoked tokens.
@@ -42,22 +42,20 @@ JWT_EXPIRE_HOURS = 24
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
-def assert_jwt_secret_set() -> None:
-    """Refuse to start if the default secret is in use unless the operator
-    has explicitly opted in via ``HITL_ALLOW_DEFAULT_SECRET=1``."""
-    if JWT_SECRET != _DEFAULT_SECRET:
-        return
-    if os.environ.get("HITL_ALLOW_DEFAULT_SECRET") == "1":
+def warn_if_default_jwt_secret() -> None:
+    """Log a warning when the default placeholder secret is in use.
+
+    The boot is not blocked — the demo needs to be runnable out of the box.
+    Production deployments should set ``JWT_SECRET`` to a strong random
+    value (see ``docs/production.md``); the warning is the reminder.
+    """
+    if JWT_SECRET == _DEFAULT_SECRET:
         log.warning(
-            "JWT_SECRET is the built-in default. HITL_ALLOW_DEFAULT_SECRET=1 "
-            "is set, so we'll boot anyway — DO NOT do this in production."
+            "JWT_SECRET is the built-in placeholder. Tokens are forgeable "
+            "by anyone who reads this source. Set JWT_SECRET to a strong "
+            "random string (`openssl rand -hex 32`) before exposing the "
+            "backend on any network beyond localhost."
         )
-        return
-    raise RuntimeError(
-        "JWT_SECRET is unset and falling back to the built-in default. "
-        "Set JWT_SECRET in .env to a strong random string before starting "
-        "the backend. To bypass for local dev, set HITL_ALLOW_DEFAULT_SECRET=1."
-    )
 
 
 # =============================================================================

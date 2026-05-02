@@ -12,14 +12,15 @@ infra and security only.
 
 ## Required configuration
 
-The backend refuses to start unless you've set a real `JWT_SECRET`.
-Generate one once:
+The backend boots out of the box with a built-in placeholder secret —
+useful for the demo and for `localhost` work. **For any deployment that
+isn't your own laptop**, set a real `JWT_SECRET`:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Set it in your deployment environment:
+Set it in your deployment environment alongside the other config:
 
 ```bash
 JWT_SECRET=<the long hex string from openssl>
@@ -29,10 +30,9 @@ OPENAI_MODEL=gpt-4o-mini
 CORS_ORIGINS=https://hitl.your-domain.com
 ```
 
-If you absolutely need to run with the dev default secret (e.g. in a
-staging environment that never sees real users), set
-`HITL_ALLOW_DEFAULT_SECRET=1`. The app will boot with a loud warning.
-**Never set this in production.**
+When `JWT_SECRET` is unset, the backend logs a loud warning at startup
+that tokens are forgeable by anyone who reads the source. **Don't ignore
+that warning in production.**
 
 ---
 
@@ -60,8 +60,9 @@ sources, and the vector embedding cache. Back this up.
 In rough order of how badly each one bites if skipped:
 
 ### 1. Real `JWT_SECRET`
-Already enforced — the app refuses to start without it. Don't share
-this secret across environments; each deploy gets its own.
+The backend boots without one, but logs a loud warning that tokens are
+forgeable. Set it for any real deployment. Don't share this secret
+across environments — each deploy gets its own.
 
 ### 2. Change the default admin password
 First thing you do after the first boot:

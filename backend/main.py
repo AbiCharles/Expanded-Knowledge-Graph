@@ -22,7 +22,7 @@ from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
 from .api.metrics import router as metrics_router
 from .api.scenarios import router as scenarios_router
-from .auth import assert_jwt_secret_set, ensure_default_admin
+from .auth import ensure_default_admin, warn_if_default_jwt_secret
 from .config import get_settings
 from .datasources import DataSourceRegistry
 from .persistence import get_database
@@ -34,9 +34,10 @@ from .state import AppState
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logging.basicConfig(level=settings.LOG_LEVEL)
-    # Bail out if JWT_SECRET is the built-in placeholder. Override only with
-    # HITL_ALLOW_DEFAULT_SECRET=1 for local dev.
-    assert_jwt_secret_set()
+    # If JWT_SECRET is the built-in placeholder, log a loud warning but
+    # continue. Operator is responsible for setting a real value before any
+    # real deployment (see docs/production.md).
+    warn_if_default_jwt_secret()
 
     scenario_dir = Path(__file__).resolve().parent / "scenarios"
     scenarios = ScenarioRegistry.from_directory(scenario_dir)
