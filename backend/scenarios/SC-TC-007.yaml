@@ -1,116 +1,126 @@
 id: SC-TC-007
-title: "Trade override — sanctioned counterparty"
-domain: "Trade Compliance"
-teams_channel: "#trade-compliance"
-actor_id: "agent-trade-01"
-operator_role: { label: "Operator", name: "trade.analyst.dlin" }
-reviewer_role: { label: "Reviewer", name: "compliance.officer.kchen" }
+title: "Trade override \u2014 sanctioned counterparty"
+domain: Trade Compliance
+teams_channel: '#trade-compliance'
+actor_id: agent-trade-01
+operator_role:
+  label: Operator
+  name: trade.analyst.dlin
+reviewer_role:
+  label: Reviewer
+  name: compliance.officer.kchen
 autonomous: false
-
-action_type: "trade_override"
+action_type: trade_override
 action_payload:
-  originating_guardrail_id: "SC-TC-001"
-  product_id: "P-EL-9001"
-  counterparty_name: "Sanctioned Pharma Holdings"
-  destination_country: "IR"
-  contract_id: "K-2026-0182"
-  override_reason: "Customer claims license; needs verification."
-
-teams_headline: "Trade override — SC-TC-001 sanctions block"
-execute_message: >-
-  The agent will execute the override. The order to <strong>Sanctioned Pharma
-  Holdings</strong> will proceed and the SC-TC-001 block will be cleared on this case only.
-
-match_keywords: ["override", "sanction", "ofac", "block", "eccn", "ord-44216", "iran"]
-interpreted_as: "override the SC-TC-001 sanctions block on order ORD-44216"
-clarifying_question: >-
-  Just to confirm — you want me to override the SC-TC-001 sanctions block on counterparty
-  <strong>Sanctioned Pharma Holdings</strong> for product <code>P-EL-9001</code>
-  (encryption module, ECCN 5A002), based on a customer-claimed OFAC license.<br><br>
-  This is a critical override that will require named compliance officer approval. Proceed?
-
+  originating_guardrail_id: SC-TC-001
+  product_id: P-EL-9001
+  counterparty_name: Sanctioned Pharma Holdings
+  destination_country: IR
+  contract_id: K-2026-0182
+  override_reason: Customer claims license; needs verification.
+teams_headline: "Trade override \u2014 SC-TC-001 sanctions block"
+execute_message: The agent will execute the override. The order to <strong>Sanctioned
+  Pharma Holdings</strong> will proceed and the SC-TC-001 block will be cleared on
+  this case only.
+match_keywords:
+- override
+- sanction
+- ofac
+- block
+- eccn
+- ord-44216
+- iran
+interpreted_as: override the SC-TC-001 sanctions block on order ORD-44216
+clarifying_question: "Just to confirm \u2014 you want me to override the SC-TC-001\
+  \ sanctions block on counterparty <strong>Sanctioned Pharma Holdings</strong> for\
+  \ product <code>P-EL-9001</code> (encryption module, ECCN 5A002), based on a customer-claimed\
+  \ OFAC license.<br><br> This is a critical override that will require named compliance\
+  \ officer approval. Proceed?"
 closing_messages:
-  approve: >-
-    <strong>Compliance officer approved with conditions.</strong> Override granted pending
-    verified license. License reference attached to the audit trail. Proceeding to execute the order.
-  reject: >-
-    <strong>Compliance officer rejected the override.</strong> Reason given:
-    <em>"{rationale}"</em><br><br>Action aborted; the order stays blocked and the customer
-    needs to provide the license.
-  request_more_info: >-
-    <strong>Compliance officer needs more information.</strong> Specifically:
-    <em>"{rationale}"</em><br><br>Case is back in review with these added queries.
-
+  approve: <strong>Compliance officer approved with conditions.</strong> Override
+    granted pending verified license. License reference attached to the audit trail.
+    Proceeding to execute the order.
+  reject: '<strong>Compliance officer rejected the override.</strong> Reason given:
+    <em>"{rationale}"</em><br><br>Action aborted; the order stays blocked and the
+    customer needs to provide the license.'
+  request_more_info: '<strong>Compliance officer needs more information.</strong>
+    Specifically: <em>"{rationale}"</em><br><br>Case is back in review with these
+    added queries.'
 rationale_reasons:
   reject:
-    - "OFAC license could not be verified — counterparty remains on SDN list."
-    - "Customer documentation is insufficient to clear the sanctions match."
-    - "Override pattern is unusual for this customer — escalating to legal."
+  - "OFAC license could not be verified \u2014 counterparty remains on SDN list."
+  - Customer documentation is insufficient to clear the sanctions match.
+  - "Override pattern is unusual for this customer \u2014 escalating to legal."
   request_more_info:
-    - "Need a copy of the OFAC license and its expiration date."
-    - "Need end-user verification and intended-use documentation."
-    - "Need customer compliance attestation signed by their export officer."
-
+  - Need a copy of the OFAC license and its expiration date.
+  - Need end-user verification and intended-use documentation.
+  - Need customer compliance attestation signed by their export officer.
 stages:
   agent_intake:
-    binder: "PolicyAndScopeAgentBinder/1.0"
+    binder: PolicyAndScopeAgentBinder/1.0
     facts:
-      - source: "kf:graph"
-        ontology_type: "Policy"
-        id: "POL-TC-OVERRIDE-2026-Q2"
-        uri: "kf.tcs/policy/POL-TC-OVERRIDE-2026-Q2"
-        title: "TC override policy"
-        payload: "Critical TC overrides require named compliance officer. Not delegable to agents."
-      - source: "iam:scopes"
-        ontology_type: "ActorScope"
-        id: "agent-trade-01"
-        uri: "iam.tcs/actors/agent-trade-01"
-        title: "Actor scope"
-        payload: "Scopes: sc.read, sc.propose, sc.execute_after_review · max_commitment $250k"
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-TC-OVERRIDE-2026-Q2
+      uri: kf.tcs/policy/POL-TC-OVERRIDE-2026-Q2
+      title: TC override policy
+      payload: Critical TC overrides require named compliance officer. Not delegable
+        to agents.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-trade-01
+      uri: iam.tcs/actors/agent-trade-01
+      title: Actor scope
+      payload: "Scopes: sc.read, sc.propose, sc.execute_after_review \xB7 max_commitment\
+        \ $250k"
   proposal:
-    binder: "TradeOverrideProposalBinder/1.0"
+    binder: TradeOverrideProposalBinder/1.0
     facts:
-      - source: "erp:material_master"
-        ontology_type: "Product"
-        id: "P-EL-9001"
-        uri: "erp.tcs/products/P-EL-9001"
-        title: "Encryption module"
-        payload: "ECCN 5A002 · HTS 8517.62.00 · controlled"
-      - source: "governance:guardrail_results"
-        ontology_type: "GuardrailResult"
-        id: "GR-ACT-OVR-9001-SC-TC-001"
-        uri: "governance.tcs/results/GR-ACT-OVR-9001"
-        title: "SC-TC-001 sanctions hit"
-        payload: "BLOCK · score 0.94 · OFAC SDN match on counterparty"
-      - source: "contract_mgmt"
-        ontology_type: "Contract"
-        id: "K-2026-0182"
-        uri: "contracts.tcs/K-2026-0182"
-        title: "Customer contract"
-        payload: "DDP terms · $480k value · effective Q2 2026"
+    - source: erp:material_master
+      ontology_type: Product
+      id: P-EL-9001
+      uri: erp.tcs/products/P-EL-9001
+      title: Encryption module
+      payload: "ECCN 5A002 \xB7 HTS 8517.62.00 \xB7 controlled"
+    - source: governance:guardrail_results
+      ontology_type: GuardrailResult
+      id: GR-ACT-OVR-9001-SC-TC-001
+      uri: governance.tcs/results/GR-ACT-OVR-9001
+      title: SC-TC-001 sanctions hit
+      payload: "BLOCK \xB7 score 0.94 \xB7 OFAC SDN match on counterparty"
+    - source: contract_mgmt
+      ontology_type: Contract
+      id: K-2026-0182
+      uri: contracts.tcs/K-2026-0182
+      title: Customer contract
+      payload: "DDP terms \xB7 $480k value \xB7 effective Q2 2026"
   review:
-    binder: "TradeOverrideReviewBinder/1.0"
+    binder: TradeOverrideReviewBinder/1.0
     facts:
-      - source: "kf:graph"
-        ontology_type: "SOP"
-        id: "SOP-TC-OVERRIDE-001"
-        uri: "kf.tcs/sop/SOP-TC-OVERRIDE-001"
-        title: "Trade override SOP"
-        payload: "Verify license · Confirm end-use · Document rationale · Two-person rule"
-      - source: "governance:case_history"
-        ontology_type: "PriorOverride"
-        id: "PR-2026-Q1-088"
-        uri: "governance.tcs/cases/PR-2026-Q1-088"
-        title: "Similar prior override"
-        payload: "Outcome: REJECTED · End-user could not be verified · 78% similarity"
-
+    - source: kf:graph
+      ontology_type: SOP
+      id: SOP-TC-OVERRIDE-001
+      uri: kf.tcs/sop/SOP-TC-OVERRIDE-001
+      title: Trade override SOP
+      payload: "Verify license \xB7 Confirm end-use \xB7 Document rationale \xB7 Two-person\
+        \ rule"
+    - source: governance:case_history
+      ontology_type: PriorOverride
+      id: PR-2026-Q1-088
+      uri: governance.tcs/cases/PR-2026-Q1-088
+      title: Similar prior override
+      payload: "Outcome: REJECTED \xB7 End-user could not be verified \xB7 78% similarity"
 outcomes:
   approve:
-    headline: "Approved with conditions"
-    detail: "Override granted pending verified license. Compliance officer attached license reference number to the audit trail."
+    headline: Approved with conditions
+    detail: Override granted pending verified license. Compliance officer attached
+      license reference number to the audit trail.
   reject:
-    headline: "Rejected — sanctions hit confirmed"
-    detail: "Override denied per SOP-TC-OVERRIDE-001. The OFAC SDN match cannot be cleared without an OFAC license. Action aborted; agent resumes with denial recorded."
+    headline: "Rejected \u2014 sanctions hit confirmed"
+    detail: Override denied per SOP-TC-OVERRIDE-001. The OFAC SDN match cannot be
+      cleared without an OFAC license. Action aborted; agent resumes with denial recorded.
   request_more_info:
-    headline: "More information requested"
-    detail: "Reviewer requested OFAC license documentation and end-user verification before deciding. ReviewBinder will re-run with additional queries; case loops back to review."
+    headline: More information requested
+    detail: Reviewer requested OFAC license documentation and end-user verification
+      before deciding. ReviewBinder will re-run with additional queries; case loops
+      back to review.

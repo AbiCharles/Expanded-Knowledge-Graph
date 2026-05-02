@@ -4,6 +4,7 @@ import { Console } from "./components/Console";
 import { FlowStage } from "./components/FlowStage";
 import { LineagePanel } from "./components/LineagePanel";
 import { DataSourcesModal } from "./components/DataSourcesModal";
+import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
 import {
   ApproveModal,
@@ -24,7 +25,8 @@ type ModalState =
   | { kind: "auto"; guardrailId: string; reason: string }
   | { kind: "compare"; cases: [CaseFull, CaseFull] }
   | { kind: "datasources" }
-  | { kind: "scenarios-help" };
+  | { kind: "scenarios-help" }
+  | { kind: "edit-scenario"; scenarioId: string };
 
 export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioRow[]>([]);
@@ -233,6 +235,7 @@ export default function App() {
           onPickCandidate={onPickCandidate}
           onDeleteCase={onDeleteCase}
           onClearCompleted={onClearCompleted}
+          onEditScenario={(sid) => setModal({ kind: "edit-scenario", scenarioId: sid })}
         />
         <FlowStage active={active} role={role} onOpenReview={onOpenReview} />
         <LineagePanel lineage={active?.lineage ?? []} />
@@ -261,6 +264,13 @@ export default function App() {
       )}
       {modal.kind === "scenarios-help" && (
         <ScenariosHelp onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "edit-scenario" && (
+        <ScenarioEditModal
+          scenarioId={modal.scenarioId}
+          onClose={() => setModal({ kind: "none" })}
+          onSaved={() => api.listScenarios().then(setScenarios).catch(console.error)}
+        />
       )}
     </>
   );

@@ -17,6 +17,7 @@ interface Props {
   onPickCandidate: (scenarioId: string) => void;
   onDeleteCase: (caseId: string) => void;
   onClearCompleted: () => void;
+  onEditScenario: (scenarioId: string) => void;
 }
 
 export function Console({
@@ -35,6 +36,7 @@ export function Console({
   onPickCandidate,
   onDeleteCase,
   onClearCompleted,
+  onEditScenario,
 }: Props) {
   const [text, setText] = useState("");
   const [replayOpen, setReplayOpen] = useState<string | null>(null);
@@ -114,18 +116,30 @@ export function Console({
         <div className="suggested-label">Suggested · click to use</div>
         <div className="suggested-chips">
           {scenarios.map((sc) => (
-            <button
-              key={sc.id}
-              className="chip"
-              disabled={composerLocked}
-              onClick={() => onSendPrompt(sc.suggested_prompt)}
-              title={chipTooltip(sc)}
-            >
-              {sc.suggested_prompt}
-              {sc.run_count && sc.run_count > 0 ? (
-                <span className="chip-stat">· {sc.run_count}</span>
-              ) : null}
-            </button>
+            <div key={sc.id} className="chip-row">
+              <button
+                className="chip"
+                disabled={composerLocked}
+                onClick={() => onSendPrompt(sc.suggested_prompt)}
+                title={chipTooltip(sc)}
+              >
+                {sc.suggested_prompt}
+                {sc.run_count && sc.run_count > 0 ? (
+                  <span className="chip-stat">· {sc.run_count}</span>
+                ) : null}
+              </button>
+              <button
+                className="chip-edit"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditScenario(sc.id);
+                }}
+                title={`Edit ${sc.id}`}
+                aria-label={`Edit ${sc.id}`}
+              >
+                ✎
+              </button>
+            </div>
           ))}
         </div>
       </div>

@@ -631,6 +631,143 @@ body {
   color: var(--cyan);
   letter-spacing: 0.04em;
 }
+.chip-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.chip-row .chip { flex: 1; }
+.chip-row:hover .chip-edit { opacity: 1; }
+.chip-edit {
+  width: 30px;
+  flex-shrink: 0;
+  font-size: 12px;
+  background: white;
+  border: 1px solid var(--rule);
+  color: var(--ink-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 160ms ease;
+}
+.chip-edit:hover {
+  background: var(--cyan);
+  color: var(--navy-deep);
+  border-color: var(--cyan);
+  opacity: 1;
+}
+
+/* Scenario editor modal */
+.scenario-edit-card {
+  width: 640px;
+  max-width: 92vw;
+  max-height: 88vh;
+  background: white;
+  border-radius: 8px;
+  box-shadow: var(--shadow-deep);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cardIn 320ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.scenario-edit-loading {
+  padding: 30px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.scenario-edit-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scenario-edit-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--paper-deep);
+}
+.scenario-edit-meta code {
+  background: var(--paper-warm);
+  padding: 0 4px;
+  border-radius: 2px;
+  color: var(--navy);
+}
+.scenario-edit-builtin-flag {
+  background: rgba(214,158,46,0.15);
+  color: var(--amber);
+  padding: 1px 6px;
+  border-radius: 100px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: help;
+}
+.scenario-edit-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.scenario-edit-body input,
+.scenario-edit-body textarea {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: white;
+  color: var(--ink);
+  outline: none;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.scenario-edit-body input:focus,
+.scenario-edit-body textarea:focus { border-color: var(--cyan); }
+.scenario-edit-help {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-style: italic;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--paper-warm);
+  border-radius: 3px;
+}
+.scenario-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--paper-deep);
+}
+.scenario-edit-actions button {
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: white;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  transition: all 160ms ease;
+}
+.scenario-edit-actions button.primary {
+  background: var(--navy-deep);
+  color: white;
+  border-color: var(--navy-deep);
+}
+.scenario-edit-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .composer {
   padding: 12px 16px 16px;
@@ -2295,6 +2432,38 @@ body {
   letter-spacing: -0.005em;
   color: var(--ink);
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.query-autofill-btn {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  background: white;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.query-autofill-btn:hover:not(:disabled) {
+  background: var(--cyan);
+  color: var(--navy-deep);
+}
+.query-autofill-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.query-autofill-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  background: rgba(0,201,183,0.08);
+  border-left: 2px solid var(--cyan);
+  border-radius: 3px;
+  color: var(--ink-soft);
 }
 .query-save-form label {
   display: flex;

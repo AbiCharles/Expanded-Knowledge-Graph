@@ -225,3 +225,51 @@ export async function deleteScenario(scenarioId: string): Promise<void> {
     await fetch(`/api/scenarios/${scenarioId}`, { method: "DELETE" })
   );
 }
+
+export interface EditScenarioArgs {
+  title?: string;
+  match_keywords?: string[];
+  interpreted_as?: string;
+  clarifying_question?: string;
+  suggested_prompt?: string;
+  description?: string;
+}
+
+export async function editScenario(scenarioId: string, args: EditScenarioArgs): Promise<void> {
+  await jsonOrThrow(
+    await fetch(`/api/scenarios/${scenarioId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function getScenario(scenarioId: string): Promise<any> {
+  return jsonOrThrow(
+    await fetch(`/api/scenarios/${scenarioId}`)
+  );
+}
+
+export interface AutofillSuggestion {
+  source: "llm" | "fallback";
+  match_keywords: string[];
+  clarifying_question: string;
+  suggested_prompt: string;
+}
+
+export async function autofillScenario(args: {
+  title: string;
+  data_source: string;
+  sql: string;
+  sample_rows?: unknown[];
+  ontology_type?: string;
+}): Promise<AutofillSuggestion> {
+  return jsonOrThrow(
+    await fetch("/api/scenarios/autofill", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}

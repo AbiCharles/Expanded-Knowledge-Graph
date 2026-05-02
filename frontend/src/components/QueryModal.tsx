@@ -139,6 +139,7 @@ export function QueryModal({
               source={source}
               sql={sql}
               params={params}
+              result={result}
               onCancel={() => setSaveOpen(false)}
               onSaved={(sid) => {
                 setSavedAs(sid);
@@ -160,12 +161,14 @@ function SaveScenarioForm({
   source,
   sql,
   params,
+  result,
   onCancel,
   onSaved,
 }: {
   source: DataSourceRow;
   sql: string;
   params: ParamRow[];
+  result: api.RunQueryResult | null;
   onCancel: () => void;
   onSaved: (scenarioId: string) => void;
 }) {
@@ -179,7 +182,38 @@ function SaveScenarioForm({
     "Record"
   );
   const [busy, setBusy] = useState(false);
+  const [autofilling, setAutofilling] = useState(false);
+  const [autofillSource, setAutofillSource] = useState<"llm" | "fallback" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const onAutofill = async () => {
+    if (!title.trim()) {
+      setError("Add a title first — the LLM uses it as the seed.");
+      return;
+    }
+    setAutofilling(true);
+    setError(null);
+    try {
+      const sampleRows = (result?.rows || []).slice(0, 3).map((row) =>
+        Object.fromEntries((result?.columns || []).map((c, i) => [c, row[i]]))
+      );
+      const r = await api.autofillScenario({
+        title: title.trim(),
+        data_source: source.id,
+        sql,
+        sample_rows: sampleRows,
+        ontology_type: ontology,
+      });
+      setKeywords(r.match_keywords.join(", "));
+      setClarifier(r.clarifying_question);
+      setPrompt(r.suggested_prompt);
+      setAutofillSource(r.source);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAutofilling(false);
+    }
+  };
 
   const submit = async () => {
     if (!title.trim()) {
@@ -216,7 +250,24 @@ function SaveScenarioForm({
 
   return (
     <div className="query-save-form">
-      <div className="query-save-header">Save as scenario</div>
+      <div className="query-save-header">
+        Save as scenario
+        <button
+          className="query-autofill-btn"
+          onClick={onAutofill}
+          disabled={autofilling || !title.trim()}
+          title="Ask the LLM to suggest keywords, a clarifying question, and a chip prompt"
+        >
+          {autofilling ? "Suggesting…" : "✨ Suggest with AI"}
+        </button>
+      </div>
+      {autofillSource && (
+        <div className="query-autofill-badge">
+          {autofillSource === "llm"
+            ? "✓ Filled by LLM — review and edit before saving."
+            : "⚠ No LLM credentials — used keyword-derived defaults. Edit before saving."}
+        </div>
+      )}
       <label>Title (required)
         <input
           value={title}

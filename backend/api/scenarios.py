@@ -122,6 +122,80 @@ class SaveScenarioIn(BaseModel):
     suggested_prompt: Optional[str] = None
 
 
+class AutofillIn(BaseModel):
+    """Ask the LLM to suggest keywords / clarifier / suggested-prompt for a
+    save-as-scenario form, given the user's title + SQL + data source + a
+    sample of result rows. All fields optional except `title` and `data_source`."""
+    title: str
+    data_source: str
+    sql: str = ""
+    sample_rows: list[dict[str, Any]] = Field(default_factory=list)
+    ontology_type: str = "Record"
+
+
+_AUTOFILL_SYSTEM = """You help the operator turn an iterated SQL query into a
+runnable agent scenario. Given a title, the data source it queries, the SQL,
+and a sample of the result rows, you suggest:
+  - 5 specific match_keywords (lowercase, 1-3 words each, no generic terms
+    like 'data' or 'lookup' on their own)
+  - a one-sentence clarifying_question that asks the operator to confirm
+    running this lookup; HTML allowed; refer to the data source by id
+  - a suggested_prompt (the chip text the operator sees in the console;
+    a natural-language imperative starting with a verb)
+
+Respond with strict JSON only, matching this schema:
+{"match_keywords": [string, ...], "clarifying_question": string, "suggested_prompt": string}"""
+
+
+@router.post("/scenarios/autofill")
+async def autofill_scenario(payload: AutofillIn, request: Request) -> dict:
+    """LLM-suggested keywords / clarifier / prompt for the Save form.
+
+    Falls back gracefully when the LLM is FakeLLMClient (no key) — returns
+    keyword-derived defaults so the form is still useful without credentials.
+    """
+    state = request.app.state.app_state
+    label = payload.title.strip().lower()
+    fallback = {
+        "match_keywords": [
+            label,
+            *[w for w in label.split() if len(w) >= 4],
+            payload.data_source.lower(),
+            payload.ontology_type.lower(),
+        ][:5],
+        "clarifying_question": (
+            f"Run the saved <strong>{payload.title}</strong> lookup against "
+            f"<code>{payload.data_source}</code>?"
+        ),
+        "suggested_prompt": payload.title,
+    }
+    if state.llm.name == "fake":
+        return {"source": "fallback", **fallback}
+
+    user_msg = (
+        f"Title: {payload.title}\n"
+        f"Data source: {payload.data_source} (ontology: {payload.ontology_type})\n"
+        f"SQL:\n{payload.sql}\n"
+        f"Sample rows (first 3):\n"
+        + "\n".join(str(r) for r in payload.sample_rows[:3])
+        + "\n\nReturn JSON only."
+    )
+    try:
+        raw = await state.llm.complete(
+            system=_AUTOFILL_SYSTEM, user=user_msg, response_format="json", temperature=0.4,
+        )
+        import json
+        parsed = json.loads(raw)
+        return {
+            "source": "llm",
+            "match_keywords": list(parsed.get("match_keywords") or fallback["match_keywords"])[:8],
+            "clarifying_question": str(parsed.get("clarifying_question") or fallback["clarifying_question"]),
+            "suggested_prompt": str(parsed.get("suggested_prompt") or fallback["suggested_prompt"]),
+        }
+    except Exception:
+        return {"source": "fallback", **fallback}
+
+
 @router.post("/scenarios")
 def save_scenario(payload: SaveScenarioIn, request: Request) -> dict:
     """Persist a customised scenario built around a registered data source's
@@ -167,6 +241,67 @@ def save_scenario(payload: SaveScenarioIn, request: Request) -> dict:
     if payload.suggested_prompt:
         scenario["_custom_suggested_prompt"] = payload.suggested_prompt
     return {"scenario_id": sid}
+
+
+class EditScenarioIn(BaseModel):
+    """Editable fields on any scenario — we don't allow changing stages,
+    action_type, or autonomous since those affect running behaviour."""
+    title: Optional[str] = None
+    match_keywords: Optional[list[str]] = None
+    interpreted_as: Optional[str] = None
+    clarifying_question: Optional[str] = None
+    suggested_prompt: Optional[str] = None
+    description: Optional[str] = None
+
+
+@router.get("/scenarios/{scenario_id}")
+def get_scenario(scenario_id: str, request: Request) -> dict:
+    """Return the editable subset of a scenario for the editor modal."""
+    state = request.app.state.app_state
+    sc = state.scenarios.get(scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="scenario not found")
+    return {
+        "id": sc["id"],
+        "title": sc["title"],
+        "domain": sc.get("domain", ""),
+        "autonomous": bool(sc.get("autonomous")),
+        "match_keywords": sc.get("match_keywords", []),
+        "interpreted_as": sc.get("interpreted_as", ""),
+        "clarifying_question": sc.get("clarifying_question", ""),
+        "suggested_prompt": _suggested_prompt_for(sc),
+        "description": sc.get("description", ""),
+        # Read-only context for the operator
+        "action_type": sc.get("action_type", ""),
+        "is_builtin": not (sc["id"].startswith("SC-CUSTOM-") or sc["id"].startswith("SC-AUTO-")),
+    }
+
+
+@router.patch("/scenarios/{scenario_id}")
+def edit_scenario(scenario_id: str, payload: EditScenarioIn, request: Request) -> dict:
+    """Update editable fields on a scenario in place. Built-in, auto, and
+    custom scenarios can all be edited; only structural fields are locked."""
+    state = request.app.state.app_state
+    sc = state.scenarios.get(scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail="scenario not found")
+
+    if payload.title is not None:
+        sc["title"] = payload.title
+    if payload.match_keywords is not None:
+        sc["match_keywords"] = [k.strip().lower() for k in payload.match_keywords if k.strip()]
+    if payload.interpreted_as is not None:
+        sc["interpreted_as"] = payload.interpreted_as
+    if payload.clarifying_question is not None:
+        sc["clarifying_question"] = payload.clarifying_question
+    if payload.suggested_prompt is not None:
+        sc["_custom_suggested_prompt"] = payload.suggested_prompt
+    if payload.description is not None:
+        sc["description"] = payload.description
+
+    # Persist via the registry's save path
+    state.scenarios.register(sc, persist=True)
+    return {"scenario_id": scenario_id, "updated": True}
 
 
 @router.delete("/scenarios/{scenario_id}")
