@@ -12,9 +12,8 @@ infra and security only.
 
 ## Required configuration
 
-The backend boots out of the box with a built-in placeholder secret —
-useful for the demo and for `localhost` work. **For any deployment that
-isn't your own laptop**, set a real `JWT_SECRET`:
+The backend **refuses to start** unless `JWT_SECRET` is set to a real
+value. Generate one once:
 
 ```bash
 openssl rand -hex 32
@@ -30,9 +29,10 @@ OPENAI_MODEL=gpt-4o-mini
 CORS_ORIGINS=https://hitl.your-domain.com
 ```
 
-When `JWT_SECRET` is unset, the backend logs a loud warning at startup
-that tokens are forgeable by anyone who reads the source. **Don't ignore
-that warning in production.**
+For transient local runs where you really don't want to set a secret
+(e.g. spinning up a one-off container to inspect the schema), export
+`HITL_ALLOW_DEFAULT_SECRET=1`. The app boots with a loud warning that
+tokens are forgeable. **Never use this in any real deployment.**
 
 ---
 
@@ -60,9 +60,8 @@ sources, and the vector embedding cache. Back this up.
 In rough order of how badly each one bites if skipped:
 
 ### 1. Real `JWT_SECRET`
-The backend boots without one, but logs a loud warning that tokens are
-forgeable. Set it for any real deployment. Don't share this secret
-across environments — each deploy gets its own.
+Already enforced — the backend refuses to start without it. Don't share
+this secret across environments; each deploy gets its own.
 
 ### 2. Change the default admin password
 First thing you do after the first boot:

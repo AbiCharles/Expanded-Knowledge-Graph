@@ -2,9 +2,9 @@
 
 Hardening notes (2026-Q2):
 
-- ``JWT_SECRET`` defaults to a placeholder when not set. We log a loud
-  warning at startup so the operator knows to set their own secret
-  before any real deployment, but boot is not blocked.
+- ``JWT_SECRET`` is **required**. The backend refuses to start when it's
+  unset or matches the built-in placeholder. Set ``HITL_ALLOW_DEFAULT_
+  SECRET=1`` to bypass for transient local runs (warns loudly).
 - Tokens carry a ``jti`` claim (random uuid) and are revocable via the
   ``RevokedTokenStore``. The ``/auth/logout`` endpoint adds the current
   token's jti; ``current_user`` rejects revoked tokens.
@@ -42,20 +42,30 @@ JWT_EXPIRE_HOURS = 24
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
-def warn_if_default_jwt_secret() -> None:
-    """Log a warning when the default placeholder secret is in use.
+def assert_jwt_secret_set() -> None:
+    """Refuse to start when ``JWT_SECRET`` is unset or matches the placeholder.
 
-    The boot is not blocked — the demo needs to be runnable out of the box.
-    Production deployments should set ``JWT_SECRET`` to a strong random
-    value (see ``docs/production.md``); the warning is the reminder.
+    Set ``HITL_ALLOW_DEFAULT_SECRET=1`` to bypass for transient local runs
+    (the bypass logs a loud warning). Production deploys must always set a
+    real secret — the docker-compose stack already enforces this via
+    ``${JWT_SECRET:?...}`` substitution.
     """
-    if JWT_SECRET == _DEFAULT_SECRET:
+    if JWT_SECRET != _DEFAULT_SECRET:
+        return
+    if os.environ.get("HITL_ALLOW_DEFAULT_SECRET") == "1":
         log.warning(
-            "JWT_SECRET is the built-in placeholder. Tokens are forgeable "
-            "by anyone who reads this source. Set JWT_SECRET to a strong "
-            "random string (`openssl rand -hex 32`) before exposing the "
-            "backend on any network beyond localhost."
+            "JWT_SECRET is the built-in placeholder; HITL_ALLOW_DEFAULT_SECRET=1 "
+            "is set so we'll boot anyway. Tokens are forgeable by anyone who "
+            "reads this source — DO NOT use this in any deployment."
         )
+        return
+    raise RuntimeError(
+        "JWT_SECRET is unset (or equal to the built-in placeholder). "
+        "Set it to a strong random string before starting the backend:\n"
+        "  echo \"JWT_SECRET=$(openssl rand -hex 32)\" >> .env\n"
+        "For a transient local run without setting it, export "
+        "HITL_ALLOW_DEFAULT_SECRET=1."
+    )
 
 
 # =============================================================================

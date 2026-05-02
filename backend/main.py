@@ -5,6 +5,14 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Load .env into os.environ BEFORE any backend imports. backend.auth captures
+# JWT_SECRET at module-import time via os.environ.get(); without this dance
+# .env values are only seen later (when pydantic-settings reads them in
+# get_settings()), which is too late for the import-time constant.
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,7 +30,7 @@ from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
 from .api.metrics import router as metrics_router
 from .api.scenarios import router as scenarios_router
-from .auth import ensure_default_admin, warn_if_default_jwt_secret
+from .auth import assert_jwt_secret_set, ensure_default_admin
 from .config import get_settings
 from .datasources import DataSourceRegistry
 from .persistence import get_database
@@ -34,10 +42,9 @@ from .state import AppState
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logging.basicConfig(level=settings.LOG_LEVEL)
-    # If JWT_SECRET is the built-in placeholder, log a loud warning but
-    # continue. Operator is responsible for setting a real value before any
-    # real deployment (see docs/production.md).
-    warn_if_default_jwt_secret()
+    # Refuse to start without a real JWT_SECRET. HITL_ALLOW_DEFAULT_SECRET=1
+    # bypasses for transient local runs.
+    assert_jwt_secret_set()
 
     scenario_dir = Path(__file__).resolve().parent / "scenarios"
     scenarios = ScenarioRegistry.from_directory(scenario_dir)
