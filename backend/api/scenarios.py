@@ -123,10 +123,11 @@ class SaveScenarioIn(BaseModel):
 
 
 class AutofillIn(BaseModel):
-    """Ask the LLM to suggest keywords / clarifier / suggested-prompt for a
-    save-as-scenario form, given the user's title + SQL + data source + a
-    sample of result rows. All fields optional except `title` and `data_source`."""
-    title: str
+    """Ask the LLM to suggest a complete save-as-scenario form from the
+    operator's iterated SQL + data source + sample rows. Title is optional;
+    when missing, the LLM proposes one. `data_source` and `sql` are the
+    real seed."""
+    title: str = ""
     data_source: str
     sql: str = ""
     sample_rows: list[dict[str, Any]] = Field(default_factory=list)
@@ -134,9 +135,12 @@ class AutofillIn(BaseModel):
 
 
 _AUTOFILL_SYSTEM = """You help the operator turn an iterated SQL query into a
-runnable agent scenario. Given a title, the data source it queries, the SQL,
-and a sample of the result rows, you suggest:
-  - 5 specific match_keywords (lowercase, 1-3 words each, no generic terms
+runnable agent scenario. Given the data source the query targets, the SQL
+itself, and a sample of the result rows, you suggest:
+  - a short title (3–6 words, Title Case) that names what this lookup
+    answers. If the operator already supplied a title use it; otherwise
+    invent one based on the SQL semantics.
+  - 5 specific match_keywords (lowercase, 1–3 words each, no generic terms
     like 'data' or 'lookup' on their own)
   - a one-sentence clarifying_question that asks the operator to confirm
     running this lookup; HTML allowed; refer to the data source by id
@@ -144,7 +148,7 @@ and a sample of the result rows, you suggest:
     a natural-language imperative starting with a verb)
 
 Respond with strict JSON only, matching this schema:
-{"match_keywords": [string, ...], "clarifying_question": string, "suggested_prompt": string}"""
+{"title": string, "match_keywords": [string, ...], "clarifying_question": string, "suggested_prompt": string}"""
 
 
 @router.post("/scenarios/autofill")
@@ -155,8 +159,13 @@ async def autofill_scenario(payload: AutofillIn, request: Request) -> dict:
     keyword-derived defaults so the form is still useful without credentials.
     """
     state = request.app.state.app_state
-    label = payload.title.strip().lower()
+    # Best-effort default title from the data source id (e.g. "outcome_stats"
+    # → "Outcome stats lookup") so the form has something even when the LLM
+    # is offline.
+    default_title = payload.title.strip() or _humanise(payload.data_source).title() + " lookup"
+    label = default_title.lower()
     fallback = {
+        "title": default_title,
         "match_keywords": [
             label,
             *[w for w in label.split() if len(w) >= 4],
@@ -164,16 +173,16 @@ async def autofill_scenario(payload: AutofillIn, request: Request) -> dict:
             payload.ontology_type.lower(),
         ][:5],
         "clarifying_question": (
-            f"Run the saved <strong>{payload.title}</strong> lookup against "
+            f"Run the saved <strong>{default_title}</strong> lookup against "
             f"<code>{payload.data_source}</code>?"
         ),
-        "suggested_prompt": payload.title,
+        "suggested_prompt": default_title,
     }
     if state.llm.name == "fake":
         return {"source": "fallback", **fallback}
 
     user_msg = (
-        f"Title: {payload.title}\n"
+        f"Title (operator-supplied; empty = please invent one): {payload.title!r}\n"
         f"Data source: {payload.data_source} (ontology: {payload.ontology_type})\n"
         f"SQL:\n{payload.sql}\n"
         f"Sample rows (first 3):\n"
@@ -188,12 +197,17 @@ async def autofill_scenario(payload: AutofillIn, request: Request) -> dict:
         parsed = json.loads(raw)
         return {
             "source": "llm",
+            "title": str(parsed.get("title") or fallback["title"]),
             "match_keywords": list(parsed.get("match_keywords") or fallback["match_keywords"])[:8],
             "clarifying_question": str(parsed.get("clarifying_question") or fallback["clarifying_question"]),
             "suggested_prompt": str(parsed.get("suggested_prompt") or fallback["suggested_prompt"]),
         }
     except Exception:
         return {"source": "fallback", **fallback}
+
+
+def _humanise(s: str) -> str:
+    return re.sub(r"[_\-]+", " ", (s or "").strip())
 
 
 @router.post("/scenarios")

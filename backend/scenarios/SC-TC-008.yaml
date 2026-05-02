@@ -1,109 +1,122 @@
 id: SC-TC-008
-title: "Trade override (live data) — sanctions hit on encryption module"
-domain: "Trade Compliance"
-teams_channel: "#trade-compliance"
-actor_id: "agent-trade-01"
-operator_role: { label: "Operator", name: "trade.analyst.dlin" }
-reviewer_role: { label: "Reviewer", name: "compliance.officer.kchen" }
+title: "Trade override (live data) \u2014 sanctions hit on encryption module"
+domain: Trade Compliance
+teams_channel: '#trade-compliance'
+actor_id: agent-trade-01
+operator_role:
+  label: Operator
+  name: trade.analyst.dlin
+reviewer_role:
+  label: Reviewer
+  name: compliance.officer.kchen
 autonomous: false
-
-action_type: "trade_override"
+action_type: trade_override
 action_payload:
-  originating_guardrail_id: "SC-TC-001"
-  product_id: "P-EL-9001"
-  counterparty_name: "Sanctioned Pharma Holdings"
-  destination_country: "IR"
-  contract_id: "K-2026-0182"
-  override_reason: "Customer claims license; needs verification."
-
-teams_headline: "Trade override (LIVE) — SC-TC-001 sanctions block"
-execute_message: >-
-  The agent will execute the override. This case bound facts from CSV (product master),
-  CSV (sanctions list), SQLite (prior cases), and the vector store (relevant SOP excerpts).
-
-match_keywords: ["live", "fresh", "actual data", "real data", "sc-tc-008", "live override"]
-interpreted_as: "override the SC-TC-001 sanctions block — pulling live data from registered sources"
-clarifying_question: >-
-  This will run the same trade-override flow as SC-TC-007, but every fact is fetched
-  <strong>from a registered data source at bind time</strong> — the product CSV, the sanctions
-  CSV, the governance SQLite, and the policy vector store. <br><br>
-  Open the Data sources panel after to see what was queried. Proceed?
-
+  originating_guardrail_id: SC-TC-001
+  product_id: P-EL-9001
+  counterparty_name: Sanctioned Pharma Holdings
+  destination_country: IR
+  contract_id: K-2026-0182
+  override_reason: Customer claims license; needs verification.
+teams_headline: "Trade override (LIVE) \u2014 SC-TC-001 sanctions block"
+execute_message: The agent will execute the override. This case bound facts from CSV
+  (product master), CSV (sanctions list), SQLite (prior cases), and the vector store
+  (relevant SOP excerpts).
+match_keywords:
+- live
+- fresh
+- actual data
+- real data
+- sc-tc-008
+- live override
+interpreted_as: "override the SC-TC-001 sanctions block \u2014 pulling live data from\
+  \ registered sources"
+clarifying_question: "This will run the same trade-override flow as SC-TC-007, but\
+  \ every fact is fetched <strong>from a registered data source at bind time</strong>\
+  \ \u2014 the product CSV, the sanctions CSV, the governance SQLite, and the policy\
+  \ vector store. <br><br> Open the Data sources panel after to see what was queried.\
+  \ Proceed?"
 closing_messages:
-  approve: >-
-    <strong>Compliance officer approved with conditions.</strong> Override granted pending verified license.
-  reject: >-
-    <strong>Compliance officer rejected the override.</strong> Reason given: <em>"{rationale}"</em>
-    <br><br>Action aborted; the order stays blocked.
-  request_more_info: >-
-    <strong>Compliance officer needs more information.</strong> Specifically: <em>"{rationale}"</em>
-    <br><br>Case is back in review.
-
+  approve: <strong>Compliance officer approved with conditions.</strong> Override
+    granted pending verified license.
+  reject: '<strong>Compliance officer rejected the override.</strong> Reason given:
+    <em>"{rationale}"</em> <br><br>Action aborted; the order stays blocked.'
+  request_more_info: '<strong>Compliance officer needs more information.</strong>
+    Specifically: <em>"{rationale}"</em> <br><br>Case is back in review.'
 rationale_reasons:
   reject:
-    - "OFAC license could not be verified — counterparty remains on SDN list."
-    - "Customer documentation is insufficient to clear the sanctions match."
-    - "Pattern of similar overrides recently rejected — escalating to legal."
+  - "OFAC license could not be verified \u2014 counterparty remains on SDN list."
+  - Customer documentation is insufficient to clear the sanctions match.
+  - "Pattern of similar overrides recently rejected \u2014 escalating to legal."
   request_more_info:
-    - "Need a copy of the OFAC license and its expiration date."
-    - "Need end-user verification and intended-use documentation."
-    - "Need confirmation that prior similar overrides have been resolved."
-
+  - Need a copy of the OFAC license and its expiration date.
+  - Need end-user verification and intended-use documentation.
+  - Need confirmation that prior similar overrides have been resolved.
 stages:
   agent_intake:
-    binder: "PolicyAndScopeAgentBinder/2.0-live"
+    binder: PolicyAndScopeAgentBinder/2.0-live
     facts:
-      - source: "kf:graph"
-        ontology_type: "Policy"
-        id: "POL-TC-OVERRIDE-2026-Q2"
-        uri: "kf.tcs/policy/POL-TC-OVERRIDE-2026-Q2"
-        title: "TC override policy"
-        payload: "Critical TC overrides require named compliance officer. Not delegable to agents."
-      - source: "iam:scopes"
-        ontology_type: "ActorScope"
-        id: "agent-trade-01"
-        uri: "iam.tcs/actors/agent-trade-01"
-        title: "Actor scope"
-        payload: "Scopes: sc.read, sc.propose, sc.execute_after_review · max_commitment $250k"
-
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-TC-OVERRIDE-2026-Q2
+      uri: kf.tcs/policy/POL-TC-OVERRIDE-2026-Q2
+      title: TC override policy
+      payload: Critical TC overrides require named compliance officer. Not delegable
+        to agents.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-trade-01
+      uri: iam.tcs/actors/agent-trade-01
+      title: Actor scope
+      payload: "Scopes: sc.read, sc.propose, sc.execute_after_review \xB7 max_commitment\
+        \ $250k"
   proposal:
-    binder: "TradeOverrideProposalBinder/2.0-live"
+    binder: TradeOverrideProposalBinder/2.0-live
     queries:
-      - data_source: products_csv
-        ontology_type: Product
-        filter: { product_id: P-EL-9001 }
-        purpose: "Bind product master record from CSV"
-      - data_source: sanctions_csv
-        ontology_type: SanctionedEntity
-        filter: { name: "Sanctioned Pharma Holdings" }
-        purpose: "Confirm OFAC SDN match from sanctions CSV"
+    - data_source: products_csv
+      ontology_type: Product
+      filter:
+        product_id: P-EL-9001
+      purpose: Bind product master record from CSV
+    - data_source: sanctions_csv
+      ontology_type: SanctionedEntity
+      filter:
+        name: Sanctioned Pharma Holdings
+      purpose: Confirm OFAC SDN match from sanctions CSV
     facts:
-      - source: "contract_mgmt"
-        ontology_type: "Contract"
-        id: "K-2026-0182"
-        uri: "contracts.tcs/K-2026-0182"
-        title: "Customer contract"
-        payload: "DDP terms · $480k value · effective Q2 2026"
-
+    - source: contract_mgmt
+      ontology_type: Contract
+      id: K-2026-0182
+      uri: contracts.tcs/K-2026-0182
+      title: Customer contract
+      payload: "DDP terms \xB7 $480k value \xB7 effective Q2 2026"
   review:
-    binder: "TradeOverrideReviewBinder/2.0-live"
+    binder: TradeOverrideReviewBinder/2.0-live
     queries:
-      - data_source: governance_sqlite
-        ontology_type: PriorOverride
-        filter: { scenario_id: SC-TC-007, max_results: 3 }
-        purpose: "Surface prior similar overrides from governance store"
-      - data_source: policy_corpus
-        ontology_type: PolicyExcerpt
-        filter: { query: "OFAC sanctions override license verification end-use", top_k: 3 }
-        purpose: "Retrieve relevant SOP excerpts via semantic search"
-
+    - data_source: governance_sqlite
+      ontology_type: PriorOverride
+      filter:
+        scenario_id: SC-TC-007
+        max_results: 3
+      purpose: Surface prior similar overrides from governance store
+    - data_source: policy_corpus
+      ontology_type: PolicyExcerpt
+      filter:
+        query: OFAC sanctions override license verification end-use
+        top_k: 3
+      purpose: Retrieve relevant SOP excerpts via semantic search
 outcomes:
   approve:
-    headline: "Approved with conditions"
-    detail: "Override granted pending verified license. Decision recorded in audit store."
+    headline: Approved with conditions
+    detail: Override granted pending verified license. Decision recorded in audit
+      store.
   reject:
-    headline: "Rejected — sanctions hit confirmed"
-    detail: "Override denied per SOP-TC-OVERRIDE-001. The OFAC SDN match cannot be cleared without an OFAC license."
+    headline: "Rejected \u2014 sanctions hit confirmed"
+    detail: Override denied per SOP-TC-OVERRIDE-001. The OFAC SDN match cannot be
+      cleared without an OFAC license.
   request_more_info:
-    headline: "More information requested"
-    detail: "Reviewer requested OFAC license documentation and end-user verification before deciding."
+    headline: More information requested
+    detail: Reviewer requested OFAC license documentation and end-user verification
+      before deciding.
+_custom_suggested_prompt: Run the live override flow with fresh data from registered
+  sources.

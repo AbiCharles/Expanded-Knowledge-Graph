@@ -187,10 +187,6 @@ function SaveScenarioForm({
   const [error, setError] = useState<string | null>(null);
 
   const onAutofill = async () => {
-    if (!title.trim()) {
-      setError("Add a title first — the LLM uses it as the seed.");
-      return;
-    }
     setAutofilling(true);
     setError(null);
     try {
@@ -198,12 +194,15 @@ function SaveScenarioForm({
         Object.fromEntries((result?.columns || []).map((c, i) => [c, row[i]]))
       );
       const r = await api.autofillScenario({
-        title: title.trim(),
+        title: title.trim() || undefined,
         data_source: source.id,
         sql,
         sample_rows: sampleRows,
         ontology_type: ontology,
       });
+      // Only overwrite the title if the operator left it blank — once they've
+      // typed something they presumably want it kept.
+      if (!title.trim()) setTitle(r.title);
       setKeywords(r.match_keywords.join(", "));
       setClarifier(r.clarifying_question);
       setPrompt(r.suggested_prompt);
@@ -255,8 +254,12 @@ function SaveScenarioForm({
         <button
           className="query-autofill-btn"
           onClick={onAutofill}
-          disabled={autofilling || !title.trim()}
-          title="Ask the LLM to suggest keywords, a clarifying question, and a chip prompt"
+          disabled={autofilling || !sql.trim()}
+          title={
+            !sql.trim()
+              ? "Run a query first — the AI uses the SQL + sample rows to suggest fields"
+              : "Ask the AI to suggest a title, keywords, clarifying question, and chip prompt"
+          }
         >
           {autofilling ? "Suggesting…" : "✨ Suggest with AI"}
         </button>

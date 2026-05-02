@@ -268,13 +268,14 @@ export async function getMetrics(): Promise<MetricsSummary> {
 
 export interface AutofillSuggestion {
   source: "llm" | "fallback";
+  title: string;
   match_keywords: string[];
   clarifying_question: string;
   suggested_prompt: string;
 }
 
 export async function autofillScenario(args: {
-  title: string;
+  title?: string;
   data_source: string;
   sql: string;
   sample_rows?: unknown[];
