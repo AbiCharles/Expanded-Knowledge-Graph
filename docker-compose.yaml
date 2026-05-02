@@ -1,0 +1,55 @@
+# Production-style stack: backend behind Caddy (auto TLS) + Postgres
+# instead of SQLite. The optional Postgres instance from
+# docker-compose.postgres.yaml can be merged in if you want a separate
+# governance store.
+#
+# Quick start:
+#   echo "JWT_SECRET=$(openssl rand -hex 32)" > .env.docker
+#   echo "DOMAIN=hitl.example.com" >> .env.docker
+#   docker compose --env-file .env.docker up -d
+#
+# For a no-TLS local run (just the backend + a Caddy on :80):
+#   docker compose --env-file .env.docker -f docker-compose.yaml up backend
+
+services:
+  backend:
+    build: .
+    container_name: hitl-backend
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${DOMAIN:-localhost}}
+    volumes:
+      # Persist the SQLite DB + uploaded sources across container restarts
+      - hitl-data:/app/backend/data
+    ports:
+      - "8001:8001"
+
+  # Caddy auto-issues a Let's Encrypt cert for ${DOMAIN} and proxies to
+  # the backend. Skip this service if you have a different reverse proxy.
+  caddy:
+    image: caddy:2-alpine
+    container_name: hitl-caddy
+    restart: unless-stopped
+    depends_on: [backend]
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set, e.g. hitl.example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  hitl-data:
+  caddy-data:
+  caddy-config:

@@ -34,6 +34,12 @@ from tcs_hitl_context import KnowledgeFact, KnowledgeQuery, KnowledgeRef, LLMCli
 
 log = logging.getLogger(__name__)
 
+# Hard cap on chunks-per-source so one operator-uploaded folder can't run up
+# an enormous OpenAI bill on registration. Override with HITL_MAX_VECTOR_
+# CHUNKS=N if you really mean it.
+import os as _os
+_MAX_CHUNKS = int(_os.environ.get("HITL_MAX_VECTOR_CHUNKS", "500"))
+
 
 def _chunk_text(text: str, target: int = 500) -> list[str]:
     """Split on blank-line boundaries; merge small paragraphs."""
@@ -118,6 +124,14 @@ class VectorStoreResolver:
             text = path.read_text()
             for i, c in enumerate(_chunk_text(text)):
                 chunks.append({"file": path.name, "chunk_id": i, "text": c})
+        if len(chunks) > _MAX_CHUNKS:
+            log.warning(
+                "vector_store %s: folder produced %d chunks; capping at %d "
+                "(HITL_MAX_VECTOR_CHUNKS to override). Embedding cost would otherwise "
+                "scale linearly with the rest.",
+                self.name, len(chunks), _MAX_CHUNKS,
+            )
+            chunks = chunks[:_MAX_CHUNKS]
         self._chunks = chunks
 
         if not self._api_key:

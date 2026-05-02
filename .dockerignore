@@ -1,0 +1,19 @@
+# Don't ship dev artifacts into the image
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.git/
+.gitignore
+.env
+backend/data/app.sqlite
+backend/data/app.sqlite-journal
+backend/data/uploads/
+backend/data/*.npz
+frontend/node_modules/
+frontend/dist/
+*.swp
+.DS_Store
+.vscode/
+.idea/

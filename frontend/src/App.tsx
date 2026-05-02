@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import * as api from "./api";
-import { AuthUser, clearAuth, fetchMe, getUser } from "./auth";
+import { AuthUser, clearAuth, fetchMe, getUser, logout as serverLogout } from "./auth";
 import { Console } from "./components/Console";
 import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
@@ -59,13 +59,28 @@ export default function App() {
     });
   }, []);
 
-  const onLogout = () => {
-    clearAuth();
+  const onLogout = async () => {
+    // Tell the server to blocklist the token (so a stolen copy can't be
+    // reused). serverLogout() also clears localStorage.
+    await serverLogout();
     setUser(null);
     setActiveId(null);
     setActive(null);
     setCases([]);
   };
+
+  // When any API call returns 401, authedFetch clears the token and fires
+  // this event; we drop the user back to the login screen.
+  useEffect(() => {
+    const handler = () => {
+      setUser(null);
+      setActiveId(null);
+      setActive(null);
+      setCases([]);
+    };
+    window.addEventListener("auth-expired", handler);
+    return () => window.removeEventListener("auth-expired", handler);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Initial load

@@ -1,21 +1,42 @@
-"""Auth endpoints: register, login, me, change-password."""
+"""Auth endpoints: register, login, logout, me, change-password.
+
+Rate-limiting policy (enforced via slowapi at the route level):
+- ``/login`` and ``/register``: 10 attempts per minute per source IP.
+  Tighter than the global default to make password-spray attacks
+  expensive; legitimate operators won't notice.
+- Set ``HITL_DISABLE_RATE_LIMIT=1`` to bypass for tests / local dev.
+"""
 from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..auth import (
     CurrentUser,
     create_access_token,
     current_user,
+    current_token_payload,
     hash_password,
+    revoked_tokens,
     verify_password,
 )
 from ..persistence.db import UserRow
 
 router = APIRouter(tags=["auth"], prefix="/auth")
+
+# Per-IP limiter for login/register. Other endpoints use the app-wide
+# limiter (set up in main.py). Keeping a separate instance lets us tune the
+# ratio without touching the global one. ``HITL_DISABLE_RATE_LIMIT=1`` makes
+# the limiter a no-op (used by the pytest suite).
+_DISABLED = os.environ.get("HITL_DISABLE_RATE_LIMIT") == "1"
+limiter = Limiter(key_func=get_remote_address, enabled=not _DISABLED)
 
 
 class RegisterIn(BaseModel):
@@ -54,6 +75,7 @@ class ChangePasswordIn(BaseModel):
 
 
 @router.post("/register", response_model=TokenOut)
+@limiter.limit("10/minute")
 def register(payload: RegisterIn, request: Request) -> TokenOut:
     state = request.app.state.app_state
     with state.database.session() as session:
@@ -79,7 +101,8 @@ def register(payload: RegisterIn, request: Request) -> TokenOut:
 
 
 @router.post("/login", response_model=TokenOut)
-def login(form: OAuth2PasswordRequestForm = Depends(), request: Request = None) -> TokenOut:
+@limiter.limit("10/minute")
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends()) -> TokenOut:
     state = request.app.state.app_state
     with state.database.session() as session:
         user = session.execute(
@@ -97,6 +120,23 @@ def login(form: OAuth2PasswordRequestForm = Depends(), request: Request = None) 
 @router.get("/me", response_model=MeOut)
 def me(user: CurrentUser = Depends(current_user)) -> MeOut:
     return MeOut(id=user.id, username=user.username, role=user.role, display_name=user.display_name)
+
+
+@router.post("/logout")
+def logout(payload: dict = Depends(current_token_payload)) -> dict:
+    """Revoke the caller's token by adding its ``jti`` to the in-process
+    blocklist. Subsequent requests with this token fail at ``current_user``.
+
+    Client-side, the frontend also clears localStorage; this server-side
+    revocation is the belt-and-braces against a stolen token still being
+    valid until expiry.
+    """
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if jti and exp:
+        # `exp` is a unix timestamp; convert to aware datetime.
+        revoked_tokens.add(jti, datetime.fromtimestamp(exp, tz=timezone.utc))
+    return {"ok": True}
 
 
 @router.post("/change-password")

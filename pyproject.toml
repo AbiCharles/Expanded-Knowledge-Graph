@@ -24,6 +24,7 @@ dependencies = [
   "sqlalchemy>=2.0",
   "bcrypt>=4.1",
   "python-jose[cryptography]>=3.3",
+  "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

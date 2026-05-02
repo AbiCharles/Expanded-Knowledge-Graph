@@ -37,13 +37,23 @@ export function setUser(user: AuthUser) {
 
 /**
  * fetch wrapper that adds the bearer token to every request.
- * Throws an "Unauthorized" Error on 401 so callers can clear the auth state.
+ *
+ * On a 401 response (token expired or revoked), clears the cached auth
+ * state and dispatches an `auth-expired` window event. The App listens
+ * for that event and bounces the user back to the login screen — no
+ * extra plumbing needed at every callsite.
  */
 export async function authedFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const token = getToken();
   const headers = new Headers(init?.headers || {});
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(input, { ...init, headers });
+  const resp = await fetch(input, { ...init, headers });
+  if (resp.status === 401 && getToken()) {
+    // Best-effort cleanup. Don't block the original caller.
+    clearAuth();
+    window.dispatchEvent(new CustomEvent("auth-expired"));
+  }
+  return resp;
 }
 
 export async function login(username: string, password: string): Promise<{ token: string; user: AuthUser }> {
@@ -90,4 +100,18 @@ export async function fetchMe(): Promise<AuthUser | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Server-side logout: blocklists the current token's jti so it can't be
+ * reused even if a copy was stolen. Best-effort — clears local state
+ * regardless of whether the server call succeeds.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await authedFetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // Network failure shouldn't block the user from logging out locally.
+  }
+  clearAuth();
 }

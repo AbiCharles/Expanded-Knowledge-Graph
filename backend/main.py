@@ -10,15 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from tcs_hitl_context import FakeLLMClient, build_llm_client_from_env
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 from .agent_runtime import AgentRuntime
-from .api.auth import router as auth_router
+from .api.auth import limiter as auth_limiter, router as auth_router
 from .api.cases import router as cases_router
 from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
 from .api.metrics import router as metrics_router
 from .api.scenarios import router as scenarios_router
-from .auth import ensure_default_admin
+from .auth import assert_jwt_secret_set, ensure_default_admin
 from .config import get_settings
 from .datasources import DataSourceRegistry
 from .persistence import get_database
@@ -30,6 +34,9 @@ from .state import AppState
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logging.basicConfig(level=settings.LOG_LEVEL)
+    # Bail out if JWT_SECRET is the built-in placeholder. Override only with
+    # HITL_ALLOW_DEFAULT_SECRET=1 for local dev.
+    assert_jwt_secret_set()
 
     scenario_dir = Path(__file__).resolve().parent / "scenarios"
     scenarios = ScenarioRegistry.from_directory(scenario_dir)
@@ -85,6 +92,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Rate limiting: app-wide default keeps any one IP from hammering the
+    # LLM-backed endpoints. The auth router has a tighter per-route limit
+    # for /login + /register applied via the @limiter.limit decorator.
+    limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+    app.state.limiter = limiter
+    auth_limiter._key_func = get_remote_address  # share the IP-extraction strategy
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(auth_router, prefix="/api")
     app.include_router(cases_router, prefix="/api")
     app.include_router(decisions_router, prefix="/api")

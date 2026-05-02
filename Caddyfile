@@ -1,0 +1,28 @@
+# Caddy reverse proxy with auto-TLS via Let's Encrypt.
+# Backend serves /api/*; the built frontend (frontend/dist/) is served
+# as static files.
+
+{$DOMAIN} {
+    # API + SSE
+    reverse_proxy /api/* hitl-backend:8001 {
+        # SSE needs HTTP/1.1 + flush_interval -1 so events ship promptly
+        flush_interval -1
+    }
+
+    # Frontend static assets — built in the Docker image, copied to
+    # /app/frontend/dist by the multi-stage build.
+    handle {
+        root * /app/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+
+    # Reasonable security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # No need to render this in a frame
+        X-Frame-Options "DENY"
+    }
+}
