@@ -22,6 +22,10 @@ frontend/.vite/
 backend/data/*.npz
 backend/data/uploads/
 
+# Runtime SQLite (cases + lineage)
+backend/data/app.sqlite
+backend/data/app.sqlite-journal
+
 # OS / IDE
 .DS_Store
 .vscode/
