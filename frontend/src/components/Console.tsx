@@ -595,6 +595,18 @@ function WelcomeState({ historyCount }: { historyCount: number }) {
             {historyCount} past conversation{historyCount === 1 ? "" : "s"} saved · use <strong>History</strong> above to revisit.
           </div>
         )}
+        <div className="welcome-hint welcome-hint-quiet">
+          Want to add your own scenarios?{" "}
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              window.dispatchEvent(new CustomEvent("open-scenarios-help"));
+            }}
+          >
+            Read the authoring guide →
+          </a>
+        </div>
       </div>
     </div>
   );

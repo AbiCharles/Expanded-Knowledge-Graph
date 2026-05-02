@@ -4,9 +4,10 @@ interface Props {
   active: CaseFull | null;
   role: "operator" | "reviewer";
   onOpenDataSources: () => void;
+  onOpenScenariosHelp: () => void;
 }
 
-export function StatusBar({ active, role, onOpenDataSources }: Props) {
+export function StatusBar({ active, role, onOpenDataSources, onOpenScenariosHelp }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -57,6 +58,13 @@ export function StatusBar({ active, role, onOpenDataSources }: Props) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center" }}>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onOpenScenariosHelp}
+          title="How scenarios work"
+        >
+          Scenarios guide
+        </button>
         <button className="statusbar-action" onClick={onOpenDataSources}>
           Data sources
         </button>

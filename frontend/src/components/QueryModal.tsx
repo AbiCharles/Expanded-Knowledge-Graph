@@ -252,7 +252,16 @@ function SaveScenarioForm({
       <div className="query-save-help">
         The saved scenario is autonomous (read-only · no human review). It runs
         the SQL above against <code>{source.id}</code>. Edit the SQL or params
-        in the playground first, then save.
+        in the playground first, then save.{" "}
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent("open-scenarios-help"));
+          }}
+        >
+          Field reference →
+        </a>
       </div>
       {error && <div className="query-save-error">{error}</div>}
       <div className="query-save-actions">

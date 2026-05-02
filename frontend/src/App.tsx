@@ -4,6 +4,7 @@ import { Console } from "./components/Console";
 import { FlowStage } from "./components/FlowStage";
 import { LineagePanel } from "./components/LineagePanel";
 import { DataSourcesModal } from "./components/DataSourcesModal";
+import { ScenariosHelp } from "./components/ScenariosHelp";
 import {
   ApproveModal,
   AutoApproveModal,
@@ -22,7 +23,8 @@ type ModalState =
   | { kind: "rationale"; decision: "reject" | "request_more_info" }
   | { kind: "auto"; guardrailId: string; reason: string }
   | { kind: "compare"; cases: [CaseFull, CaseFull] }
-  | { kind: "datasources" };
+  | { kind: "datasources" }
+  | { kind: "scenarios-help" };
 
 export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioRow[]>([]);
@@ -38,6 +40,15 @@ export default function App() {
   useEffect(() => {
     api.listScenarios().then(setScenarios).catch(console.error);
     refreshCases();
+  }, []);
+
+  // The "Field reference →" link inside the Save form (which is two modals
+  // deep) dispatches a window event we listen for here. Keeps the link from
+  // having to thread a callback through 3 layers.
+  useEffect(() => {
+    const handler = () => setModal({ kind: "scenarios-help" });
+    window.addEventListener("open-scenarios-help", handler);
+    return () => window.removeEventListener("open-scenarios-help", handler);
   }, []);
 
   const refreshCases = useCallback(async () => {
@@ -203,6 +214,7 @@ export default function App() {
         active={active}
         role={role}
         onOpenDataSources={() => setModal({ kind: "datasources" })}
+        onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
       />
       <div className="main">
         <Console
@@ -246,6 +258,9 @@ export default function App() {
           onClose={() => setModal({ kind: "none" })}
           onScenariosChanged={() => api.listScenarios().then(setScenarios).catch(console.error)}
         />
+      )}
+      {modal.kind === "scenarios-help" && (
+        <ScenariosHelp onClose={() => setModal({ kind: "none" })} />
       )}
     </>
   );
