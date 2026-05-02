@@ -1,13 +1,35 @@
-# HITL Context Framework — Full-Stack App
+# HITL Context Framework
 
-A real implementation of the HITL Context Framework demo, with:
+A working full-stack implementation of a Human-In-The-Loop agent runtime
+for enterprise supply-chain workflows. The agent reads a natural-language
+prompt, classifies it to a scenario, binds knowledge from registered data
+sources at each stage, and either auto-executes (low-risk) or routes to a
+human reviewer (anything that needs judgement). Every step is recorded in
+an append-only lineage log.
 
-- **Backend** (`backend/`) — FastAPI exposing the framework over REST + Server-Sent Events.
-- **Framework** (`hitl-context/`) — the typed envelope, stage binders, transports, lineage recorder.
-- **Frontend** (`frontend/`) — Vite + React + TypeScript. Lifts the design from the static demo.
-- **LLM adapter** — OpenAI, Azure OpenAI, or a fake client. Configurable via `.env`.
+```
+┌─────────────────┐  prompt   ┌────────────────┐  binds at each stage
+│ Operator (you)  ├──────────▶│  Agent runtime ├──┐
+└─────────────────┘           └────────────────┘  │   ┌─────────────┐
+                                                  ├──▶│   Envelope  │
+   ┌────────────────────────┐  KnowledgeResolver  │   │  (typed)    │
+   │ Data sources (CSV,     ├─────────────────────┘   └──────┬──────┘
+   │ SQLite, Postgres,      │                                │
+   │ HTTP, vector store)    │                          autonomous?
+   └────────────────────────┘                                │
+                                          ┌─────────────────┴─┐
+                                          │                   │
+                                  yes — auto-execute   no — HITL review
+                                                              │
+                                                       ┌──────┴──────┐
+                                                       │ Reviewer    │
+                                                       │ (Teams card)│
+                                                       └─────────────┘
+```
 
-## Quick start
+---
+
+## Quick start (five minutes)
 
 ```bash
 # 1. Python env (one-time)
@@ -15,51 +37,166 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 
-# 2. Configure credentials
+# 2. Optional: configure LLM credentials. Without this the app uses a
+#    deterministic keyword classifier that runs the demo end-to-end.
 cp .env.example .env
-$EDITOR .env       # set LLM_PROVIDER + the matching keys
+$EDITOR .env       # set LLM_PROVIDER + matching keys
 
 # 3. Frontend deps (one-time)
 cd frontend && npm install && cd ..
 
-# 4. Run (two terminals)
-uvicorn backend.main:app --reload --port 8000
-cd frontend && npm run dev   # http://localhost:5173
+# 4. Run two processes
+uvicorn backend.main:app --reload --port 8001     # terminal 1
+cd frontend && npm run dev                        # terminal 2 — http://localhost:5173
 ```
 
-If you don't have credentials handy, set `LLM_PROVIDER=fake` in `.env` — the UI will run end-to-end against canned LLM responses.
+Sign in at <http://localhost:5173> with the seeded `admin / admin` account.
+Click any of the suggested prompt chips to run a case end to end. See
+[docs/production.md](docs/production.md) before deploying to anything that
+isn't your own laptop.
 
-## Layout
+---
+
+## What's in the box
+
+### Core flow
+- **6 hand-authored scenarios** (Trade Compliance, Procurement, Logistics)
+  covering both HITL and autonomous shapes
+- **5 connector types** for data sources: CSV upload, SQLite, Postgres, HTTP
+  REST, vector store (OpenAI embeddings)
+- **LLM adapter** with three drop-in clients: `OpenAIClient`,
+  `AzureOpenAIClient`, `FakeLLMClient`
+- **Top-K classifier suggestions** when prompt confidence is low
+- **Replay & compare**: clone a completed case with a forced reviewer
+  decision; view both side by side
+
+### Operator features
+- **Query playground** — run ad-hoc SQL against any SQLite/Postgres source
+  with named parameters
+- **Save as scenario** — turn an iterated query into a runnable agent
+  scenario, with optional LLM-suggested keywords / clarifier / prompt
+- **Edit existing scenarios** in-app (titles, keywords, clarifier text);
+  Remove for auto- and custom-scenarios
+- **Auto-scenario per registered data source** — drop a source in, get a
+  chip immediately
+- **Live metrics dashboard** — totals, cases-by-status, decisions-by-
+  scenario stack, cases-per-day sparkline, top rejection reasons
+- **CSV export** of cases + full lineage (with date-range filters)
+- **History panel** — past conversations, search, delete, bulk-clear
+  completed
+
+### Architecture
+- **Persistent storage** in SQLite — cases, lineage events, users. Survives
+  restart. Designed to swap for Postgres without code changes (the
+  framework's `LineageRecorder` Protocol is the seam).
+- **Authentication** via JWT + bcrypt. Per-user case isolation; admin role
+  bypasses scoping. Token revocation on logout.
+- **Rate limiting** — 10/min on login + register, 120/min global.
+- **SSE live updates** — stage-bound, review-ready, decided, auto-approved
+  events streamed to the UI; auto-reconnects with exponential backoff.
+
+### Operations
+- **Multi-stage Dockerfile** + `docker-compose.yaml` with Caddy auto-TLS
+- **GitHub Actions CI** — framework tests, pytest suite, frontend build,
+  ruff lint
+- **21 backend tests** + 90 framework tests, all green
+
+---
+
+## Architecture at a glance
 
 ```
 HITL/
-├── backend/              FastAPI app
-│   ├── api/              REST routes
-│   ├── scenarios/        YAML scenario fixtures (data, not code)
-│   ├── agent_runtime.py  LLM-driven prompt classification + action drafting
-│   ├── binders.py        Fixture-driven implementations of the framework's binder protocols
-│   ├── policy.py         Deciding autonomous vs HITL
-│   ├── state.py          In-memory case + ticket store
-│   └── main.py           App entry point
-├── hitl-context/         The framework package (Pydantic envelope, transports, surface)
-├── frontend/             React UI
-└── pyproject.toml        Top-level project (declares backend + framework as installable)
+├── hitl-context/                 The framework package (separate from the app)
+│   ├── src/tcs_hitl_context/
+│   │   ├── models.py             KnowledgeContext, KnowledgeFact, AgentAction…
+│   │   ├── protocols.py          KnowledgeResolver, StageBinder, HITLTransport,
+│   │   │                         ReviewerSurface, LineageRecorder
+│   │   ├── service.py            HITLContextService orchestrator
+│   │   ├── transport.py          Sync + async transports
+│   │   ├── lineage.py            InMemoryLineageRecorder
+│   │   ├── llm.py                OpenAI / Azure / Fake adapter
+│   │   └── surface_teams.py      Teams Adaptive Card v1.5 surface
+│   └── docs/                     Framework reference docs
+│
+├── backend/                      FastAPI app on top of the framework
+│   ├── api/                      REST routers (auth, cases, decisions,
+│   │                             scenarios, datasources, exports, metrics)
+│   ├── scenarios/                Built-in YAML scenarios + saved customs
+│   ├── data/                     Default data sources (CSV, SQLite, vector)
+│   ├── datasources/              Connector implementations
+│   ├── persistence/              SQLite-backed CaseStore + LineageRecorder
+│   ├── agent_runtime.py          LLM-driven classification + action drafting
+│   ├── binders.py                Fixture- and source-driven stage binders
+│   ├── auth.py                   Hash, JWT, FastAPI dependencies
+│   ├── auto_scenario.py          Generate a chip per registered source
+│   ├── orchestrator.py           Drives a case through all 4 nodes
+│   └── main.py                   App entry point
+│
+├── frontend/                     Vite + React + TypeScript
+│   └── src/
+│       ├── components/           StatusBar, Console, FlowStage, Envelope,
+│       │                         LineagePanel, modals (Teams card,
+│       │                         rationale, scenarios help, metrics, …)
+│       ├── api.ts                Typed REST client
+│       ├── auth.ts               Token storage + authedFetch wrapper
+│       └── App.tsx               Layout + state
+│
+├── tests/                        pytest suite (auth, cases, scenarios, sources)
+├── docs/                         Architecture + authoring guides
+├── Dockerfile                    Multi-stage build
+├── docker-compose.yaml           Backend + Caddy with auto-TLS
+└── pyproject.toml                Top-level Python project
 ```
+
+The framework package (`hitl-context/`) is reusable on its own — the
+backend depends on it the same way any external project would. This gives
+you a clean swap path: replace the FastAPI app with whatever wrapper you
+need, keep the framework's typed envelope + binder Protocols.
+
+---
+
+## Documentation
+
+| Path | Topic |
+|---|---|
+| [docs/scenarios.md](docs/scenarios.md) | Scenario authoring: anatomy, HITL vs autonomous, stage knowledge, full examples, lifecycle (built-in / auto / custom). |
+| [docs/scaling.md](docs/scaling.md) | When to add scenarios vs. when to manage growth. Top-K UX, auto-generation patterns, the staged roadmap. |
+| [docs/production.md](docs/production.md) | Deployment guide: required config, security checklist, what's still deferred, smoke-test checklist. |
+| [hitl-context/docs/framework.md](hitl-context/docs/framework.md) | Framework reference: protocols, transports, knowledge envelope. |
+| [hitl-context/docs/context_flow.mermaid](hitl-context/docs/context_flow.mermaid) | Visual diagram of the four-stage flow. |
+| In-app **Scenarios guide** (status bar pill) | Same content as scenarios.md, navigable in the running app. |
+
+---
 
 ## Switching LLM providers
 
 Edit `.env`:
 
-```
-LLM_PROVIDER=openai      # or `azure` or `fake`
+```bash
+LLM_PROVIDER=openai      # or "azure" or "fake"
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+
+# Azure (when LLM_PROVIDER=azure)
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_API_VERSION=2024-10-21
+AZURE_OPENAI_DEPLOYMENT=
 ```
 
-For Azure, fill in the four `AZURE_OPENAI_*` variables (deployment name + endpoint + api-version + key). For OpenAI, fill in `OPENAI_API_KEY` and `OPENAI_MODEL`. The model identifier is a free-form string — set it to whatever your deployment exposes.
+The model name is free-form — set it to whatever your account / deployment
+exposes (e.g. `gpt-4o`, `gpt-4o-mini`, your Azure deployment name).
+
+`LLM_PROVIDER=fake` runs the entire UI without any credentials, using a
+deterministic keyword classifier. Great for development and demos.
+
+---
 
 ## Type-generation (frontend ↔ backend)
 
-The frontend keeps a hand-maintained `src/types.ts` for the most-used shapes.
-For full coverage that won't drift, run:
+The frontend keeps a hand-maintained `src/types.ts` for the most-used
+shapes. For full coverage that won't drift:
 
 ```bash
 # (with uvicorn running on :8001)
@@ -67,34 +204,77 @@ cd frontend && npm run gen-types
 ```
 
 This regenerates `src/api-types.ts` from FastAPI's `/openapi.json`. Re-run
-whenever you add/change a backend endpoint and want the frontend's typings
-to follow.
+whenever you add or change a backend endpoint.
 
-## Smoke tests
+---
+
+## Testing
 
 ```bash
-# Framework regression — should report 90/90.
+# Framework regression — 90/90 expected
 python hitl-context/tests/verify_package.py
 
-# Original SC-TC-007 example, end-to-end:
-python hitl-context/examples/sc_guardrails_integration.py
+# Backend pytest — 21/21 expected
+pytest tests/
 
-# Backend health (with uvicorn running):
-curl http://localhost:8000/api/health
+# Frontend type-check + bundle
+cd frontend && npx tsc --noEmit && npm run build
+
+# Original SC-TC-007 framework example end-to-end
+python hitl-context/examples/sc_guardrails_integration.py
 ```
 
-## What's wired
+CI runs all four on every push (`.github/workflows/ci.yaml`).
 
-- **5 scenarios** (3 HITL, 2 autonomous) live as YAML in [backend/scenarios/](backend/scenarios/). Drop new ones in to extend.
-- **Stage 1 / Stage 2 / Stage 3** binders ([backend/binders.py](backend/binders.py)) pull facts from those YAMLs and return the framework's `StageContext`.
-- **Policy** ([backend/policy.py](backend/policy.py)) reads each scenario's `autonomous` flag to decide HITL vs auto-execute.
-- **LLM adapter** ([hitl-context/src/tcs_hitl_context/llm.py](hitl-context/src/tcs_hitl_context/llm.py)) wraps OpenAI / Azure / Fake under one `LLMClient` Protocol.
-- **Live updates** stream over SSE at `GET /api/cases/{case_id}/events` — `stage_bound`, `review_ready`, `decided`, `auto_approved`, `done`.
-- **Replay & compare**: `POST /api/cases/{case_id}/replay` clones a case with a forced reviewer decision; both cases get linked as siblings for side-by-side comparison.
+---
 
-## What's not wired (and why)
+## Production deployment
 
-- **No real KF / ERP / IAM connectors** — the binders read fixture YAML. Swap in real `KnowledgeResolver` implementations to upgrade.
-- **In-memory only** — `dict[str, CaseRecord]` and `InMemoryLineageRecorder`. Restart wipes state. The framework's `LineageRecorder` Protocol is the upgrade seam to a real audit store.
-- **No auth** — single-operator demo. Operator/reviewer is a UI toggle.
-- **Teams card is rendered locally** — uses `TeamsAdaptiveCardSurface.render()` JSON but doesn't actually post to MS Teams.
+The bundled `Dockerfile` builds the frontend in a node stage and copies
+the static assets into a Python runtime image. `docker-compose.yaml`
+brings it up alongside Caddy with auto-TLS:
+
+```bash
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env.docker
+echo "DOMAIN=hitl.your-domain.com" >> .env.docker
+echo "OPENAI_API_KEY=sk-..." >> .env.docker
+docker compose --env-file .env.docker up -d
+```
+
+Read [docs/production.md](docs/production.md) before going live. It covers
+the security checklist (real `JWT_SECRET`, rotate the seeded admin
+password, HTTPS, rate limiting, read-only DB user for the playground,
+backups, LLM cost cap) and the items still deferred (single-worker
+limitation, no password reset, no audit-log retention policy).
+
+---
+
+## What's *not* yet wired (and why)
+
+These are deliberate trade-offs documented in
+[docs/production.md](docs/production.md) — call them out so you can pick
+which to address first.
+
+- **Single-process state** — case-store, decision events, and the SSE bus
+  live in memory. Horizontal scale needs Redis-backed state and the
+  framework's `AsyncQueueTransport` against Kafka/SQS.
+- **No password reset / email verification** — auth is demo-grade. Wire
+  SMTP if you need it.
+- **No structured metrics emission** — the dashboard reads from SQLite;
+  there's no Prometheus instrumentation yet.
+- **Teams card is rendered locally** — wire-compatible JSON, but the UI
+  shows the card itself; nothing actually posts to MS Teams. Swap in
+  a webhook to make this a real surface.
+- **Real KF / ERP / IAM connectors** are not provided — built-in scenarios
+  use fixture data. Drop in real `KnowledgeResolver` implementations to
+  upgrade.
+
+The architecture is built around clean swap points: every piece above is
+a Protocol the framework already declares, so each upgrade is one new
+class, not a refactor.
+
+---
+
+## License
+
+Private / not yet licensed. Add a `LICENSE` file before any public release.
