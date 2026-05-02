@@ -17,6 +17,7 @@ from .api.decisions import router as decisions_router
 from .api.scenarios import router as scenarios_router
 from .config import get_settings
 from .datasources import DataSourceRegistry
+from .persistence import get_database
 from .scenario_loader import ScenarioRegistry
 from .state import AppState
 
@@ -36,6 +37,9 @@ async def lifespan(app: FastAPI):
         project_root=project_root,
         openai_api_key=settings.OPENAI_API_KEY or None,
     )
+
+    db_path = project_root / "backend" / "data" / "app.sqlite"
+    database = get_database(db_path)
 
     # Build the LLM client from env. If keys are missing for the requested
     # provider, fall back to FakeLLMClient so the UI still runs (with keyword
@@ -57,10 +61,11 @@ async def lifespan(app: FastAPI):
         llm=llm,
         agent_runtime=agent_runtime,
         data_sources=data_sources,
+        database=database,
     )
     logging.getLogger(__name__).info(
-        "HITL backend ready · LLM=%s · scenarios=%d · data_sources=%d",
-        llm.name, len(scenarios.all()), len(data_sources.specs()),
+        "HITL backend ready · LLM=%s · scenarios=%d · data_sources=%d · db=%s",
+        llm.name, len(scenarios.all()), len(data_sources.specs()), db_path,
     )
     yield
 

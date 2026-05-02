@@ -37,6 +37,7 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     if not case.scenario_id:
         log.warning("case %s has no scenario_id; aborting", case.case_id)
         case.phase = "cancelled"
+        state.cases.save(case)
         await state.bus.close(case.case_id)
         return
 
@@ -44,12 +45,15 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
 
     # Stage 1 — agent intake binding
     case.phase = "binding"
+    state.cases.save(case)
     ctx = state.service.open_case(
         agent_id=scenario["actor_id"],
         scenario={"scenario_id": case.scenario_id, "domain": scenario["domain"]},
         transport_mode=TransportMode.ASYNC,
     )
     case.ctx = ctx
+    case.framework_case_id = ctx.case_id
+    state.cases.save(case)
     await state.bus.emit(case.case_id, _stage_event(ctx, Stage.AGENT_INTAKE))
 
     await asyncio.sleep(DELAY_BETWEEN_STAGES)
@@ -75,6 +79,7 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     case.ticket_id = ticket.ticket_id
     case.phase = "review_ready"
     case.decision_event = asyncio.Event()
+    state.cases.save(case)
     await state.bus.emit(
         case.case_id,
         CaseEvent(
@@ -101,6 +106,7 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     case.decision_kind = rd.decision.value
     case.rationale = rd.rationale or None
     case.closing_message = _closing_message_for(scenario, case)
+    state.cases.save(case)
 
     await state.bus.emit(
         case.case_id,
@@ -138,6 +144,7 @@ async def _finalise_autonomous(state: AppState, case: CaseRecord, pd: policy.Pol
     case.phase = "complete"
     case.decision_kind = "auto_execute"
     case.closing_message = scenario.get("closing_message", "")
+    state.cases.save(case)
 
     await state.bus.emit(
         case.case_id,

@@ -88,6 +88,7 @@ async def record_decision_internal(
     case.follow_up = follow_up
 
     case.phase = "reviewing"
+    state.cases.save(case)
     if case.decision_event is not None:
         case.decision_event.set()
 

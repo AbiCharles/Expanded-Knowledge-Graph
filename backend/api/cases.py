@@ -114,6 +114,7 @@ async def relink_case(case_id: str, payload: RelinkIn, request: Request) -> dict
     case.scenario_id = sc["id"]
     case.interpreted_as = sc.get("interpreted_as", "")
     case.clarifying_question = sc.get("clarifying_question", "")
+    state.cases.save(case)
     return {
         "case_id": case_id,
         "scenario_id": case.scenario_id,
@@ -148,7 +149,9 @@ async def delete_case(case_id: str, request: Request) -> dict:
         pass
     # Clean sibling references on other cases
     for other in state.cases.values():
-        other.sibling_case_ids = [s for s in other.sibling_case_ids if s != case_id]
+        if case_id in other.sibling_case_ids:
+            other.sibling_case_ids = [s for s in other.sibling_case_ids if s != case_id]
+            state.cases.save(other)
     state.cases.pop(case_id, None)
     return {"case_id": case_id, "deleted": True}
 
@@ -177,6 +180,7 @@ async def cancel_case(case_id: str, request: Request) -> dict:
     if case is None:
         raise HTTPException(status_code=404, detail="case not found")
     case.phase = "cancelled"
+    state.cases.save(case)
     await state.bus.close(case_id)
     return {"case_id": case_id, "phase": case.phase}
 
@@ -322,6 +326,17 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
             "auto_approval_guardrail": scenario.get("auto_approval_guardrail"),
             "auto_approval_reason": scenario.get("auto_approval_reason"),
         }
+    # After a restart, c.ctx is None but lineage is in SQLite — fetch it from
+    # the persistent recorder so the operator still sees the audit trail.
+    # The framework keys lineage on its own internal case_id (different from
+    # ours); we captured that as framework_case_id at intake-bind time.
+    if c.ctx is None and c.framework_case_id:
+        try:
+            persisted = state.lineage.history(c.framework_case_id)
+            if persisted:
+                out["lineage"] = [ev.model_dump(mode="json") for ev in persisted]
+        except Exception:
+            pass
     if c.ctx is not None:
         out["stages"] = [
             {
