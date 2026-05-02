@@ -1,8 +1,38 @@
 # Authoring Scenarios
 
-A scenario is the blueprint for one type of action the agent can take. It tells
-the framework: how to recognise an operator's intent, what knowledge to bind at
-each stage, whether to require human review, and what to say back.
+## What is a scenario?
+
+A **scenario** is the framework's blueprint for *one type of action the agent
+can take*. Think of it as a recipe: the operator says something in plain
+language, the framework matches the request to a recipe, follows it
+step-by-step (binding the right knowledge at each stage), runs the action —
+and either executes autonomously or routes through a human reviewer first.
+
+> **Example.** An operator types "Override the SC-TC-001 block on order
+> ORD-44216." The framework matches that to the `SC-TC-007` scenario. It binds
+> the active trade-compliance policy, the agent's IAM scope, the product
+> master record, the contract, prior similar overrides, and an applicable
+> SOP — then renders all of that as evidence for a compliance officer to
+> review.
+
+What scenarios *do*:
+
+1. **Route prompts.** The classifier scans every scenario's `match_keywords`
+   and `interpreted_as` phrasing and picks the best match.
+2. **Tell the agent what to read.** Each scenario specifies which knowledge
+   gets bound at each stage (intake, proposal, review).
+3. **Decide whether a human needs to look.** Autonomous scenarios skip review
+   and execute directly. HITL scenarios stop at the review stage.
+4. **Render the right surfaces.** Teams card title, rationale-reason chips,
+   outcome banner, closing message.
+
+What scenarios are **not**:
+
+- Not the binders themselves. Binders are Python in `backend/binders.py`.
+- Not the agent's reasoning. The LLM only consults scenarios for
+  classification.
+- Not persistent state. Each case run reads the YAML fresh; the data envelope
+  is the case's state, not the YAML.
 
 This document covers both ways to add scenarios:
 
@@ -58,13 +88,30 @@ A scenario answers eight questions:
 
 ---
 
-## Two flow shapes
+## HITL vs autonomous
 
-### HITL — `autonomous: false`
+Every scenario picks one of two flow shapes. The choice governs whether a
+human gets to inspect and approve the action before it happens.
 
-Three binder stages (intake, proposal, review). The case enters
-`review_ready`, a Teams card is rendered, the reviewer decides. Required
-fields specific to HITL:
+### HITL (Human In The Loop) — `autonomous: false`
+
+The agent does the reasoning and proposes an action, **but stops before
+executing**. The framework binds an evidence package (everything from the
+proposal stage plus a review-only stage with prior cases / SOPs / sanctions
+checks), renders it as a Teams Adaptive Card, and waits for a named reviewer
+to decide.
+
+The reviewer sees three buttons:
+
+- **Approve** → outcome banner, agent executes
+- **Reject** → outcome banner, action aborted, rationale captured
+- **Need more info** → case loops back to review with the reviewer's questions appended
+
+The case spends measurable time in `review_ready` (seconds to hours,
+depending on the reviewer). The framework's async transport keeps the case
+envelope persisted while waiting.
+
+**Required HITL-only fields:**
 
 ```yaml
 autonomous: false
@@ -95,8 +142,16 @@ closing_messages:
 
 ### Autonomous — `autonomous: true`
 
-Two binder stages. The framework auto-approves and executes without human
-review. Required fields specific to autonomous:
+The agent reasons, the framework verifies the action against a named
+guardrail, and **executes immediately without human review**. The reviewer
+sees an "auto-approved by guardrail" badge in the case history afterward —
+but isn't a gate in the flow.
+
+The case never enters `review_ready`. From the operator's perspective the
+agent appears to "just do it" — the envelope still binds and lineage still
+records every step, but execution doesn't pause.
+
+**Required autonomous-only fields:**
 
 ```yaml
 autonomous: true
@@ -113,6 +168,26 @@ outcomes:
 
 closing_message: "Single closing message. No decision branching."
 ```
+
+### How to choose
+
+**Choose autonomous when…**
+
+- The action is **read-only** (data lookups, status checks, dashboards).
+- The action is a **parameter change within a pre-approved envelope** (e.g. reorder-point adjustments within ±50%, mode switches under 25% cost uplift).
+- A guardrail engine can establish safety **deterministically** — clear yes/no rules, not judgement calls.
+- **Reversibility is high**: if it's wrong, you can undo it cheaply.
+
+**Choose HITL when…**
+
+- The action is **irreversible or expensive to undo** — sanctions overrides, vendor onboarding commitments, payments above a threshold.
+- The action requires **judgement** the agent can't capture in code — interpreting a customer's claimed license, weighing a strategic supplier relationship, deciding when a precedent has stretched too far.
+- It involves **regulatory or audit obligations** — sanctions screening, AML, export controls, fiduciary decisions.
+- Stakes are high enough that a "two-person rule" or named-officer signoff is required by policy.
+
+> **Rule of thumb.** Autonomous = "the framework knows enough to be safe alone."
+> HITL = "we want a human's name on this decision in the audit log."
+> When in doubt, ship HITL first; you can promote a scenario to autonomous later by adding a guardrail and flipping the flag, but you can't easily un-execute an autonomous mistake.
 
 ---
 
@@ -224,7 +299,7 @@ logic.
 
 ### Anti-patterns to avoid
 
-| Anti-pattern | Why it bites |
+| Anti-pattern | The issue |
 |---|---|
 | Vague keywords | Every prompt routes here, classifier accuracy collapses |
 | Empty `facts:` AND `queries:` on a stage | Stage binds nothing, envelope is empty |
@@ -235,7 +310,199 @@ logic.
 
 ---
 
-## Worked examples (already in the repo)
+## Full examples
+
+Two complete YAMLs you can use as templates. Drop a copy into
+`backend/scenarios/`, edit the domain content, and restart uvicorn.
+
+### HITL example — sanctions override
+
+Trade-compliance scenario. The agent proposes overriding a sanctions block;
+a compliance officer reviews the evidence (policy, master data, prior cases,
+SOP excerpts) and decides approve / reject / need more info.
+
+```yaml
+id: SC-TC-007
+title: "Trade override — sanctioned counterparty"
+domain: "Trade Compliance"
+teams_channel: "#trade-compliance"
+actor_id: "agent-trade-01"
+operator_role: { label: "Operator", name: "trade.analyst.dlin" }
+reviewer_role: { label: "Reviewer", name: "compliance.officer.kchen" }
+autonomous: false
+
+action_type: "trade_override"
+action_payload:
+  originating_guardrail_id: "SC-TC-001"
+  product_id: "P-EL-9001"
+  counterparty_name: "Sanctioned Pharma Holdings"
+  destination_country: "IR"
+  contract_id: "K-2026-0182"
+
+teams_headline: "Trade override — SC-TC-001 sanctions block"
+execute_message: >-
+  The agent will execute the override. The order to <strong>Sanctioned Pharma
+  Holdings</strong> will proceed and the SC-TC-001 block will be cleared on this case only.
+
+match_keywords: ["override", "sanction", "ofac", "block", "eccn", "ord-44216"]
+interpreted_as: "override the SC-TC-001 sanctions block on order ORD-44216"
+clarifying_question: >-
+  Just to confirm — override the SC-TC-001 sanctions block on counterparty
+  <strong>Sanctioned Pharma Holdings</strong> for product <code>P-EL-9001</code>?
+  This is a critical override that requires named compliance officer approval.
+
+closing_messages:
+  approve: >-
+    <strong>Compliance officer approved.</strong> Override granted; proceeding to execute.
+  reject: >-
+    <strong>Compliance officer rejected the override.</strong> Reason: <em>"{rationale}"</em>
+  request_more_info: >-
+    <strong>Compliance officer needs more information.</strong> Specifically: <em>"{rationale}"</em>
+
+rationale_reasons:
+  reject:
+    - "OFAC license could not be verified — counterparty remains on SDN list."
+    - "Customer documentation insufficient to clear sanctions match."
+    - "Override pattern is unusual — escalating to legal."
+  request_more_info:
+    - "Need a copy of the OFAC license and its expiration date."
+    - "Need end-user verification and intended-use documentation."
+    - "Need customer compliance attestation signed by their export officer."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-TC-OVERRIDE-2026-Q2"
+        uri: "kf.tcs/policy/POL-TC-OVERRIDE-2026-Q2"
+        title: "TC override policy"
+        payload: "Critical TC overrides require named compliance officer."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-trade-01"
+        uri: "iam.tcs/actors/agent-trade-01"
+        title: "Actor scope"
+        payload: "Scopes: sc.read, sc.propose, sc.execute_after_review"
+
+  proposal:
+    binder: "TradeOverrideProposalBinder/1.0"
+    facts:
+      - source: "erp:material_master"
+        ontology_type: "Product"
+        id: "P-EL-9001"
+        uri: "erp.tcs/products/P-EL-9001"
+        title: "Encryption module"
+        payload: "ECCN 5A002 · HTS 8517.62.00 · controlled"
+    queries:
+      - data_source: sanctions_csv
+        ontology_type: SanctionedEntity
+        filter: { name: "Sanctioned Pharma Holdings" }
+        purpose: "Confirm OFAC SDN match"
+
+  review:
+    binder: "TradeOverrideReviewBinder/1.0"
+    queries:
+      - data_source: governance_sqlite
+        ontology_type: PriorOverride
+        filter: { scenario_id: SC-TC-007, max_results: 3 }
+        purpose: "Surface prior similar overrides"
+      - data_source: policy_corpus
+        ontology_type: PolicyExcerpt
+        filter: { query: "OFAC override license verification", top_k: 3 }
+        purpose: "Retrieve relevant SOP excerpts"
+
+outcomes:
+  approve:
+    headline: "Approved with conditions"
+    detail: "Override granted pending verified license."
+  reject:
+    headline: "Rejected — sanctions hit confirmed"
+    detail: "Override denied per SOP-TC-OVERRIDE-001."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requested OFAC license documentation before deciding."
+```
+
+### Autonomous example — read-only data lookup
+
+Logistics scenario. The agent fetches a shipment's live status. No human
+review; auto-cleared by a read-only guardrail.
+
+```yaml
+id: SC-LN-STATUS-009
+title: "Shipment status lookup"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "shipment_status_lookup"
+action_payload:
+  shipment_id: "S-700499"
+  query_type: "live_status"
+  scope: "logistics.read"
+
+match_keywords: ["eta", "status", "where is", "track", "shipment status", "s-700499"]
+interpreted_as: "look up the current status and ETA on shipment S-700499"
+clarifying_question: >-
+  Just to confirm — pull the current status and ETA on shipment <code>S-700499</code>.
+  Read-only query within my <code>logistics.read</code> scope; per policy
+  <code>GR-LN-AUTO-001</code>, no human review is required. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-001"
+auto_approval_reason: "Read-only logistics query within agent scope. Policy GR-LN-AUTO-001 permits autonomous status checks."
+
+closing_message: >-
+  Done — the status query was auto-approved by <code>GR-LN-AUTO-001</code>.
+  <strong>Shipment S-700499</strong>: ETA now <strong>Apr 30</strong>. No action required.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-READONLY-2026"
+        uri: "kf.tcs/policy/POL-LN-READONLY-2026"
+        title: "Read-only logistics policy"
+        payload: "Read-only queries are autonomous within logistics.read scope."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read · this query: logistics.read only"
+
+  proposal:
+    binder: "ShipmentLookupProposalBinder/1.0"
+    facts:
+      - source: "tms:shipments"
+        ontology_type: "Shipment"
+        id: "S-700499"
+        uri: "tms.tcs/shipments/S-700499"
+        title: "Shipment record"
+        payload: "Origin Singapore · Dest Rotterdam · 8 pallets · ocean booking"
+      - source: "tms:tracking"
+        ontology_type: "LiveTrack"
+        id: "TRK-S-700499"
+        uri: "tms.tcs/tracking/TRK-S-700499"
+        title: "Live tracking"
+        payload: "Vessel MV NORDIC CRYSTAL · 12 nm off Rotterdam · ETA Apr 30 04:00 UTC"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — status retrieved"
+    detail: "ETA confirmed as Apr 30. Vessel 12 nm off Rotterdam. No action required."
+```
+
+Both shapes share `id`, `title`, `domain`, `actor_id`, `operator_role`,
+`match_keywords`, `interpreted_as`, `clarifying_question`, `action_type`,
+`action_payload`, and `stages.{agent_intake, proposal}`. The differences are
+entirely in the review-related fields.
+
+## Other scenarios already in the repo
 
 | File | Domain | Mode | Notable |
 |---|---|---|---|
