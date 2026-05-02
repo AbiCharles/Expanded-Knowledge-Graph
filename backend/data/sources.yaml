@@ -56,3 +56,15 @@ sources:
       prior_cases GROUP BY outcome LIMIT :max_results
 
       '
+- id: governance_postgres
+  kind: postgres
+  dsn: postgresql://hitl:hitl@localhost:5432/governance
+  queries:
+    PriorOverride: "SELECT case_id AS id,\n       'Prior case ' || case_id AS title,\n\
+      \       outcome || ' — ' || rationale || ' (decided by ' || decided_by\
+      \ || ' on ' || decided_at || ')' AS summary\nFROM prior_cases\nWHERE scenario_id\
+      \ = :scenario_id\nORDER BY decided_at DESC\nLIMIT :max_results\n"
+  sample_filter:
+    scenario_id: SC-TC-007
+  description: 'Postgres governance store (local docker-compose.postgres.yaml): same
+    prior_cases schema as the SQLite store, swappable connector'

@@ -1,0 +1,61 @@
+id: SC-AUTO-governance_postgres
+title: "Lookup \xB7 governance postgres"
+domain: Custom data sources
+autonomous: true
+actor_id: agent-data-lookup
+operator_role:
+  label: Operator
+  name: data.analyst
+action_type: data_lookup
+action_payload:
+  source_id: governance_postgres
+  ontology_type: PriorOverride
+  scope: data.read
+match_keywords:
+- governance
+- governance postgres
+- governance_postgres
+- lookup governance postgres
+- postgres
+- prioroverride
+- query governance postgres
+- show governance postgres
+interpreted_as: look up data from governance postgres
+clarifying_question: "Just to confirm \u2014 pull data from <code>governance_postgres</code>\
+  \ (postgres). Read-only query within my <code>data.read</code> scope; per policy\
+  \ <code>GR-AUTO-LOOKUP</code> no human review is required. Proceed?"
+auto_approval_guardrail: GR-AUTO-LOOKUP
+auto_approval_reason: Read-only query against operator-registered source 'governance_postgres'.
+  Policy GR-AUTO-LOOKUP permits autonomous lookups against trusted operator sources.
+closing_message: "Done \u2014 pulled rows from <code>governance_postgres</code>. The\
+  \ result is on the audit trail."
+stages:
+  agent_intake:
+    binder: AutoLookupAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-AUTO-LOOKUP
+      uri: kf.tcs/policy/POL-AUTO-LOOKUP
+      title: Autonomous data lookup policy
+      payload: Read-only queries against operator-registered data sources are autonomous
+        within the data.read scope.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-data-lookup
+      uri: iam.tcs/actors/agent-data-lookup
+      title: Actor scope
+      payload: "Scopes: data.read \xB7 operator-registered source: governance_postgres"
+  proposal:
+    binder: AutoLookupProposalBinder/1.0
+    queries:
+    - data_source: governance_postgres
+      ontology_type: PriorOverride
+      purpose: Lookup against operator-registered source governance_postgres
+      filter: {}
+outcomes:
+  auto_execute:
+    headline: "Auto-executed \u2014 data retrieved from governance_postgres"
+    detail: Lookup against governance_postgres (postgres) completed. Rows are bound
+      to the case envelope and recorded in the audit trail.
+_auto_for_source: governance_postgres
