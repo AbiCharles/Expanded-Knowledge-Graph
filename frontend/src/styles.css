@@ -263,7 +263,26 @@ body {
 .thread-list-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+.thread-export-link {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 5px 10px;
+  background: white;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 100px;
+  text-decoration: none;
+  transition: all 160ms ease;
+}
+.thread-export-link:hover {
+  background: var(--cyan);
+  color: var(--navy-deep);
+  border-color: var(--cyan);
 }
 .thread-clear-btn {
   font-family: 'DM Mono', monospace;
@@ -604,6 +623,13 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
+}
+.chip-stat {
+  margin-left: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
 }
 
 .composer {

@@ -12,20 +12,80 @@ router = APIRouter(tags=["scenarios"])
 
 @router.get("/scenarios")
 def list_scenarios(request: Request) -> list[dict]:
-    """Return the public-facing slice of each scenario for the chip row."""
+    """Return the public-facing slice of each scenario for the chip row.
+
+    Includes per-scenario run history (count + last run) queried from the
+    persisted cases table — so the frontend can show usage stats on each chip.
+    """
     state = request.app.state.app_state
+    history = _scenario_run_history(state)
     rows: list[dict] = []
     for sc in state.scenarios.all():
+        sid = sc["id"]
+        h = history.get(sid, {})
         rows.append(
             {
-                "id": sc["id"],
+                "id": sid,
                 "title": sc["title"],
                 "domain": sc["domain"],
                 "autonomous": bool(sc.get("autonomous")),
                 "suggested_prompt": _suggested_prompt_for(sc),
+                "run_count": int(h.get("count", 0)),
+                "last_run_at": h.get("last_run_at"),
+                "approve_count": int(h.get("approve_count", 0)),
+                "reject_count": int(h.get("reject_count", 0)),
+                "auto_count": int(h.get("auto_count", 0)),
             }
         )
     return rows
+
+
+def _scenario_run_history(state) -> dict[str, dict[str, Any]]:
+    """Aggregate counts + last-run timestamp per scenario_id from the cases table."""
+    from sqlalchemy import func, select
+    from ..persistence.db import CaseRow
+
+    out: dict[str, dict[str, Any]] = {}
+    db = state.database
+    with db.session() as session:
+        # Total run count + last run
+        rows = session.execute(
+            select(
+                CaseRow.scenario_id,
+                func.count(CaseRow.case_id),
+                func.max(CaseRow.updated_at),
+            ).group_by(CaseRow.scenario_id)
+        ).all()
+        for sid, count, last in rows:
+            if sid:
+                out[sid] = {
+                    "count": int(count or 0),
+                    "last_run_at": last.isoformat() if last else None,
+                    "approve_count": 0,
+                    "reject_count": 0,
+                    "auto_count": 0,
+                }
+        # Per-decision counts
+        decisions = session.execute(
+            select(
+                CaseRow.scenario_id,
+                CaseRow.decision_kind,
+                func.count(CaseRow.case_id),
+            )
+            .where(CaseRow.scenario_id.is_not(None))
+            .where(CaseRow.decision_kind.is_not(None))
+            .group_by(CaseRow.scenario_id, CaseRow.decision_kind)
+        ).all()
+        for sid, kind, count in decisions:
+            entry = out.setdefault(sid, {"count": 0, "last_run_at": None,
+                                          "approve_count": 0, "reject_count": 0, "auto_count": 0})
+            if kind == "approve":
+                entry["approve_count"] = int(count or 0)
+            elif kind == "reject":
+                entry["reject_count"] = int(count or 0)
+            elif kind == "auto_execute":
+                entry["auto_count"] = int(count or 0)
+    return out
 
 
 _BUILTIN_PROMPTS = {
@@ -82,6 +142,24 @@ def save_scenario(payload: SaveScenarioIn, request: Request) -> dict:
     if state.scenarios.get(sid):
         raise HTTPException(status_code=409, detail=f"scenario {sid!r} already exists")
 
+    # Conflict detection: warn-only — return 409 with a structured payload if
+    # any existing scenario shares > 50% of the proposed keywords. Lets the
+    # frontend offer "use these anyway" rather than silently degrading the
+    # classifier. Disable with `?force=1`.
+    overlap = _detect_keyword_conflict(state.scenarios, payload.match_keywords or [])
+    if overlap and not request.query_params.get("force"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "keyword_conflict",
+                "message": (
+                    "Some of these keywords overlap heavily with an existing scenario. "
+                    "The classifier may pick the wrong one. Re-submit with ?force=1 to save anyway."
+                ),
+                "conflicts": overlap,
+            },
+        )
+
     scenario = _build_custom_scenario(payload, sid)
     state.scenarios.register(scenario)
     # Track the suggested prompt on the scenario itself so /api/scenarios picks
@@ -110,6 +188,31 @@ def delete_scenario(scenario_id: str, request: Request) -> dict:
 
 def _slugify(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", text.strip())[:48].strip("_") or "untitled"
+
+
+def _detect_keyword_conflict(
+    scenarios, proposed: list[str], threshold: float = 0.5
+) -> list[dict[str, Any]]:
+    """Return any existing scenarios that share ≥ threshold of `proposed`."""
+    if not proposed:
+        return []
+    proposed_set = {k.strip().lower() for k in proposed if k.strip()}
+    if not proposed_set:
+        return []
+    conflicts: list[dict[str, Any]] = []
+    for sc in scenarios.all():
+        existing = {k.strip().lower() for k in sc.get("match_keywords", []) if k.strip()}
+        if not existing:
+            continue
+        overlap = proposed_set & existing
+        if len(overlap) / len(proposed_set) >= threshold:
+            conflicts.append({
+                "scenario_id": sc["id"],
+                "title": sc["title"],
+                "shared_keywords": sorted(overlap),
+                "overlap_pct": round(len(overlap) / len(proposed_set), 2),
+            })
+    return conflicts
 
 
 def _build_custom_scenario(p: SaveScenarioIn, sid: str) -> dict[str, Any]:

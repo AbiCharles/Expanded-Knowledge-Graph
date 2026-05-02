@@ -3,7 +3,7 @@ import * as api from "../api";
 import { DataSourceRow, SampleFact } from "../types";
 import { QueryModal } from "./QueryModal";
 
-type AddMode = null | "csv" | "http" | "sqlite" | "postgres";
+type AddMode = null | "csv" | "http" | "sqlite" | "postgres" | "vector";
 
 export function DataSourcesModal({
   onClose,
@@ -136,6 +136,7 @@ export function DataSourcesModal({
               <button onClick={() => setAddMode("http")}>+ Add HTTP</button>
               <button onClick={() => setAddMode("sqlite")}>+ Add SQLite</button>
               <button onClick={() => setAddMode("postgres")}>+ Add Postgres</button>
+              <button onClick={() => setAddMode("vector")}>+ Add Vector store</button>
             </div>
           </>
         )}
@@ -144,6 +145,7 @@ export function DataSourcesModal({
         {addMode === "http" && <AddHttpForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
         {addMode === "sqlite" && <AddSqliteForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
         {addMode === "postgres" && <AddPostgresForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+        {addMode === "vector" && <AddVectorForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
       </div>
       {queryOpenFor && (
         <QueryModal
@@ -371,6 +373,66 @@ function AddPostgresForm({ onClose, onAdded, setError }: AddFormProps) {
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy || !id.trim() || !dsn.trim() || !sql.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
+      </div>
+    </div>
+  );
+}
+
+function AddVectorForm({ onClose, onAdded, setError }: AddFormProps) {
+  const [id, setId] = useState("");
+  const [folder, setFolder] = useState("");
+  const [indexPath, setIndexPath] = useState("");
+  const [ontology, setOntology] = useState("PolicyExcerpt");
+  const [topK, setTopK] = useState(3);
+  const [model, setModel] = useState("text-embedding-3-small");
+  const [busy, setBusy] = useState(false);
+
+  const folderPlaceholder = "backend/data/policy_corpus/";
+  const indexPlaceholder = "backend/data/<id>.npz";
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api.addDataSource({
+        id,
+        kind: "vector_store",
+        config: {
+          folder,
+          index_path: indexPath || `backend/data/${id}.npz`,
+          ontology_type: ontology,
+          top_k: topK,
+          embed_model: model,
+        },
+      });
+      onAdded();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="ds-add-form">
+      <h3>Add Vector store source</h3>
+      <label>Source id <input value={id} onChange={(e) => setId(e.target.value)} /></label>
+      <label>Folder (path containing .md / .txt to embed)
+        <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={folderPlaceholder} />
+      </label>
+      <label>Index path (.npz cache; auto-derived if blank)
+        <input value={indexPath} onChange={(e) => setIndexPath(e.target.value)} placeholder={indexPlaceholder} />
+      </label>
+      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
+      <label>Top K <input type="number" min={1} max={20} value={topK} onChange={(e) => setTopK(parseInt(e.target.value || "3", 10))} /></label>
+      <label>Embedding model <input value={model} onChange={(e) => setModel(e.target.value)} /></label>
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        Documents are embedded once at registration time using the OpenAI key from <code>.env</code>.
+        Without a key the source registers but returns empty results until you add one and restart.
+      </div>
+      <div className="ds-form-actions">
+        <button onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || !id.trim() || !folder.trim()} onClick={submit}>{busy ? "Embedding…" : "Add"}</button>
       </div>
     </div>
   );

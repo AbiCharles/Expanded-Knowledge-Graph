@@ -119,8 +119,12 @@ export function Console({
               className="chip"
               disabled={composerLocked}
               onClick={() => onSendPrompt(sc.suggested_prompt)}
+              title={chipTooltip(sc)}
             >
               {sc.suggested_prompt}
+              {sc.run_count && sc.run_count > 0 ? (
+                <span className="chip-stat">· {sc.run_count}</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -191,13 +195,31 @@ function ThreadList({
   };
   return (
     <div className="thread-list">
-      {completedCount > 0 && (
-        <div className="thread-list-actions">
+      <div className="thread-list-actions">
+        <a
+          className="thread-export-link"
+          href="/api/exports/cases.csv"
+          target="_blank"
+          rel="noreferrer"
+          title="Download all cases as CSV"
+        >
+          ↓ Export cases
+        </a>
+        <a
+          className="thread-export-link"
+          href="/api/exports/lineage.csv"
+          target="_blank"
+          rel="noreferrer"
+          title="Download the full lineage / audit log as CSV"
+        >
+          ↓ Export lineage
+        </a>
+        {completedCount > 0 && (
           <button className="thread-clear-btn" onClick={doClear}>
             Clear completed ({completedCount})
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {cases
         .slice()
         .reverse()
@@ -610,6 +632,23 @@ function WelcomeState({ historyCount }: { historyCount: number }) {
       </div>
     </div>
   );
+}
+
+function chipTooltip(sc: ScenarioRow): string {
+  const lines = [`${sc.id} — ${sc.title}`];
+  if (typeof sc.run_count === "number" && sc.run_count > 0) {
+    const parts = [`${sc.run_count} run${sc.run_count === 1 ? "" : "s"}`];
+    if (sc.approve_count) parts.push(`${sc.approve_count} approved`);
+    if (sc.reject_count) parts.push(`${sc.reject_count} rejected`);
+    if (sc.auto_count) parts.push(`${sc.auto_count} auto-executed`);
+    lines.push(parts.join(" · "));
+    if (sc.last_run_at) {
+      lines.push(`Last run: ${new Date(sc.last_run_at).toLocaleString()}`);
+    }
+  } else {
+    lines.push("(never run)");
+  }
+  return lines.join("\n");
 }
 
 function escapeHtml(s: string): string {

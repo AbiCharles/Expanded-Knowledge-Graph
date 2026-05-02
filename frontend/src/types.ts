@@ -16,6 +16,11 @@ export interface ScenarioRow {
   domain: string;
   autonomous: boolean;
   suggested_prompt: string;
+  run_count?: number;
+  last_run_at?: string | null;
+  approve_count?: number;
+  reject_count?: number;
+  auto_count?: number;
 }
 
 export interface FactRow {

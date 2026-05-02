@@ -14,6 +14,7 @@ from .agent_runtime import AgentRuntime
 from .api.cases import router as cases_router
 from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
+from .api.exports import router as exports_router
 from .api.scenarios import router as scenarios_router
 from .config import get_settings
 from .datasources import DataSourceRegistry
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(decisions_router, prefix="/api")
     app.include_router(scenarios_router, prefix="/api")
     app.include_router(datasources_router, prefix="/api")
+    app.include_router(exports_router, prefix="/api")
 
     @app.get("/api/health")
     def health():
