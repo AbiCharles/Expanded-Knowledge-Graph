@@ -56,6 +56,20 @@ LLM_PROVIDER=openai      # or `azure` or `fake`
 
 For Azure, fill in the four `AZURE_OPENAI_*` variables (deployment name + endpoint + api-version + key). For OpenAI, fill in `OPENAI_API_KEY` and `OPENAI_MODEL`. The model identifier is a free-form string — set it to whatever your deployment exposes.
 
+## Type-generation (frontend ↔ backend)
+
+The frontend keeps a hand-maintained `src/types.ts` for the most-used shapes.
+For full coverage that won't drift, run:
+
+```bash
+# (with uvicorn running on :8001)
+cd frontend && npm run gen-types
+```
+
+This regenerates `src/api-types.ts` from FastAPI's `/openapi.json`. Re-run
+whenever you add/change a backend endpoint and want the frontend's typings
+to follow.
+
 ## Smoke tests
 
 ```bash
