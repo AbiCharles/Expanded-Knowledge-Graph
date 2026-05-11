@@ -60,6 +60,24 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
 
     # Stage 2 — proposal binding
     action = state.agent_runtime.draft_action(scenario)
+    # Phase 3.E enhancement: when a chip-style ontology lookup scenario
+    # routes a prompt that mentions a filter (e.g. *"show me Dutch
+    # suppliers"* hits SC-ONTO-supply_chain-Supplier), pre-parse the
+    # prompt against the bound ontology and stash the extracted where on
+    # the action so the binder can merge it into the ontology_query's
+    # `where: {}`. Only fires when the scenario marks itself
+    # `_filter_from_prompt: true` — keeps hand-authored scenarios with
+    # deliberate empty/literal where clauses untouched.
+    if scenario.get("_filter_from_prompt") and (case.prompt or "").strip():
+        try:
+            prompt_filters = await _extract_prompt_filters(
+                state, scenario, case.prompt
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.info("prompt-filter extraction skipped: %s", exc)
+            prompt_filters = {}
+        if prompt_filters:
+            action.payload["__prompt_filters__"] = prompt_filters
     state.service.attach_proposal(ctx, action)
     await state.bus.emit(case.case_id, _stage_event(ctx, Stage.PROPOSAL))
 
@@ -106,6 +124,13 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     case.decision_kind = rd.decision.value
     case.rationale = rd.rationale or None
     case.closing_message = _closing_message_for(scenario, case)
+
+    # Phase 3.E: when the case approves an SC-NLWRITE-* scenario, run
+    # the action's executor. Result is stashed on the case so the
+    # detail endpoint and the audit trail both surface it.
+    if rd.decision.value == "approve":
+        _maybe_run_executor(state, case, scenario)
+
     state.cases.save(case)
 
     await state.bus.emit(
@@ -144,6 +169,11 @@ async def _finalise_autonomous(state: AppState, case: CaseRecord, pd: policy.Pol
     case.phase = "complete"
     case.decision_kind = "auto_execute"
     case.closing_message = scenario.get("closing_message", "")
+
+    # Phase 3.E: an SC-NLWRITE-* scenario with action.hitl=false can
+    # land in the autonomous path. Run the executor here too.
+    _maybe_run_executor(state, case, scenario)
+
     state.cases.save(case)
 
     await state.bus.emit(
@@ -196,6 +226,92 @@ def _stage_payload(ctx: KnowledgeContext, stage: Stage) -> dict:
             for f in sc.facts
         ],
     }
+
+
+async def _extract_prompt_filters(
+    state: AppState, scenario: dict, prompt: str
+) -> dict[str, dict]:
+    """Parse the prompt against every ontology referenced by the
+    scenario's `ontology_queries:` blocks and return the per-target
+    where dict.
+
+    Returned shape: `{f"{ontology_id}.{class}": where_dict}`. The binder
+    uses the same key to look up filters when issuing a query, so a
+    prompt-extracted `country: NL` only ends up applied to a query that
+    targets the same class the parser identified.
+    """
+    from .ontology import (
+        NLParseError,
+        collect_attribute_samples,
+        parse_nl_query,
+    )
+
+    proposal = (scenario.get("stages") or {}).get("proposal") or {}
+    queries = proposal.get("ontology_queries") or []
+    if not queries:
+        return {}
+
+    out: dict[str, dict] = {}
+    # Group by ontology so we only hit the parser once per ontology, not
+    # once per ontology_query.
+    ontology_ids = {q.get("ontology") for q in queries if q.get("ontology")}
+    for ontology_id in ontology_ids:
+        onto = state.ontologies.get(ontology_id)
+        if onto is None:
+            continue
+        mapping = state.ontologies.get_mapping(ontology_id)
+        samples = collect_attribute_samples(onto, mapping, state.data_sources)
+        try:
+            parsed = await parse_nl_query(
+                prompt, onto, state.llm, attribute_samples=samples
+            )
+        except NLParseError:
+            continue
+        if parsed.where:
+            out[f"{ontology_id}.{parsed.class_}"] = dict(parsed.where)
+    return out
+
+
+def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> None:
+    """If the scenario carries an `_executor` block (synthesized SC-NLWRITE-*
+    scenarios do), look up the action, invoke it, and record the outcome.
+
+    No-op for any other scenario kind. Failures don't raise — they're
+    captured into `case.execution_result` so the audit trail tells the
+    truth and the case completion path continues.
+    """
+    executor_cfg = scenario.get("_executor")
+    if not executor_cfg:
+        return
+    action_id = executor_cfg.get("action_id")
+    arguments = executor_cfg.get("arguments") or {}
+    if not action_id:
+        log.warning("scenario %s has _executor but no action_id", scenario.get("id"))
+        return
+    action = state.actions.get(action_id)
+    if action is None:
+        case.execution_result = {
+            "action_id": action_id,
+            "ok": False,
+            "detail": f"action {action_id!r} no longer registered",
+            "args": arguments,
+        }
+        return
+    from .actions import execute_action
+
+    result = execute_action(action, arguments, sources=state.data_sources)
+    case.execution_result = result.model_dump(mode="json")
+
+    # Append a lineage event so the audit trail captures the executor run.
+    if case.ctx is not None:
+        ev = make_event(
+            stage=Stage.EXECUTE,
+            actor=scenario.get("actor_id") or "agent-write-actions",
+            action="executed" if result.ok else "executor_failed",
+            detail=result.detail,
+        )
+        case.ctx.append_lineage(ev)
+        state.lineage.record(case.ctx.case_id, ev)
 
 
 def _closing_message_for(scenario: dict, case: CaseRecord) -> Optional[str]:

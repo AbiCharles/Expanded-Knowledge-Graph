@@ -1,0 +1,64 @@
+ontology_id: tcs_core
+mappings:
+  Product:
+    sources:
+    - data_source: products_csv
+      identifier_column: product_id
+      attribute_map:
+        product_id: product_id
+        name: name
+        eccn: eccn
+        hts: hts
+        description: description
+        category: category
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table is a direct match for Product with exact column-name and type
+        alignment for all ontology attributes.
+    relations: {}
+  SanctionedEntity:
+    sources:
+    - data_source: sanctions_csv
+      identifier_column: ent_id
+      attribute_map:
+        ent_id: ent_id
+        name: name
+        programs: programs
+        country: country
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table is an obvious match for SanctionedEntity with exact column-name
+        and type matches for all class attributes.
+    relations: {}
+  PriorOverride:
+    sources:
+    - data_source: governance_sqlite
+      identifier_column: case_id
+      attribute_map:
+        case_id: case_id
+        scenario_id: scenario_id
+        outcome: outcome
+        rationale: rationale
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table name and columns directly match the PriorOverride concept and
+        all ontology attributes align exactly by name, type, and sample values.
+    relations: {}
+  PolicyExcerpt:
+    sources: []
+    relations: {}

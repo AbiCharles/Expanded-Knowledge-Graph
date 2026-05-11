@@ -6,12 +6,12 @@ interface Props {
   role: "operator" | "reviewer";
   user: AuthUser;
   onLogout: () => void;
-  onOpenDataSources: () => void;
+  onOpenKnowledge: () => void;
   onOpenScenariosHelp: () => void;
   onOpenMetrics: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onOpenScenariosHelp, onOpenMetrics }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -76,8 +76,8 @@ export function StatusBar({ active, role, user, onLogout, onOpenDataSources, onO
         >
           Scenarios guide
         </button>
-        <button className="statusbar-action" onClick={onOpenDataSources}>
-          Data sources
+        <button className="statusbar-action" onClick={onOpenKnowledge}>
+          Knowledge
         </button>
         <div className={`role-pill${role === "reviewer" ? " reviewer" : ""}`}>
           <div className="role-dot" />

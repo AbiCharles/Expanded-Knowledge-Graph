@@ -62,8 +62,22 @@ isn't your own laptop.
 ### Core flow
 - **6 hand-authored scenarios** (Trade Compliance, Procurement, Logistics)
   covering both HITL and autonomous shapes
-- **5 connector types** for data sources: CSV upload, SQLite, Postgres, HTTP
-  REST, vector store (OpenAI embeddings)
+- **6 connector types** for data sources: CSV upload, SQLite, Postgres, HTTP
+  REST, vector store (OpenAI embeddings), and **Neo4j** (Cypher with a
+  read-only safety guard; bind ontology classes via `query_template`
+  templates in the mapping doc)
+- **Ontology layer** — upload a YAML/JSON ontology, the LLM proposes
+  column-to-attribute mappings against your registered sources, and
+  scenarios bind data via ontology classes instead of hard-coding
+  source ids. Includes an NL→ontology query playground for ad-hoc
+  questions and an opt-in NL→ontology fallback in the operator
+  console. See [docs/ontology.md](docs/ontology.md).
+- **Action registry (NL→write)** — register structured write actions
+  (SQL UPDATE, HTTP POST/PUT/PATCH/DELETE) with typed argument schemas
+  and an executor; the LLM picks an action from a natural-language
+  prompt, the case goes through HITL review by default, and the
+  executor runs only on reviewer approval. Opt in per-prompt via the
+  composer's "Try write action" toggle.
 - **LLM adapter** with three drop-in clients: `OpenAIClient`,
   `AzureOpenAIClient`, `FakeLLMClient`
 - **Top-K classifier suggestions** when prompt confidence is low
@@ -77,8 +91,10 @@ isn't your own laptop.
   scenario, with optional LLM-suggested keywords / clarifier / prompt
 - **Edit existing scenarios** in-app (titles, keywords, clarifier text);
   Remove for auto- and custom-scenarios
-- **Auto-scenario per registered data source** — drop a source in, get a
-  chip immediately
+- **One-click lookup chip per ontology class** — register a source, map
+  it to ontology classes via the Knowledge tile, click "Generate lookup
+  chip" per class to surface an autonomous `SC-ONTO-…` chip on the
+  operator console
 - **Live metrics dashboard** — totals, cases-by-status, decisions-by-
   scenario stack, cases-per-day sparkline, top rejection reasons
 - **CSV export** of cases + full lineage (with date-range filters)
@@ -121,16 +137,27 @@ HITL/
 │
 ├── backend/                      FastAPI app on top of the framework
 │   ├── api/                      REST routers (auth, cases, decisions,
-│   │                             scenarios, datasources, exports, metrics)
+│   │                             scenarios, datasources, ontologies,
+│   │                             ontology_query, actions, exports, metrics)
 │   ├── scenarios/                Built-in YAML scenarios + saved customs
+│   ├── ontologies/               Uploaded ontology + mapping YAMLs
 │   ├── data/                     Default data sources (CSV, SQLite, vector)
+│   │   └── actions/              Registered write actions (one YAML per action)
 │   ├── datasources/              Connector implementations
+│   │                             (csv, sqlite, postgres, http, vector, neo4j)
+│   ├── ontology/                 OntologyRegistry, mapper, OntologyResolver,
+│   │                             NL→ontology query parser, cypher safety
+│   ├── actions/                  ActionRegistry, NL action picker, executors
+│   │                             (sql_update, http_request)
 │   ├── persistence/              SQLite-backed CaseStore + LineageRecorder
 │   ├── agent_runtime.py          LLM-driven classification + action drafting
 │   ├── binders.py                Fixture- and source-driven stage binders
+│   │                             (also dispatches `ontology_queries:` blocks)
 │   ├── auth.py                   Hash, JWT, FastAPI dependencies
-│   ├── auto_scenario.py          Generate a chip per registered source
-│   ├── orchestrator.py           Drives a case through all 4 nodes
+│   ├── auto_scenario.py          Generate a chip per ontology class +
+│   │                             synthesize SC-ADHOC / SC-NLWRITE scenarios
+│   ├── orchestrator.py           Drives a case through all 4 nodes;
+│   │                             invokes action executors on approve
 │   └── main.py                   App entry point
 │
 ├── frontend/                     Vite + React + TypeScript
@@ -158,14 +185,17 @@ need, keep the framework's typed envelope + binder Protocols.
 
 ## Documentation
 
-| Path | Topic |
-|---|---|
-| [docs/scenarios.md](docs/scenarios.md) | Scenario authoring: anatomy, HITL vs autonomous, stage knowledge, full examples, lifecycle (built-in / auto / custom). |
-| [docs/scaling.md](docs/scaling.md) | When to add scenarios vs. when to manage growth. Top-K UX, auto-generation patterns, the staged roadmap. |
-| [docs/production.md](docs/production.md) | Deployment guide: required config, security checklist, what's still deferred, smoke-test checklist. |
-| [hitl-context/docs/framework.md](hitl-context/docs/framework.md) | Framework reference: protocols, transports, knowledge envelope. |
-| [hitl-context/docs/context_flow.mermaid](hitl-context/docs/context_flow.mermaid) | Visual diagram of the four-stage flow. |
-| In-app **Scenarios guide** (status bar pill) | Same content as scenarios.md, navigable in the running app. |
+| Path | Topic | Audience |
+|---|---|---|
+| [docs/overview.md](docs/overview.md) | What the system is, who uses it, the mental model, an end-to-end walkthrough, what's been built, what's next. | Non-technical / managers / new joiners |
+| [docs/architecture.md](docs/architecture.md) | Big-picture diagram, layer-by-layer breakdown with file paths, the three core flows (case lifecycle, fallback chain, ontology resolution), extension seams. | Engineers |
+| [docs/scenarios.md](docs/scenarios.md) | Scenario authoring: anatomy, HITL vs autonomous, stage knowledge, full examples, lifecycle (built-in / auto / custom). | Scenario authors |
+| [docs/ontology.md](docs/ontology.md) | Ontology layer: document format, source mappings, `ontology_queries:` block, NL playground, Neo4j connector, authoring tutorial. | Engineers + ontology authors |
+| [docs/scaling.md](docs/scaling.md) | When to add scenarios vs. when to manage growth. Top-K UX, auto-generation patterns, ontology as a scaling lever, the staged roadmap. | Architects |
+| [docs/production.md](docs/production.md) | Deployment guide: required config, security checklist, what's still deferred, smoke-test checklist. | Ops / deployers |
+| [hitl-context/docs/framework.md](hitl-context/docs/framework.md) | Framework reference: protocols, transports, knowledge envelope. | Engineers extending the framework |
+| [hitl-context/docs/context_flow.mermaid](hitl-context/docs/context_flow.mermaid) | Visual diagram of the four-stage flow. | Anyone |
+| In-app **Scenarios guide** (status bar pill) | Same content as scenarios.md, navigable in the running app. | Operators |
 
 ---
 
@@ -267,7 +297,9 @@ which to address first.
   a webhook to make this a real surface.
 - **Real KF / ERP / IAM connectors** are not provided — built-in scenarios
   use fixture data. Drop in real `KnowledgeResolver` implementations to
-  upgrade.
+  upgrade. The recommended path for cross-source knowledge is the planned
+  ontology layer ([docs/ontology.md](docs/ontology.md)) — one ontology +
+  N source mappings replaces N scenario rewrites.
 
 The architecture is built around clean swap points: every piece above is
 a Protocol the framework already declares, so each upgrade is one new

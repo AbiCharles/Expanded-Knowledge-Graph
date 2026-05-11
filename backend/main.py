@@ -22,6 +22,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from .actions import ActionRegistry
 from .agent_runtime import AgentRuntime
 from .api.auth import limiter as auth_limiter, router as auth_router
 from .api.cases import router as cases_router
@@ -29,10 +30,13 @@ from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
 from .api.exports import router as exports_router
 from .api.metrics import router as metrics_router
+from .api.actions import router as actions_router
+from .api.ontologies import router as ontologies_router
 from .api.scenarios import router as scenarios_router
 from .auth import assert_jwt_secret_set, ensure_default_admin
 from .config import get_settings
 from .datasources import DataSourceRegistry
+from .ontology import OntologyRegistry
 from .persistence import get_database
 from .scenario_loader import ScenarioRegistry
 from .state import AppState
@@ -74,6 +78,44 @@ async def lifespan(app: FastAPI):
         azure_embedding_config=azure_embedding_config,
     )
 
+    # Optional: auto-register a default Neo4j source when NEO4J_PASSWORD
+    # is set in the env. The operator can still add more Neo4j sources
+    # via the UI form. We use a stable id (`neo4j_default`) so re-running
+    # at boot updates the spec rather than creating duplicates.
+    if settings.NEO4J_PASSWORD and settings.NEO4J_URI:
+        from .datasources import DataSourceSpec, ResolverError
+
+        cfg: dict = {"uri": settings.NEO4J_URI, "password": settings.NEO4J_PASSWORD}
+        if settings.NEO4J_USER:
+            cfg["user"] = settings.NEO4J_USER
+        if settings.NEO4J_DATABASE:
+            cfg["database"] = settings.NEO4J_DATABASE
+        try:
+            data_sources.register(
+                DataSourceSpec(
+                    id="neo4j_default",
+                    kind="neo4j",
+                    config=cfg,
+                    description=(
+                        f"Auto-registered from NEO4J_* env vars "
+                        f"({settings.NEO4J_URI})"
+                    ),
+                )
+            )
+            logging.getLogger(__name__).info(
+                "Neo4j source `neo4j_default` auto-registered from NEO4J_* env vars"
+            )
+        except ResolverError as exc:
+            logging.getLogger(__name__).warning(
+                "Neo4j auto-registration failed: %s", exc
+            )
+
+    ontology_dir = project_root / "backend" / "ontologies"
+    ontologies = OntologyRegistry.from_directory(ontology_dir)
+
+    actions_dir = project_root / "backend" / "data" / "actions"
+    actions = ActionRegistry.from_directory(actions_dir)
+
     db_path = project_root / "backend" / "data" / "app.sqlite"
     database = get_database(db_path)
     ensure_default_admin(database)
@@ -98,11 +140,18 @@ async def lifespan(app: FastAPI):
         llm=llm,
         agent_runtime=agent_runtime,
         data_sources=data_sources,
+        ontologies=ontologies,
+        actions=actions,
         database=database,
     )
+    mapping_count = sum(
+        1 for o in ontologies.all() if ontologies.get_mapping(o.id) is not None
+    )
     logging.getLogger(__name__).info(
-        "HITL backend ready · LLM=%s · scenarios=%d · data_sources=%d · db=%s",
-        llm.name, len(scenarios.all()), len(data_sources.specs()), db_path,
+        "HITL backend ready · LLM=%s · scenarios=%d · data_sources=%d · "
+        "ontologies=%d · mappings=%d · actions=%d · db=%s",
+        llm.name, len(scenarios.all()), len(data_sources.specs()),
+        len(ontologies.all()), mapping_count, len(actions.all()), db_path,
     )
     yield
 
@@ -132,6 +181,8 @@ def create_app() -> FastAPI:
     app.include_router(datasources_router, prefix="/api")
     app.include_router(exports_router, prefix="/api")
     app.include_router(metrics_router, prefix="/api")
+    app.include_router(ontologies_router, prefix="/api")
+    app.include_router(actions_router, prefix="/api")
 
     @app.get("/api/health")
     def health():

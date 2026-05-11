@@ -21,6 +21,12 @@ export function QueryModal({
   const [saveOpen, setSaveOpen] = useState(false);
   const [savedAs, setSavedAs] = useState<string | null>(null);
 
+  const isCypher = source.kind === "neo4j";
+  const langLabel = isCypher ? "Cypher" : "SQL";
+  const placeholderText = isCypher
+    ? "MATCH (n:Label) WHERE n.col = $name RETURN n LIMIT $max_results"
+    : "SELECT id, title, summary FROM table WHERE col = :name LIMIT :max_results";
+
   const run = async () => {
     setBusy(true);
     setResult(null);
@@ -29,7 +35,9 @@ export function QueryModal({
       for (const p of params) {
         if (p.key.trim()) obj[p.key.trim()] = p.value;
       }
-      const r = await api.runQuery(source.id, { sql, params: obj, limit });
+      const r = isCypher
+        ? await api.runCypher(source.id, { cypher: sql, params: obj, limit })
+        : await api.runQuery(source.id, { sql, params: obj, limit });
       setResult(r);
     } finally {
       setBusy(false);
@@ -60,15 +68,21 @@ export function QueryModal({
         </div>
 
         <div className="query-body">
-          <label className="query-section-label">SQL</label>
+          <label className="query-section-label">{langLabel}</label>
           <textarea
             className="query-sql"
             value={sql}
             onChange={(e) => setSql(e.target.value)}
-            placeholder="SELECT id, title, summary FROM table WHERE col = :name LIMIT :max_results"
+            placeholder={placeholderText}
             rows={8}
             spellCheck={false}
           />
+          {isCypher && (
+            <div style={{ fontSize: 11, color: "var(--ink-soft)", marginTop: 4 }}>
+              Read-only: write/mutate Cypher (CREATE/MERGE/DELETE/SET/REMOVE/…)
+              and dangerous procedures are rejected before reaching the driver.
+            </div>
+          )}
 
           <div className="query-controls-row">
             <div className="query-params">
@@ -380,6 +394,15 @@ function ResultPanel({ result }: { result: api.RunQueryResult }) {
 //   * For Postgres, the same "list tables" trick using information_schema.
 // =============================================================================
 function starterSqlFor(source: DataSourceRow): string {
+  if (source.kind === "neo4j") {
+    return [
+      "// Labels in this graph — pick one and write real Cypher against it.",
+      "CALL db.labels() YIELD label",
+      "RETURN label",
+      "ORDER BY label",
+      "LIMIT $max_results",
+    ].join("\n");
+  }
   if (source.kind === "sqlite") {
     // Schema introspection — one row per table, comma-list of columns with types.
     return [

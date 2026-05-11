@@ -16,6 +16,7 @@ from tcs_hitl_context import KnowledgeFact, KnowledgeResolver
 
 from .csv_source import CsvResolver
 from .http_source import HttpResolver
+from .neo4j_source import Neo4jResolver
 from .postgres_source import PostgresResolver
 from .sqlite_source import SqliteResolver
 from .vector_source import VectorStoreResolver
@@ -158,6 +159,14 @@ class DataSourceRegistry:
                 embed_model=cfg.get("embed_model", "text-embedding-3-small"),
                 openai_api_key=self._openai_api_key,
                 azure_config=self._azure_embedding_config,
+            )
+        if spec.kind == "neo4j":
+            return Neo4jResolver(
+                source_id=spec.id,
+                uri=cfg["uri"],
+                user=cfg.get("user"),
+                password=cfg.get("password"),
+                database=cfg.get("database"),
             )
         raise ResolverError(f"unknown source kind: {spec.kind!r}")
 

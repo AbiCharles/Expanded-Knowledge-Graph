@@ -16,6 +16,9 @@ export interface ScenarioRow {
   domain: string;
   autonomous: boolean;
   suggested_prompt: string;
+  // Unix-seconds freshness; backend sorts newest-first. Optional because
+  // older API responses may not have it.
+  mtime?: number | null;
   run_count?: number;
   last_run_at?: string | null;
   approve_count?: number;
@@ -131,7 +134,7 @@ export interface DecidedEvent {
 }
 export interface DataSourceRow {
   id: string;
-  kind: "csv" | "sqlite" | "http" | "postgres" | "vector_store";
+  kind: "csv" | "sqlite" | "http" | "postgres" | "vector_store" | "neo4j";
   default: boolean;
   description: string;
   config_summary: Record<string, unknown>;

@@ -45,6 +45,13 @@ def tmp_app_data(tmp_path: Path) -> Iterator[Path]:
 
     scenarios = tmp_path / "backend" / "scenarios"
     shutil.copytree(REPO_ROOT / "backend" / "scenarios", scenarios)
+
+    # Mirror the seeded ontologies (tcs_core etc.) so tests get the same
+    # default ontology the dev environment ships with.
+    ontologies_src = REPO_ROOT / "backend" / "ontologies"
+    if ontologies_src.exists():
+        shutil.copytree(ontologies_src, tmp_path / "backend" / "ontologies")
+
     yield data_dir
 
 
@@ -63,10 +70,12 @@ def client(tmp_app_data: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Test
     # project root. Easiest approach: monkeypatch the function locally.
     @main_module.asynccontextmanager
     async def test_lifespan(app):
+        from backend.actions import ActionRegistry
         from backend.agent_runtime import AgentRuntime
         from backend.auth import ensure_default_admin
         from backend.config import get_settings
         from backend.datasources import DataSourceRegistry
+        from backend.ontology import OntologyRegistry
         from backend.persistence import get_database
         from backend.scenario_loader import ScenarioRegistry
         from backend.state import AppState
@@ -82,13 +91,20 @@ def client(tmp_app_data: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Test
             project_root=project_root,
             openai_api_key=settings.OPENAI_API_KEY or None,
         )
+        ontologies = OntologyRegistry.from_directory(
+            project_root / "backend" / "ontologies"
+        )
+        actions = ActionRegistry.from_directory(
+            project_root / "backend" / "data" / "actions"
+        )
         database = get_database(tmp_app_data / "app.sqlite")
         ensure_default_admin(database)
         llm = build_llm_client_from_env(settings.model_dump())
         agent_runtime = AgentRuntime(llm=llm, scenarios=scenarios)
         app.state.app_state = AppState(
             scenarios=scenarios, llm=llm, agent_runtime=agent_runtime,
-            data_sources=data_sources, database=database,
+            data_sources=data_sources, ontologies=ontologies,
+            actions=actions, database=database,
         )
         yield
 

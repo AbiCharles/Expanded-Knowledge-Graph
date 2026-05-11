@@ -1,0 +1,66 @@
+id: SC-ONTO-supply_chain_demo-PriorOverride
+title: "Lookup \xB7 PriorOverride"
+domain: Ontology lookups
+autonomous: true
+actor_id: agent-data-lookup
+operator_role:
+  label: Operator
+  name: data.analyst
+action_type: ontology_lookup
+action_payload:
+  ontology: supply_chain_demo
+  class: PriorOverride
+  scope: data.read
+match_keywords:
+- governance sqlite
+- governance_sqlite
+- list prioroverride
+- lookup prioroverride
+- outcome stats
+- outcome_stats
+- prioroverride
+- show prioroverride
+- supply_chain_demo
+interpreted_as: look up PriorOverride via the supply_chain_demo ontology
+clarifying_question: "Just to confirm \u2014 fetch <code>PriorOverride</code> via\
+  \ <code>supply_chain_demo</code>, fanning out to <code>governance_sqlite, outcome_stats</code>\
+  \ (2 sources). Read-only autonomous lookup. Proceed?"
+auto_approval_guardrail: GR-ONTO-LOOKUP
+auto_approval_reason: Read-only ontology query against supply_chain_demo.PriorOverride.
+  The mapping doc governs which sources back this class; guardrail GR-ONTO-LOOKUP
+  permits autonomous lookups.
+closing_message: "Done \u2014 bound <code>PriorOverride</code> facts via the <code>supply_chain_demo</code>\
+  \ ontology. Per-fact provenance is on the audit trail."
+stages:
+  agent_intake:
+    binder: OntologyLookupAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-ONTO-LOOKUP
+      uri: kf.tcs/policy/POL-ONTO-LOOKUP
+      title: Autonomous ontology lookup policy
+      payload: Read-only ontology queries are autonomous within the data.read scope.
+        The mapping doc governs which sources are consulted.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-data-lookup
+      uri: iam.tcs/actors/agent-data-lookup
+      title: Actor scope
+      payload: "Scopes: data.read \xB7 ontology lookup: supply_chain_demo.PriorOverride"
+  proposal:
+    binder: OntologyLookupProposalBinder/1.0
+    ontology_queries:
+    - ontology: supply_chain_demo
+      class: PriorOverride
+      where: {}
+      purpose: Lookup against ontology class supply_chain_demo.PriorOverride
+outcomes:
+  auto_execute:
+    headline: "Auto-executed \u2014 PriorOverride fetched via supply_chain_demo"
+    detail: Lookup against supply_chain_demo.PriorOverride completed via 2 source
+      bindings. Rows are bound to the case envelope and recorded in the audit trail.
+_auto_for_ontology_class:
+- supply_chain_demo
+- PriorOverride
+_custom_suggested_prompt: Look up PriorOverride (via supply_chain_demo)

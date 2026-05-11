@@ -139,6 +139,21 @@ The framework is wire-compatible with `tcs_sc_guardrails.AgentAction`. When `Gua
 
 The integration example in `examples/sc_guardrails_integration.py` walks through SC-TC-007 (Trade override approval) end-to-end.
 
+## 9b. Extensions in the wrapping app
+
+The framework deliberately ships only one `KnowledgeResolver` Protocol — it does not assume any particular routing strategy across multiple sources. The consuming app is expected to layer that on.
+
+Concrete example: the [HITL Context app](../../README.md) sitting on top of this framework **shipped** an `OntologyResolver` that is itself a `KnowledgeResolver` Protocol implementation. It dispatches class-level queries (`Product`, `Supplier`, `PriorOverride`, …) to one or more underlying resolvers (CSV / SQLite / Postgres / vector) via an operator-confirmed mapping document. Scenarios reference ontology classes via an `ontology_queries:` block; the framework itself was not modified. The consuming app also added:
+
+- A `KnowledgeResolverRegistry`-shaped router (`DataSourceRegistry`)
+- An LLM-driven mapping suggester + per-class chip generator
+- An NL→`OntologyQuery` parser used both by an ad-hoc playground and by an opt-in fallback path in the main composer
+- Per-fact provenance tags (`payload.via_ontology`, `payload.via_source_binding`) layered onto `KnowledgeFact` without touching the framework's models
+
+This is an example of the resolver seam working as designed — multi-source dispatch, NL→query parsing, mapping governance, and ad-hoc fallback all live in the consumer, not the framework.
+
+See [the consuming app's ontology design doc](../../docs/ontology.md) for the full shape.
+
 ## 10. Open questions / next iteration
 
 - **Reviewer surface** defaulted to Teams; confirm or substitute.

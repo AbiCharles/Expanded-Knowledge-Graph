@@ -44,3 +44,7 @@ class CaseRecord:
     closing_message: Optional[str] = None
     # asyncio.Event signalling that a decision has been recorded for this case's ticket
     decision_event: Optional[asyncio.Event] = None
+    # Phase 3.E: when an SC-NLWRITE-* scenario approves, the orchestrator
+    # invokes the action's executor and stashes the outcome here so the
+    # case-detail endpoint can render it.
+    execution_result: Optional[dict] = None

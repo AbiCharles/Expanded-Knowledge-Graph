@@ -4,9 +4,9 @@
 # governance store.
 #
 # Quick start:
-#   echo "JWT_SECRET=$(openssl rand -hex 32)" > .env.docker
-#   echo "DOMAIN=hitl.example.com" >> .env.docker
-#   docker compose --env-file .env.docker up -d
+  # echo "JWT_SECRET=$(openssl rand -hex 32)" > .env.docker
+  # echo "DOMAIN=hitl.example.com" >> .env.docker
+  # docker compose --env-file .env.docker up -d
 #
 # For a no-TLS local run (just the backend + a Caddy on :80):
 #   docker compose --env-file .env.docker -f docker-compose.yaml up backend
@@ -33,15 +33,52 @@ services:
     ports:
       - "8001:8001"
 
+  # ----------------------------------------------------------------------
+  # Optional Neo4j service. Uncomment + bring up with `docker compose
+  # --profile graph up -d` (or remove the `profiles:` line to bring up
+  # by default). Loads the APOC + n10s plugins via NEO4J_PLUGINS so
+  # ad-hoc queries and the apoc-namespace safety guard apply consistently.
+  # Connect from the backend by adding a Neo4j source via the UI:
+  #   uri:      bolt://neo4j:7687  (inside Docker network)
+  #             bolt://localhost:7687  (from your host)
+  #   user:     neo4j
+  #   password: matches NEO4J_AUTH below
+  # ----------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: hitl-neo4j
+    restart: unless-stopped
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set}
+      NEO4J_PLUGINS: '["apoc", "n10s"]'
+      # Allow APOC + n10s procedures (the cypher-safety guard rejects the
+      # write/mutate ones at the application layer).
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,n10s.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*,n10s.*"
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt
+    volumes:
+      - hitl-neo4j-data:/data
+      - hitl-neo4j-logs:/logs
+
   # Caddy auto-issues a Let's Encrypt cert for ${DOMAIN} and proxies to
   # the backend. Skip this service if you have a different reverse proxy.
+  # Profiled to `prod` so local dev (`docker compose up backend` or
+  # `docker compose --profile graph up`) doesn't require a DOMAIN.
   caddy:
     image: caddy:2-alpine
     container_name: hitl-caddy
     restart: unless-stopped
+    profiles: ["prod"]
     depends_on: [backend]
     environment:
-      DOMAIN: ${DOMAIN:?DOMAIN must be set, e.g. hitl.example.com}
+      # `:-` keeps interpolation happy when this service isn't being started
+      # (e.g. `docker compose --profile graph up neo4j`). When you DO start
+      # caddy with `--profile prod`, set DOMAIN in your .env or the cert
+      # request will fail.
+      DOMAIN: ${DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -54,3 +91,6 @@ volumes:
   hitl-data:
   caddy-data:
   caddy-config:
+  # Uncomment alongside the neo4j service block above
+  hitl-neo4j-data:
+  hitl-neo4j-logs:

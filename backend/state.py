@@ -21,11 +21,12 @@ from tcs_hitl_context import (
     TeamsAdaptiveCardSurface,
 )
 
+from .actions import ActionRegistry
 from .agent_runtime import AgentRuntime
-from .auto_scenario import make_auto_scenario
 from .binders import FixtureAgentBinder, FixtureProposalBinder, FixtureReviewBinder
 from .case_record import CaseRecord  # re-exported below for back-compat
-from .datasources import DataSourceRegistry, DataSourceSpec
+from .datasources import DataSourceRegistry
+from .ontology import OntologyRegistry, OntologyResolver
 from .persistence import Database, PersistentCaseStore, SqliteLineageRecorder
 from .scenario_loader import ScenarioRegistry
 from .sse import CaseEventBus
@@ -89,12 +90,17 @@ class AppState:
         llm: LLMClient,
         agent_runtime: AgentRuntime,
         data_sources: DataSourceRegistry,
+        ontologies: OntologyRegistry,
+        actions: ActionRegistry,
         database: Database,
     ):
         self.scenarios = scenarios
         self.llm = llm
         self.agent_runtime = agent_runtime
         self.data_sources = data_sources
+        self.ontologies = ontologies
+        self.ontology_resolver = OntologyResolver(ontologies, data_sources)
+        self.actions = actions
         self.database = database
         self.bus = CaseEventBus()
 
@@ -120,33 +126,22 @@ class AppState:
 
         # Wire the framework
         self.service = HITLContextService(
-            agent_binder=FixtureAgentBinder(scenarios, data_sources),
-            proposal_binder=FixtureProposalBinder(scenarios, data_sources),
-            review_binder=FixtureReviewBinder(scenarios, data_sources),
+            agent_binder=FixtureAgentBinder(scenarios, data_sources, self.ontology_resolver),
+            proposal_binder=FixtureProposalBinder(scenarios, data_sources, self.ontology_resolver),
+            review_binder=FixtureReviewBinder(scenarios, data_sources, self.ontology_resolver),
             transport=self.transport,
             lineage=self.lineage,
         )
 
-        # Auto-scenario lifecycle: every operator-registered source gets a
-        # corresponding chip in the operator console.
-        def _on_source_register(spec: DataSourceSpec) -> None:
-            scenarios.register(make_auto_scenario(spec))
-
-        def _on_source_remove(source_id: str) -> None:
-            scenarios.unregister(f"SC-AUTO-{source_id}")
-
+        # Phase 3.C: chip generation moved from data sources to ontology
+        # classes. Sources no longer auto-create scenarios on register —
+        # the operator clicks "Generate lookup chip" per class in the
+        # Mappings tab. The lifecycle hooks remain wired to no-ops so the
+        # registry's existing call sites stay valid.
         data_sources.set_lifecycle_hooks(
-            on_register=_on_source_register,
-            on_remove=_on_source_remove,
+            on_register=lambda spec: None,
+            on_remove=lambda source_id: None,
         )
-
-        # Backfill auto-scenarios for any operator-registered sources that
-        # already exist in sources.yaml (e.g. from a previous run).
-        for spec in data_sources.specs():
-            if not spec.default:
-                auto_id = f"SC-AUTO-{spec.id}"
-                if scenarios.get(auto_id) is None:
-                    scenarios.register(make_auto_scenario(spec))
 
     # -------------------------------------------------------------------------
     # Convenience lookups

@@ -42,14 +42,26 @@ class HttpResolver:
         self._timeout = timeout
 
     def resolve(self, query: KnowledgeQuery) -> list[KnowledgeFact]:
-        path_template = self._paths.get(query.ontology_type)
+        # Binding-driven (Phase 3.C) takes precedence: the OntologyResolver
+        # injects __binding__ with `http_path_template` ("/items/{id}").
+        binding = query.filters.get("__binding__") or {}
+        path_template = binding.get("http_path_template") or self._paths.get(
+            query.ontology_type
+        )
         if path_template is None:
             raise ValueError(
                 f"HttpResolver {self.name!r} has no path for ontology_type "
-                f"{query.ontology_type!r}; available: {list(self._paths)}"
+                f"{query.ontology_type!r}; available: {list(self._paths)} "
+                "and no binding.http_path_template provided"
             )
+        # Strip framework-private keys before substituting into the template.
+        substitution = {
+            k: v
+            for k, v in query.filters.items()
+            if k not in ("__binding__", "__ontology__", "max_results")
+        }
         try:
-            path = path_template.format(**query.filters)
+            path = path_template.format(**substitution)
         except KeyError as e:
             raise ValueError(
                 f"HttpResolver {self.name!r}: missing filter {e.args[0]!r} for path {path_template!r}"

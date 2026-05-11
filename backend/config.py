@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     AZURE_OPENAI_DEPLOYMENT: str = ""           # chat-completions deployment
     AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str = ""  # embeddings deployment (vector store)
 
+    # Neo4j (optional auto-registration of a `neo4j_default` data source).
+    # When NEO4J_PASSWORD is set, the backend registers the source at boot
+    # so it appears in the Knowledge tile ready to be mapped to ontology
+    # classes. NEO4J_DATABASE is optional (Enterprise multi-DB).
+    NEO4J_URI: str = ""
+    NEO4J_USER: str = ""
+    NEO4J_PASSWORD: str = ""
+    NEO4J_DATABASE: str = ""
+
     # Server
     CORS_ORIGINS: str = "http://localhost:5173"
     LOG_LEVEL: str = "INFO"

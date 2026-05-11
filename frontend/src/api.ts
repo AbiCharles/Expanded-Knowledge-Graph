@@ -33,12 +33,19 @@ export async function getCase(caseId: string): Promise<CaseFull> {
   return jsonOrThrow(await authedFetch(`/api/cases/${caseId}`));
 }
 
-export async function createCase(prompt: string): Promise<CreateCaseResponse> {
+export async function createCase(
+  prompt: string,
+  opts?: { try_ontology_fallback?: boolean; try_action_fallback?: boolean }
+): Promise<CreateCaseResponse> {
   return jsonOrThrow(
     await authedFetch("/api/cases", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        try_ontology_fallback: opts?.try_ontology_fallback ?? false,
+        try_action_fallback: opts?.try_action_fallback ?? false,
+      }),
     })
   );
 }
@@ -151,7 +158,7 @@ export async function uploadCsv(args: {
 
 export async function addDataSource(args: {
   id: string;
-  kind: "sqlite" | "http" | "postgres" | "vector_store";
+  kind: "sqlite" | "http" | "postgres" | "vector_store" | "neo4j";
   description?: string;
   config: Record<string, unknown>;
 }): Promise<{ id: string }> {
@@ -172,6 +179,41 @@ export async function testPostgres(dsn: string): Promise<{ ok: boolean; message:
       body: JSON.stringify({ dsn }),
     })
   );
+}
+
+export async function testNeo4j(args: {
+  uri: string;
+  user?: string;
+  password?: string;
+  database?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  return jsonOrThrow(
+    await authedFetch("/api/data-sources/test-neo4j", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function runCypher(
+  sourceId: string,
+  args: { cypher: string; params?: Record<string, unknown>; limit?: number }
+): Promise<RunQueryResult> {
+  const resp = await authedFetch(`/api/data-sources/${sourceId}/run-cypher`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      cypher: args.cypher,
+      params: args.params ?? {},
+      limit: args.limit ?? 50,
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    return { ok: false, error: `${resp.status}: ${text}` };
+  }
+  return resp.json();
 }
 
 export interface RunQueryResult {
@@ -286,6 +328,295 @@ export async function autofillScenario(args: {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(args),
+    })
+  );
+}
+
+// =============================================================================
+// Ontologies (Phase 2)
+// =============================================================================
+export interface OntologySummary {
+  id: string;
+  title: string;
+  namespace: string | null;
+  class_count: number;
+  has_mapping: boolean;
+}
+
+export interface OntologyAttribute {
+  name: string;
+  type: string;
+  identifier: boolean;
+  required: boolean;
+  description: string | null;
+}
+
+export interface OntologyRelation {
+  name: string;
+  target: string;
+  cardinality: string;
+  inverse: string | null;
+  description: string | null;
+}
+
+export interface OntologyClassDetail {
+  name: string;
+  description: string | null;
+  attributes: OntologyAttribute[];
+  relations: OntologyRelation[];
+  identifier_attribute: string | null;
+}
+
+export interface SourceBinding {
+  data_source: string;
+  identifier_column: string;
+  attribute_map: Record<string, string>;
+  // Phase 3.C: kind-specific binding hints. Connectors prefer these
+  // over anything in the source spec.
+  table?: string | null;
+  query_template?: string | null;
+  http_path_template?: string | null;
+  confidence: number | null;
+  suggested_by: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  notes: string | null;
+}
+
+export interface ClassMapping {
+  sources: SourceBinding[];
+  relations: Record<string, unknown>;
+}
+
+export interface MappingDoc {
+  ontology_id: string;
+  mappings: Record<string, ClassMapping>;
+}
+
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  nullable: boolean | null;
+  sample_values: unknown[];
+}
+
+export interface TableInfo {
+  name: string;
+  columns: ColumnInfo[];
+  sample_row_count: number;
+}
+
+export interface SourceSchema {
+  source_id: string;
+  kind: string;
+  tables: TableInfo[];
+  note: string | null;
+}
+
+export interface SuggestMappingsResponse {
+  ontology_id: string;
+  llm: string;
+  schemas: SourceSchema[];
+  mapping: MappingDoc;
+}
+
+export async function listOntologies(): Promise<OntologySummary[]> {
+  return jsonOrThrow(await authedFetch("/api/ontologies"));
+}
+
+export async function getOntologyClasses(id: string): Promise<OntologyClassDetail[]> {
+  return jsonOrThrow(await authedFetch(`/api/ontologies/${id}/classes`));
+}
+
+export async function uploadOntologyFile(file: File): Promise<{ id: string; title: string; class_count: number }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return jsonOrThrow(
+    await authedFetch("/api/ontologies", { method: "POST", body: fd })
+  );
+}
+
+export async function uploadOntologyRaw(args: { content?: string; document?: unknown }): Promise<{ id: string; title: string; class_count: number }> {
+  return jsonOrThrow(
+    await authedFetch("/api/ontologies/raw", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function deleteOntology(id: string): Promise<void> {
+  await jsonOrThrow(
+    await authedFetch(`/api/ontologies/${id}`, { method: "DELETE" })
+  );
+}
+
+export async function getMappings(id: string): Promise<MappingDoc> {
+  return jsonOrThrow(await authedFetch(`/api/ontologies/${id}/mappings`));
+}
+
+export async function putMappings(id: string, mapping: MappingDoc): Promise<void> {
+  await jsonOrThrow(
+    await authedFetch(`/api/ontologies/${id}/mappings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document: mapping }),
+    })
+  );
+}
+
+export async function suggestMappings(
+  id: string,
+  data_source_ids: string[]
+): Promise<SuggestMappingsResponse> {
+  return jsonOrThrow(
+    await authedFetch(`/api/ontologies/${id}/mappings/suggest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ data_source_ids }),
+    })
+  );
+}
+
+// Phase 3.C: per-class chip generation, opt-in. Replaces the old
+// per-source SC-AUTO-* auto-generation.
+export async function generateLookupChip(
+  ontologyId: string,
+  className: string
+): Promise<{ scenario_id: string; title: string; binding_count: number }> {
+  return jsonOrThrow(
+    await authedFetch(
+      `/api/ontologies/${ontologyId}/classes/${className}/scenario`,
+      { method: "POST" }
+    )
+  );
+}
+
+export async function removeLookupChip(
+  ontologyId: string,
+  className: string
+): Promise<void> {
+  await jsonOrThrow(
+    await authedFetch(
+      `/api/ontologies/${ontologyId}/classes/${className}/scenario`,
+      { method: "DELETE" }
+    )
+  );
+}
+
+export async function getDataSourceSchema(id: string): Promise<SourceSchema> {
+  return jsonOrThrow(await authedFetch(`/api/data-sources/${id}/schema`));
+}
+
+export interface OntologyQueryFact {
+  source: string;
+  ontology_type: string;
+  id: string;
+  title: string | null;
+  summary: string | null;
+  via_ontology: string | null;
+  via_source_binding: string | null;
+}
+
+export interface OntologyQueryResult {
+  ontology: string;
+  class: string;
+  where: Record<string, unknown>;
+  purpose: string;
+  fact_count: number;
+  facts: OntologyQueryFact[];
+  llm?: string;
+}
+
+export async function runStructuredOntologyQuery(args: {
+  ontology: string;
+  class: string;
+  where?: Record<string, unknown>;
+  include_relations?: string[];
+  max_results?: number;
+}): Promise<OntologyQueryResult> {
+  return jsonOrThrow(
+    await authedFetch("/api/ontology-query/structured", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function runNLOntologyQuery(args: {
+  ontology: string;
+  prompt: string;
+  max_results?: number;
+}): Promise<OntologyQueryResult> {
+  return jsonOrThrow(
+    await authedFetch("/api/ontology-query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+// =============================================================================
+// Write actions (Phase 3.E)
+// =============================================================================
+export interface ActionSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  hitl: boolean;
+  executor_kind: string;
+  target_source: string | null;
+  argument_count: number;
+  default: boolean;
+}
+
+export interface NLActionPreview {
+  action_id: string;
+  title: string;
+  executor_kind: string;
+  target_source: string | null;
+  arguments: Record<string, unknown>;
+  confidence: number;
+  rationale: string;
+  hitl: boolean;
+}
+
+export async function listActions(): Promise<ActionSummary[]> {
+  return jsonOrThrow(await authedFetch("/api/actions"));
+}
+
+export async function getAction(id: string): Promise<unknown> {
+  return jsonOrThrow(await authedFetch(`/api/actions/${id}`));
+}
+
+export async function uploadActionRaw(args: {
+  content?: string;
+  document?: unknown;
+}): Promise<{ id: string; title: string }> {
+  return jsonOrThrow(
+    await authedFetch("/api/actions/raw", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(args),
+    })
+  );
+}
+
+export async function deleteAction(id: string): Promise<void> {
+  await jsonOrThrow(
+    await authedFetch(`/api/actions/${id}`, { method: "DELETE" })
+  );
+}
+
+export async function previewNLAction(prompt: string): Promise<NLActionPreview> {
+  return jsonOrThrow(
+    await authedFetch("/api/actions/preview-nl", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt }),
     })
   );
 }

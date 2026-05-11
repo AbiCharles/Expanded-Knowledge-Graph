@@ -141,6 +141,24 @@ For an online backup: `sqlite3 app.sqlite ".backup app.sqlite.bak"`.
   high-stakes deployments.
 - OpenAI itself has spending limits — set them.
 
+### 8. Ontology mappings are an ACL — review them
+The mapping doc tells the `OntologyResolver` *which sources back which
+classes* and *which columns hold which attributes* — i.e. it governs
+what data flows into every ontology-aware scenario, the NL query
+playground, and the per-class lookup chips. The LLM mapper produces a
+draft, not an authoritative mapping. Before confirming a mapping in
+production:
+
+- A domain owner reviews each `ClassMapping` (especially the
+  `identifier_column` and any attribute that maps to PII).
+- Confidence below a chosen threshold (e.g. 0.8) requires explicit sign-off.
+- The mapping file (`backend/ontologies/<id>.mappings.yaml`) is treated
+  as governed configuration — change-controlled, backed up alongside
+  `app.sqlite`, and audited the same way you'd audit an ACL.
+
+A wrong mapping silently fans queries out to the wrong column or the
+wrong source. Treat the confirm step as load-bearing.
+
 ---
 
 ## Things this build does *not* yet handle
@@ -156,6 +174,11 @@ tackle first:
 | **No audit log retention policy** | Lineage table grows unboundedly | Add a daily cron that archives lineage > 90 days to S3 |
 | **No structured logging** | Hard to grep log files for incidents | Switch to structlog or python-json-logger |
 | **No metrics emission** | Can't alert on regressions | Wire Prometheus instrumentation (FastAPI has good plugins) |
+| **No RDF/Turtle ontology import** | Teams with `.owl` ontologies must convert to YAML/JSON first | Add an `rdflib`-backed importer to `backend/ontology/loader.py` |
+| **No SHACL validation on ontologies** | Bad ontology shapes only surface at query time | Add `pyshacl` validation on upload |
+| **Neo4j connector deferred** | Graph queries unsupported; relational + vector only | Add a `kind: neo4j` connector — the binding-driven contract makes this a small lift now |
+| **LLM is generous → fallback rarely fires** | With gpt-4/5 the scenario classifier matches even semi-related prompts, so the NL→ontology fallback in the composer is a safety net, not a primary path | Tune `interpret_prompt`'s confidence threshold or add a "force ontology mode" toggle for ad-hoc data exploration |
+| **No NL→write-action support** | The fallback is read-only; no NL way to drive an HITL action | Wire a second classifier path that synthesizes an HITL scenario for write actions, gated behind explicit operator opt-in |
 
 The framework's `LineageRecorder` Protocol is designed to be swapped
 for a structured logger that emits to your governance audit store —

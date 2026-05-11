@@ -1,0 +1,26 @@
+id: update_outcome_decided_by
+title: Update prior-case decided_by attribution
+description: Operator-initiated reattribution of an existing prior_cases row.
+  Targets the seeded governance.sqlite store; lets you swap the recorded
+  decided_by name on a single case_id (e.g. correcting a typo).
+hitl: true
+arguments:
+  - { name: case_id, type: string, required: true,
+      description: The case to reattribute.,
+      example: PR-2026-Q1-088 }
+  - { name: new_decided_by, type: string, required: true,
+      description: The corrected reviewer name.,
+      example: compliance.officer.kchen }
+executor:
+  kind: sql_update
+  data_source: governance_sqlite
+  sql: |
+    UPDATE prior_cases
+       SET decided_by = :new_decided_by
+     WHERE case_id = :case_id
+match_keywords:
+  - reattribute
+  - decided_by
+  - correct decided_by
+  - update prior case
+default: true

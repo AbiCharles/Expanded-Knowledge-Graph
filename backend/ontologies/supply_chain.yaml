@@ -1,0 +1,79 @@
+id: supply_chain
+title: Supply Chain (Neo4j demo)
+namespace: sc
+description: Starter ontology covering Supplier, PurchaseOrder, and Product. Pairs
+  with the seeded data in the local Neo4j (graph_local).
+default: false
+classes:
+  Supplier:
+    description: Vendor or producer of goods.
+    attributes:
+    - name: supplier_id
+      type: string
+      identifier: true
+      required: false
+      description: null
+    - name: name
+      type: string
+      identifier: false
+      required: true
+      description: null
+    - name: country
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: reliability_score
+      type: decimal
+      identifier: false
+      required: false
+      description: null
+    relations:
+    - name: places
+      target: PurchaseOrder
+      cardinality: 0..*
+      inverse: placed_with
+      description: null
+  PurchaseOrder:
+    description: A confirmed order placed with a supplier.
+    attributes:
+    - name: po_id
+      type: string
+      identifier: true
+      required: false
+      description: null
+    - name: total_value
+      type: decimal
+      identifier: false
+      required: false
+      description: null
+    - name: placed_on
+      type: date
+      identifier: false
+      required: false
+      description: null
+    relations:
+    - name: contains
+      target: Product
+      cardinality: 1..*
+      inverse: null
+      description: null
+  Product:
+    description: A SKU sold to customers.
+    attributes:
+    - name: product_id
+      type: string
+      identifier: true
+      required: false
+      description: null
+    - name: name
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: category
+      type: string
+      identifier: false
+      required: false
+      description: null
+    relations: []

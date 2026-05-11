@@ -2,7 +2,6 @@ sources:
 - id: products_csv
   kind: csv
   path: backend/data/products.csv
-  ontology_type: Product
   id_field: product_id
   title_field: name
   summary_template: "ECCN {eccn} \xB7 HTS {hts} \xB7 {description}"
@@ -11,7 +10,6 @@ sources:
 - id: sanctions_csv
   kind: csv
   path: backend/data/sanctions_sdn_sample.csv
-  ontology_type: SanctionedEntity
   id_field: ent_id
   title_field: name
   summary_template: "{programs} \xB7 {sdn_type} \xB7 {country} \xB7 added {first_seen}"
@@ -21,50 +19,37 @@ sources:
 - id: governance_sqlite
   kind: sqlite
   path: backend/data/governance.sqlite
-  queries:
-    PriorOverride: "SELECT case_id AS id,\n       'Prior case ' || case_id AS title,\n\
-      \       outcome || ' \u2014 ' || rationale || ' (decided by ' || decided_by\
-      \ || ' on ' || decided_at || ')' AS summary\nFROM prior_cases\nWHERE scenario_id\
-      \ = :scenario_id\nORDER BY decided_at DESC\nLIMIT :max_results\n"
   sample_filter:
     scenario_id: SC-TC-007
   default: true
-  description: 'Governance audit store: prior reviewer decisions, indexed by scenario_id'
+  description: 'Governance audit store: prior reviewer decisions. SQL is now in the
+    tcs_core mapping doc.'
 - id: public_jsonplaceholder
   kind: http
   base_url: https://jsonplaceholder.typicode.com
-  paths:
-    DemoPost: /posts/{id}
   default: true
   description: "Public test API (https://jsonplaceholder.typicode.com) \u2014 confirms\
-    \ HTTP connector works without keys"
+    \ HTTP connector works without keys. Path templates live in mappings."
 - id: policy_corpus
   kind: vector_store
   folder: backend/data/policy_corpus/
   index_path: backend/data/policy_corpus.npz
-  ontology_type: PolicyExcerpt
   top_k: 3
   embed_model: text-embedding-3-small
   default: true
   description: Vector store over 5 policy/SOP markdown excerpts; semantic retrieval
     via OpenAI embeddings
-- id: outcome_stats
-  kind: sqlite
-  path: backend/data/governance.sqlite
-  queries:
-    OutcomeStat: 'SELECT outcome AS id, outcome AS title, COUNT(*) AS summary FROM
-      prior_cases GROUP BY outcome LIMIT :max_results
-
-      '
 - id: governance_postgres
   kind: postgres
   dsn: postgresql://hitl:hitl@localhost:5432/governance
-  queries:
-    PriorOverride: "SELECT case_id AS id,\n       'Prior case ' || case_id AS title,\n\
-      \       outcome || ' — ' || rationale || ' (decided by ' || decided_by\
-      \ || ' on ' || decided_at || ')' AS summary\nFROM prior_cases\nWHERE scenario_id\
-      \ = :scenario_id\nORDER BY decided_at DESC\nLIMIT :max_results\n"
   sample_filter:
     scenario_id: SC-TC-007
   description: 'Postgres governance store (local docker-compose.postgres.yaml): same
-    prior_cases schema as the SQLite store, swappable connector'
+    prior_cases schema as the SQLite store, swappable connector. SQL lives in the
+    mapping doc when bound.'
+- id: neo4j_default
+  kind: neo4j
+  uri: bolt://localhost:7687
+  password: YcV7wquQWdFLKZDRwck3CqlbD0W_c1fAV0U2cpMl578
+  user: neo4j
+  description: Auto-registered from NEO4J_* env vars (bolt://localhost:7687)

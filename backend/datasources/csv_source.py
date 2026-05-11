@@ -52,19 +52,28 @@ class CsvResolver:
 
     def resolve(self, query: KnowledgeQuery) -> list[KnowledgeFact]:
         rows = self._load()
-        # Drop the framework-private filters that aren't column names
-        filters = {k: v for k, v in query.filters.items() if k != "max_results"}
+        # Pull off framework-private filter keys so they don't get matched
+        # against CSV columns. `__binding__` lets the OntologyResolver
+        # override which column holds the identifier for this query.
+        binding = query.filters.get("__binding__") or {}
+        filters = {
+            k: v
+            for k, v in query.filters.items()
+            if k not in ("max_results", "__binding__", "__ontology__")
+        }
         matched = [
             r for r in rows
             if all(str(r.get(k, "")).lower() == str(v).lower() for k, v in filters.items())
         ]
         max_results = int(query.filters.get("max_results", query.max_results))
+        # Binding-driven id column wins; falls back to the source-spec id_field.
+        id_field = binding.get("identifier_column") or self._id_field
         out: list[KnowledgeFact] = []
         for r in matched[:max_results]:
             ref = KnowledgeRef(
                 source=f"csv:{self.name}",
                 ontology_type=query.ontology_type or self._ontology_type,
-                id=r.get(self._id_field, "?"),
+                id=r.get(id_field, "?"),
             )
             try:
                 summary = self._summary_template.format(**r)

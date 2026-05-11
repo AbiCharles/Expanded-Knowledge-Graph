@@ -1,0 +1,65 @@
+id: SC-ONTO-supply_chain-Product
+title: "Lookup \xB7 Product"
+domain: Ontology lookups
+autonomous: true
+actor_id: agent-data-lookup
+operator_role:
+  label: Operator
+  name: data.analyst
+action_type: ontology_lookup
+action_payload:
+  ontology: supply_chain
+  class: Product
+  scope: data.read
+match_keywords:
+- list product
+- lookup product
+- neo4j default
+- neo4j_default
+- product
+- show product
+- supply_chain
+interpreted_as: look up Product via the supply_chain ontology
+clarifying_question: "Just to confirm \u2014 fetch <code>Product</code> via <code>supply_chain</code>,\
+  \ fanning out to <code>neo4j_default</code> (1 source). Read-only autonomous lookup.\
+  \ Proceed?"
+auto_approval_guardrail: GR-ONTO-LOOKUP
+auto_approval_reason: Read-only ontology query against supply_chain.Product. The mapping
+  doc governs which sources back this class; guardrail GR-ONTO-LOOKUP permits autonomous
+  lookups.
+closing_message: "Done \u2014 bound <code>Product</code> facts via the <code>supply_chain</code>\
+  \ ontology. Per-fact provenance is on the audit trail."
+stages:
+  agent_intake:
+    binder: OntologyLookupAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-ONTO-LOOKUP
+      uri: kf.tcs/policy/POL-ONTO-LOOKUP
+      title: Autonomous ontology lookup policy
+      payload: Read-only ontology queries are autonomous within the data.read scope.
+        The mapping doc governs which sources are consulted.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-data-lookup
+      uri: iam.tcs/actors/agent-data-lookup
+      title: Actor scope
+      payload: "Scopes: data.read \xB7 ontology lookup: supply_chain.Product"
+  proposal:
+    binder: OntologyLookupProposalBinder/1.0
+    ontology_queries:
+    - ontology: supply_chain
+      class: Product
+      where: {}
+      purpose: Lookup against ontology class supply_chain.Product
+outcomes:
+  auto_execute:
+    headline: "Auto-executed \u2014 Product fetched via supply_chain"
+    detail: Lookup against supply_chain.Product completed via 1 source binding. Rows
+      are bound to the case envelope and recorded in the audit trail.
+_auto_for_ontology_class:
+- supply_chain
+- Product
+_filter_from_prompt: true
+_custom_suggested_prompt: Look up Product (via supply_chain)

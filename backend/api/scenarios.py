@@ -23,6 +23,16 @@ def list_scenarios(request: Request) -> list[dict]:
     rows: list[dict] = []
     for sc in state.scenarios.all():
         sid = sc["id"]
+        # Phase 3.D ad-hoc ontology + Phase 3.E NL-write scenarios live
+        # in-memory only and are tied to a single case. Hide them from the
+        # operator-console chip list — they're not catalog entries.
+        if (
+            sc.get("_adhoc")
+            or sc.get("_nlwrite")
+            or sid.startswith("SC-ADHOC-")
+            or sid.startswith("SC-NLWRITE-")
+        ):
+            continue
         h = history.get(sid, {})
         rows.append(
             {
@@ -31,6 +41,7 @@ def list_scenarios(request: Request) -> list[dict]:
                 "domain": sc["domain"],
                 "autonomous": bool(sc.get("autonomous")),
                 "suggested_prompt": _suggested_prompt_for(sc),
+                "mtime": state.scenarios.mtime_for(sid),
                 "run_count": int(h.get("count", 0)),
                 "last_run_at": h.get("last_run_at"),
                 "approve_count": int(h.get("approve_count", 0)),
@@ -38,6 +49,8 @@ def list_scenarios(request: Request) -> list[dict]:
                 "auto_count": int(h.get("auto_count", 0)),
             }
         )
+    # Newest first by file mtime so freshly added/edited chips float up.
+    rows.sort(key=lambda r: r["mtime"] or 0, reverse=True)
     return rows
 
 
@@ -212,9 +225,32 @@ def _humanise(s: str) -> str:
 
 @router.post("/scenarios")
 def save_scenario(payload: SaveScenarioIn, request: Request) -> dict:
-    """Persist a customised scenario built around a registered data source's
-    arbitrary SQL. The chip appears in the operator console immediately."""
-    state = request.app.state.app_state
+    """Deprecated as of Phase 3.C. The save-from-playground flow used to
+    write a per-stage `queries:` block, which has been hard-removed. Use
+    the ontology layer instead:
+
+      1. Knowledge → Ontologies → upload (or pick an existing ontology)
+      2. Mappings tab → Suggest mappings → save
+      3. Per-class "Generate lookup chip" button creates the autonomous
+         scenario for you.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "save_from_playground_removed",
+            "message": (
+                "Phase 3.C removed the save-from-playground path because "
+                "scenarios no longer reference data sources directly via "
+                "`queries:`. Map the source to an ontology class (Knowledge → "
+                "Ontologies → Mappings) and click 'Generate lookup chip' to "
+                "create the equivalent autonomous chip."
+            ),
+        },
+    )
+
+    # The implementation below is preserved for one cycle in case we need to
+    # back the change out. It is unreachable while the 410 is in place.
+    state = request.app.state.app_state  # noqa: F841 — preserved for revert
     if state.data_sources.get(payload.data_source) is None:
         raise HTTPException(status_code=404, detail=f"unknown data_source {payload.data_source!r}")
     if not (payload.sql or "").strip():
@@ -470,4 +506,10 @@ def _suggested_prompt_for(sc: dict) -> str:
         return f"Look up data from {label}"
     if sid.startswith("SC-CUSTOM-"):
         return f"Run {sc.get('title', sid)}"
+    # Fall back to the scenario's title so any hand-authored scenario (e.g. the
+    # SC-ONTO-* ontology-aware ones) renders a non-empty chip without forcing
+    # the author to set _custom_suggested_prompt explicitly.
+    title = sc.get("title")
+    if title:
+        return str(title)
     return ""

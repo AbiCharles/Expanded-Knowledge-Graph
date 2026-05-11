@@ -1,0 +1,64 @@
+id: SC-ONTO-tcs_core-SanctionedEntity
+title: "Lookup \xB7 SanctionedEntity"
+domain: Ontology lookups
+autonomous: true
+actor_id: agent-data-lookup
+operator_role:
+  label: Operator
+  name: data.analyst
+action_type: ontology_lookup
+action_payload:
+  ontology: tcs_core
+  class: SanctionedEntity
+  scope: data.read
+match_keywords:
+- list sanctionedentity
+- lookup sanctionedentity
+- sanctionedentity
+- sanctions csv
+- sanctions_csv
+- show sanctionedentity
+- tcs_core
+interpreted_as: look up SanctionedEntity via the tcs_core ontology
+clarifying_question: "Just to confirm \u2014 fetch <code>SanctionedEntity</code> via\
+  \ <code>tcs_core</code>, fanning out to <code>sanctions_csv</code> (1 source). Read-only\
+  \ autonomous lookup. Proceed?"
+auto_approval_guardrail: GR-ONTO-LOOKUP
+auto_approval_reason: Read-only ontology query against tcs_core.SanctionedEntity.
+  The mapping doc governs which sources back this class; guardrail GR-ONTO-LOOKUP
+  permits autonomous lookups.
+closing_message: "Done \u2014 bound <code>SanctionedEntity</code> facts via the <code>tcs_core</code>\
+  \ ontology. Per-fact provenance is on the audit trail."
+stages:
+  agent_intake:
+    binder: OntologyLookupAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-ONTO-LOOKUP
+      uri: kf.tcs/policy/POL-ONTO-LOOKUP
+      title: Autonomous ontology lookup policy
+      payload: Read-only ontology queries are autonomous within the data.read scope.
+        The mapping doc governs which sources are consulted.
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-data-lookup
+      uri: iam.tcs/actors/agent-data-lookup
+      title: Actor scope
+      payload: "Scopes: data.read \xB7 ontology lookup: tcs_core.SanctionedEntity"
+  proposal:
+    binder: OntologyLookupProposalBinder/1.0
+    ontology_queries:
+    - ontology: tcs_core
+      class: SanctionedEntity
+      where: {}
+      purpose: Lookup against ontology class tcs_core.SanctionedEntity
+outcomes:
+  auto_execute:
+    headline: "Auto-executed \u2014 SanctionedEntity fetched via tcs_core"
+    detail: Lookup against tcs_core.SanctionedEntity completed via 1 source binding.
+      Rows are bound to the case envelope and recorded in the audit trail.
+_auto_for_ontology_class:
+- tcs_core
+- SanctionedEntity
+_custom_suggested_prompt: Look up SanctionedEntity (via tcs_core)

@@ -3,14 +3,18 @@ import * as api from "../api";
 import { DataSourceRow, SampleFact } from "../types";
 import { QueryModal } from "./QueryModal";
 
-type AddMode = null | "csv" | "http" | "sqlite" | "postgres" | "vector";
+type AddMode = null | "csv" | "http" | "sqlite" | "postgres" | "vector" | "neo4j";
 
 export function DataSourcesModal({
   onClose,
   onScenariosChanged,
+  embedded = false,
 }: {
   onClose: () => void;
   onScenariosChanged?: () => void;
+  // When true, render without the modal backdrop + outer dark header — the
+  // KnowledgeModal mounts us inside its tab and provides those itself.
+  embedded?: boolean;
 }) {
   const [rows, setRows] = useState<DataSourceRow[]>([]);
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -55,12 +59,9 @@ export function DataSourcesModal({
     }
   };
 
-  return (
-    <div
-      className="modal-backdrop"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="ds-modal">
+  const body = (
+    <>
+      {!embedded && (
         <div className="ds-header">
           <div>
             <div className="ds-eyebrow">Data sources</div>
@@ -70,8 +71,9 @@ export function DataSourcesModal({
             ×
           </button>
         </div>
+      )}
 
-        {error && <div className="ds-error">{error}</div>}
+      {error && <div className="ds-error">{error}</div>}
 
         {addMode === null && (
           <>
@@ -97,8 +99,10 @@ export function DataSourcesModal({
                     <button onClick={() => onTest(r.id)} disabled={loadingId === r.id}>
                       {loadingId === r.id ? "…" : "Test"}
                     </button>
-                    {(r.kind === "sqlite" || r.kind === "postgres") && (
-                      <button onClick={() => setQueryOpenFor(r)}>Query</button>
+                    {(r.kind === "sqlite" || r.kind === "postgres" || r.kind === "neo4j") && (
+                      <button onClick={() => setQueryOpenFor(r)}>
+                        {r.kind === "neo4j" ? "Cypher" : "Query"}
+                      </button>
                     )}
                     {!r.default && (
                       <button className="ds-danger" onClick={() => onDelete(r.id)}>
@@ -137,16 +141,18 @@ export function DataSourcesModal({
               <button onClick={() => setAddMode("sqlite")}>+ Add SQLite</button>
               <button onClick={() => setAddMode("postgres")}>+ Add Postgres</button>
               <button onClick={() => setAddMode("vector")}>+ Add Vector store</button>
+              <button onClick={() => setAddMode("neo4j")}>+ Add Neo4j</button>
             </div>
           </>
         )}
 
-        {addMode === "csv" && <AddCsvForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
-        {addMode === "http" && <AddHttpForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
-        {addMode === "sqlite" && <AddSqliteForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
-        {addMode === "postgres" && <AddPostgresForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
-        {addMode === "vector" && <AddVectorForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
-      </div>
+      {addMode === "csv" && <AddCsvForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+      {addMode === "http" && <AddHttpForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+      {addMode === "sqlite" && <AddSqliteForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+      {addMode === "postgres" && <AddPostgresForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+      {addMode === "vector" && <AddVectorForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+      {addMode === "neo4j" && <AddNeo4jForm onClose={() => setAddMode(null)} onAdded={refresh} setError={setError} />}
+
       {queryOpenFor && (
         <QueryModal
           source={queryOpenFor}
@@ -154,6 +160,18 @@ export function DataSourcesModal({
           onScenarioSaved={() => onScenariosChanged?.()}
         />
       )}
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="ds-modal">{body}</div>
     </div>
   );
 }
@@ -170,7 +188,6 @@ type AddFormProps = {
 function AddCsvForm({ onClose, onAdded, setError }: AddFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [id, setId] = useState("");
-  const [ontology, setOntology] = useState("Record");
   const [idField, setIdField] = useState("id");
   const [titleField, setTitleField] = useState("name");
   const [summary, setSummary] = useState("");
@@ -186,7 +203,10 @@ function AddCsvForm({ onClose, onAdded, setError }: AddFormProps) {
       await api.uploadCsv({
         file,
         id,
-        ontology_type: ontology,
+        // Phase 3.C: ontology binding moved to the mapping doc. The form
+        // still passes a placeholder so the multipart endpoint signature
+        // stays satisfied; the connector ignores it for ontology purposes.
+        ontology_type: "Record",
         id_field: idField,
         title_field: titleField,
         summary_template: summary,
@@ -207,7 +227,6 @@ function AddCsvForm({ onClose, onAdded, setError }: AddFormProps) {
         <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       </label>
       <label>Source id <input value={id} onChange={(e) => setId(e.target.value)} placeholder="my_csv_data" /></label>
-      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
       <label>id_field <input value={idField} onChange={(e) => setIdField(e.target.value)} /></label>
       <label>title_field <input value={titleField} onChange={(e) => setTitleField(e.target.value)} /></label>
       <label>summary_template
@@ -217,6 +236,11 @@ function AddCsvForm({ onClose, onAdded, setError }: AddFormProps) {
           placeholder="e.g. {field1} · {field2}"
         />
       </label>
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        After upload, map this CSV to one or more ontology classes via{" "}
+        <strong>Ontologies → Mappings</strong> to make it queryable from
+        scenarios.
+      </div>
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy} onClick={submit}>
@@ -230,13 +254,11 @@ function AddCsvForm({ onClose, onAdded, setError }: AddFormProps) {
 function AddHttpForm({ onClose, onAdded, setError }: AddFormProps) {
   const [id, setId] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://");
-  const [ontology, setOntology] = useState("Record");
-  const [pathTpl, setPathTpl] = useState("/items/{id}");
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!id || !baseUrl || !ontology) {
-      setError("All fields required");
+    if (!id || !baseUrl) {
+      setError("ID and base URL required");
       return;
     }
     setBusy(true);
@@ -244,7 +266,7 @@ function AddHttpForm({ onClose, onAdded, setError }: AddFormProps) {
       await api.addDataSource({
         id,
         kind: "http",
-        config: { base_url: baseUrl, paths: { [ontology]: pathTpl } },
+        config: { base_url: baseUrl },
       });
       onAdded();
       onClose();
@@ -260,8 +282,11 @@ function AddHttpForm({ onClose, onAdded, setError }: AddFormProps) {
       <h3>Add HTTP source</h3>
       <label>Source id <input value={id} onChange={(e) => setId(e.target.value)} /></label>
       <label>Base URL <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} /></label>
-      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
-      <label>Path template <input value={pathTpl} onChange={(e) => setPathTpl(e.target.value)} placeholder="/posts/{id}" /></label>
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        Path templates (e.g. <code>/items/{`{id}`}</code>) live in the mapping
+        doc. After saving, open <strong>Ontologies → Mappings</strong> to
+        bind classes and supply per-class path templates.
+      </div>
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy} onClick={submit}>{busy ? "…" : "Add"}</button>
@@ -273,12 +298,8 @@ function AddHttpForm({ onClose, onAdded, setError }: AddFormProps) {
 function AddSqliteForm({ onClose, onAdded, setError }: AddFormProps) {
   const [id, setId] = useState("");
   const [path, setPath] = useState("");
-  const [ontology, setOntology] = useState("Record");
-  const [sql, setSql] = useState("");
   const [busy, setBusy] = useState(false);
   const pathPlaceholder = "backend/data/governance.sqlite";
-  const sqlPlaceholder =
-    "SELECT id, name AS title, description AS summary FROM table LIMIT :max_results";
 
   const submit = async () => {
     setBusy(true);
@@ -286,7 +307,7 @@ function AddSqliteForm({ onClose, onAdded, setError }: AddFormProps) {
       await api.addDataSource({
         id,
         kind: "sqlite",
-        config: { path, queries: { [ontology]: sql } },
+        config: { path },
       });
       onAdded();
       onClose();
@@ -302,18 +323,15 @@ function AddSqliteForm({ onClose, onAdded, setError }: AddFormProps) {
       <h3>Add SQLite source</h3>
       <label>Source id <input value={id} onChange={(e) => setId(e.target.value)} /></label>
       <label>Path <input value={path} onChange={(e) => setPath(e.target.value)} placeholder={pathPlaceholder} /></label>
-      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
-      <label>SQL (use :name params, must SELECT id, title, summary)
-        <textarea
-          value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          rows={4}
-          placeholder={sqlPlaceholder}
-        />
-      </label>
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        SQL queries live in the mapping doc. After saving, open{" "}
+        <strong>Ontologies → Mappings</strong> to bind classes; each binding
+        carries its own <code>query_template</code> (or you can leave it
+        blank to auto-generate a <code>SELECT *</code>).
+      </div>
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || !id.trim() || !path.trim() || !sql.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
+        <button className="primary" disabled={busy || !id.trim() || !path.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
       </div>
     </div>
   );
@@ -322,11 +340,7 @@ function AddSqliteForm({ onClose, onAdded, setError }: AddFormProps) {
 function AddPostgresForm({ onClose, onAdded, setError }: AddFormProps) {
   const [id, setId] = useState("");
   const [dsn, setDsn] = useState("");
-  const [ontology, setOntology] = useState("PriorOverride");
-  const [sql, setSql] = useState("");
   const dsnPlaceholder = "postgresql://hitl:hitl@localhost:5432/governance";
-  const sqlPlaceholder =
-    "SELECT case_id AS id, scenario_id AS title, outcome || ' — ' || rationale AS summary FROM prior_cases WHERE scenario_id = :scenario_id ORDER BY decided_at DESC LIMIT :max_results";
   const [tested, setTested] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -346,7 +360,7 @@ function AddPostgresForm({ onClose, onAdded, setError }: AddFormProps) {
       await api.addDataSource({
         id,
         kind: "postgres",
-        config: { dsn, queries: { [ontology]: sql } },
+        config: { dsn },
       });
       onAdded();
       onClose();
@@ -366,13 +380,15 @@ function AddPostgresForm({ onClose, onAdded, setError }: AddFormProps) {
       </label>
       <button onClick={test} disabled={busy || !dsn.trim()} style={{ alignSelf: "flex-start" }}>Test connection</button>
       {tested && <div className="ds-test-result">{tested}</div>}
-      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
-      <label>SQL
-        <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={4} placeholder={sqlPlaceholder} />
-      </label>
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        SQL queries live in the mapping doc. After saving, open{" "}
+        <strong>Ontologies → Mappings</strong> to bind classes; each binding
+        carries its own <code>query_template</code> (or auto-generates a{" "}
+        <code>SELECT *</code> if you leave it blank).
+      </div>
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy || !id.trim() || !dsn.trim() || !sql.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
+        <button className="primary" disabled={busy || !id.trim() || !dsn.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
       </div>
     </div>
   );
@@ -382,7 +398,6 @@ function AddVectorForm({ onClose, onAdded, setError }: AddFormProps) {
   const [id, setId] = useState("");
   const [folder, setFolder] = useState("");
   const [indexPath, setIndexPath] = useState("");
-  const [ontology, setOntology] = useState("PolicyExcerpt");
   const [topK, setTopK] = useState(3);
   const [model, setModel] = useState("text-embedding-3-small");
   const [busy, setBusy] = useState(false);
@@ -399,7 +414,6 @@ function AddVectorForm({ onClose, onAdded, setError }: AddFormProps) {
         config: {
           folder,
           index_path: indexPath || `backend/data/${id}.npz`,
-          ontology_type: ontology,
           top_k: topK,
           embed_model: model,
         },
@@ -423,16 +437,79 @@ function AddVectorForm({ onClose, onAdded, setError }: AddFormProps) {
       <label>Index path (.npz cache; auto-derived if blank)
         <input value={indexPath} onChange={(e) => setIndexPath(e.target.value)} placeholder={indexPlaceholder} />
       </label>
-      <label>Ontology type <input value={ontology} onChange={(e) => setOntology(e.target.value)} /></label>
       <label>Top K <input type="number" min={1} max={20} value={topK} onChange={(e) => setTopK(parseInt(e.target.value || "3", 10))} /></label>
       <label>Embedding model <input value={model} onChange={(e) => setModel(e.target.value)} /></label>
       <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
         Documents are embedded once at registration time using the OpenAI key from <code>.env</code>.
         Without a key the source registers but returns empty results until you add one and restart.
+        Bind to an ontology class via <strong>Ontologies → Mappings</strong>.
       </div>
       <div className="ds-form-actions">
         <button onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy || !id.trim() || !folder.trim()} onClick={submit}>{busy ? "Embedding…" : "Add"}</button>
+      </div>
+    </div>
+  );
+}
+
+
+function AddNeo4jForm({ onClose, onAdded, setError }: AddFormProps) {
+  const [id, setId] = useState("");
+  const [uri, setUri] = useState("bolt://localhost:7687");
+  const [user, setUser] = useState("neo4j");
+  const [password, setPassword] = useState("");
+  const [database, setDatabase] = useState("");
+  const [tested, setTested] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const test = async () => {
+    setBusy(true);
+    try {
+      const r = await api.testNeo4j({ uri, user, password, database: database || undefined });
+      setTested(r.ok ? "✓ connection ok" : `✗ ${r.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const config: Record<string, unknown> = { uri };
+      if (user) config.user = user;
+      if (password) config.password = password;
+      if (database) config.database = database;
+      await api.addDataSource({ id, kind: "neo4j" as const, config });
+      onAdded();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="ds-add-form">
+      <h3>Add Neo4j source</h3>
+      <label>Source id <input value={id} onChange={(e) => setId(e.target.value)} placeholder="graph_local" /></label>
+      <label>Bolt URI
+        <input value={uri} onChange={(e) => setUri(e.target.value)} placeholder="bolt://localhost:7687" />
+      </label>
+      <label>User <input value={user} onChange={(e) => setUser(e.target.value)} /></label>
+      <label>Password <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      <label>Database (optional — leave blank for default)
+        <input value={database} onChange={(e) => setDatabase(e.target.value)} placeholder="neo4j" />
+      </label>
+      <button onClick={test} disabled={busy || !uri.trim()} style={{ alignSelf: "flex-start" }}>Test connection</button>
+      {tested && <div className="ds-test-result">{tested}</div>}
+      <div className="ds-add-help" style={{ fontSize: 11, color: "var(--ink-muted)", fontStyle: "italic" }}>
+        Cypher templates live in the mapping doc. After saving, open <strong>Ontologies → Mappings</strong> to bind ontology classes; each binding carries its own <code>query_template</code> (Cypher MATCH … RETURN …).
+        Read-only: write/mutate Cypher is rejected by the safety guard before reaching the driver.
+      </div>
+      <div className="ds-form-actions">
+        <button onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy || !id.trim() || !uri.trim()} onClick={submit}>{busy ? "…" : "Add"}</button>
       </div>
     </div>
   );

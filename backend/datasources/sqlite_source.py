@@ -53,13 +53,34 @@ class SqliteResolver:
         return conn
 
     def resolve(self, query: KnowledgeQuery) -> list[KnowledgeFact]:
-        sql = self._queries.get(query.ontology_type)
+        # Binding-driven (Phase 3.C) takes precedence: the OntologyResolver
+        # injects __binding__ with `query_template` (preferred), `table`
+        # (auto-`SELECT *` derived), and `identifier_column`.
+        binding = query.filters.get("__binding__") or {}
+        sql = binding.get("query_template")
+        if not sql and binding.get("table"):
+            id_col = binding.get("identifier_column") or "id"
+            sql = (
+                f'SELECT * FROM "{binding["table"]}" '
+                f'WHERE "{id_col}" = :{id_col} '
+                f"LIMIT :max_results"
+            )
+        # Fallback to the source-spec `queries:` dict for sources that
+        # haven't been migrated to mapping-driven config yet.
+        if not sql:
+            sql = self._queries.get(query.ontology_type)
         if sql is None:
             raise ValueError(
                 f"SqliteResolver {self.name!r} has no query for ontology_type "
-                f"{query.ontology_type!r}; available: {list(self._queries)}"
+                f"{query.ontology_type!r}; available: {list(self._queries)} "
+                "and no binding.query_template/table provided"
             )
-        params: dict[str, Any] = {**query.filters}
+        # Pull off framework-private keys before binding to SQL params.
+        params: dict[str, Any] = {
+            k: v
+            for k, v in query.filters.items()
+            if k not in ("__binding__", "__ontology__")
+        }
         params.setdefault("max_results", query.max_results)
         with self._connect() as conn:
             cursor = conn.execute(sql, params)

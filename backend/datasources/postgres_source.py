@@ -54,13 +54,34 @@ class PostgresResolver:
         self._sample_filter = sample_filter or {}
 
     def resolve(self, query: KnowledgeQuery) -> list[KnowledgeFact]:
-        sql = self._queries.get(query.ontology_type)
+        # Binding-driven (Phase 3.C) takes precedence: the OntologyResolver
+        # injects __binding__ with `query_template` (preferred), `table`
+        # (auto-`SELECT *` derived), and `identifier_column`.
+        binding = query.filters.get("__binding__") or {}
+        raw_sql = binding.get("query_template")
+        if not raw_sql and binding.get("table"):
+            id_col = binding.get("identifier_column") or "id"
+            raw_sql = (
+                f'SELECT * FROM "{binding["table"]}" '
+                f'WHERE "{id_col}" = :{id_col} '
+                f"LIMIT :max_results"
+            )
+        if raw_sql:
+            sql = _to_psycopg_sql(raw_sql)
+        else:
+            # Fallback to source-spec `queries:` dict for unmigrated sources.
+            sql = self._queries.get(query.ontology_type)
         if sql is None:
             raise ValueError(
                 f"PostgresResolver {self.name!r} has no query for ontology_type "
-                f"{query.ontology_type!r}; available: {list(self._queries)}"
+                f"{query.ontology_type!r}; available: {list(self._queries)} "
+                "and no binding.query_template/table provided"
             )
-        params: dict[str, Any] = {**query.filters}
+        params: dict[str, Any] = {
+            k: v
+            for k, v in query.filters.items()
+            if k not in ("__binding__", "__ontology__")
+        }
         params.setdefault("max_results", query.max_results)
         try:
             with psycopg.connect(self._dsn) as conn:

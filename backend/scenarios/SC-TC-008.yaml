@@ -72,17 +72,17 @@ stages:
         \ $250k"
   proposal:
     binder: TradeOverrideProposalBinder/2.0-live
-    queries:
-    - data_source: products_csv
-      ontology_type: Product
-      filter:
+    ontology_queries:
+    - ontology: tcs_core
+      class: Product
+      where:
         product_id: P-EL-9001
-      purpose: Bind product master record from CSV
-    - data_source: sanctions_csv
-      ontology_type: SanctionedEntity
-      filter:
+      purpose: Bind product master record (via tcs_core.Product → products_csv)
+    - ontology: tcs_core
+      class: SanctionedEntity
+      where:
         name: Sanctioned Pharma Holdings
-      purpose: Confirm OFAC SDN match from sanctions CSV
+      purpose: Confirm OFAC SDN match (via tcs_core.SanctionedEntity → sanctions_csv)
     facts:
     - source: contract_mgmt
       ontology_type: Contract
@@ -92,19 +92,19 @@ stages:
       payload: "DDP terms \xB7 $480k value \xB7 effective Q2 2026"
   review:
     binder: TradeOverrideReviewBinder/2.0-live
-    queries:
-    - data_source: governance_sqlite
-      ontology_type: PriorOverride
-      filter:
+    ontology_queries:
+    - ontology: tcs_core
+      class: PriorOverride
+      where:
         scenario_id: SC-TC-007
-        max_results: 3
-      purpose: Surface prior similar overrides from governance store
-    - data_source: policy_corpus
-      ontology_type: PolicyExcerpt
-      filter:
+      max_results: 3
+      purpose: Surface prior similar overrides (via tcs_core.PriorOverride → governance_sqlite)
+    - ontology: tcs_core
+      class: PolicyExcerpt
+      where:
         query: OFAC sanctions override license verification end-use
         top_k: 3
-      purpose: Retrieve relevant SOP excerpts via semantic search
+      purpose: Retrieve relevant SOP excerpts (via tcs_core.PolicyExcerpt → policy_corpus)
 outcomes:
   approve:
     headline: Approved with conditions

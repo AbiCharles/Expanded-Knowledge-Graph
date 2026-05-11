@@ -5,7 +5,7 @@ import { Console } from "./components/Console";
 import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
 import { LineagePanel } from "./components/LineagePanel";
-import { DataSourcesModal } from "./components/DataSourcesModal";
+import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -27,7 +27,7 @@ type ModalState =
   | { kind: "rationale"; decision: "reject" | "request_more_info" }
   | { kind: "auto"; guardrailId: string; reason: string }
   | { kind: "compare"; cases: [CaseFull, CaseFull] }
-  | { kind: "datasources" }
+  | { kind: "knowledge"; tab: KnowledgeTab }
   | { kind: "scenarios-help" }
   | { kind: "edit-scenario"; scenarioId: string }
   | { kind: "metrics" };
@@ -149,9 +149,12 @@ export default function App() {
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
-  const onSendPrompt = async (text: string) => {
+  const onSendPrompt = async (
+    text: string,
+    opts?: { try_ontology_fallback?: boolean; try_action_fallback?: boolean }
+  ) => {
     try {
-      const result = await api.createCase(text);
+      const result = await api.createCase(text, opts);
       setActiveId(result.case_id);
       refreshCases();
     } catch (e) {
@@ -270,7 +273,7 @@ export default function App() {
         role={role}
         user={user}
         onLogout={onLogout}
-        onOpenDataSources={() => setModal({ kind: "datasources" })}
+        onOpenKnowledge={() => setModal({ kind: "knowledge", tab: "sources" })}
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
       />
@@ -312,8 +315,9 @@ export default function App() {
       {modal.kind === "compare" && (
         <CompareModal cases={modal.cases} onClose={() => setModal({ kind: "none" })} />
       )}
-      {modal.kind === "datasources" && (
-        <DataSourcesModal
+      {modal.kind === "knowledge" && (
+        <KnowledgeModal
+          initialTab={modal.tab}
           onClose={() => setModal({ kind: "none" })}
           onScenariosChanged={() => api.listScenarios().then(setScenarios).catch(console.error)}
         />

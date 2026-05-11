@@ -191,7 +191,14 @@ closing_message: "Single closing message. No decision branching."
 
 ---
 
-## Stage knowledge: `facts:` vs `queries:`
+## Stage knowledge: `facts:` vs `ontology_queries:`
+
+> **Phase 3.C:** the legacy `queries:` block (which named a data source
+> id directly) has been hard-removed. Loading a YAML that still uses it
+> raises `ScenarioSchemaError` at startup with the migration recipe in
+> the message. New scenarios bind live data via `ontology_queries:` —
+> the OntologyResolver dispatches to whichever sources the mapping
+> covers.
 
 Each binder stage can hold either or both:
 
@@ -213,29 +220,63 @@ stages:
         payload: "Critical TC overrides require named compliance officer."
 ```
 
-### `queries:` — live data via registered sources
+### `ontology_queries:` — live data via the ontology layer
 
-Use when the fact comes from a real source that may change over time. The
-binder resolves these at bind time against the `DataSourceRegistry`.
+Use when the fact comes from a real source that may change over time.
+The binder hands the request to the OntologyResolver, which uses the
+mapping doc to fan out to whichever data source(s) back this class.
 
 ```yaml
 stages:
   proposal:
     binder: TradeOverrideProposalBinder/2.0-live
-    queries:
-      - data_source: products_csv      # source id from sources.yaml
-        ontology_type: Product
-        filter: { product_id: P-EL-9001 }
+    ontology_queries:
+      - ontology: tcs_core
+        class: Product
+        where: { product_id: P-EL-9001 }
         purpose: "Bind product master record"
 ```
 
-`filter:` is passed to the resolver as `KnowledgeQuery.filters`. Its
-interpretation depends on the connector kind (column match for CSV, named SQL
-params for SQLite/Postgres, path template substitution for HTTP, query
-string for vector store).
+`where:` keys are ontology attribute names; the resolver translates
+them to source-native columns via the binding's `attribute_map`. Per-
+fact provenance (`payload.via_ontology`, `payload.via_source_binding`)
+is added so the reviewer card can show *what* was asked AND *where* the
+answer came from.
 
 You can mix both blocks in the same stage. The combined facts go into the
 `StageContext`.
+
+---
+
+## Three coexistence patterns
+
+| Pattern | What it looks like | Use when |
+|---|---|---|
+| **A — facts-only** | Only `facts:` blocks | Pure mock/demo flows where no live data is needed |
+| **B — hybrid** | `facts:` + `ontology_queries:` together | Stable seeded data + live ontology-driven fetch on the same stage |
+| **C — ontology-first** | Only `ontology_queries:` | The scenario is portable across source layouts (CSV in dev, Postgres + Neo4j in prod) |
+
+Field-by-field on the `ontology_queries:` entry:
+
+| Field | Required? | Notes |
+|---|---|---|
+| `ontology` | yes | The `id` of an uploaded ontology. |
+| `class` | yes | Class name from that ontology. |
+| `where` | optional | `{attribute: value}` map. Values starting with `:` reference `action.payload` keys, exactly like `queries.filter` already does. |
+| `include_relations` | optional | List of relation names from the class definition. Each related class is bound via its own mapping, with `payload.related_via` set on those facts. |
+| `purpose` | optional | Free-text rationale; recorded in lineage. |
+| `max_results` | optional | Default 50. |
+
+What the reviewer sees doesn't change — the Teams card and review panel
+still render `StageContext.facts`. Two new things appear on each
+ontology-bound fact's `payload`:
+
+- `via_ontology: "supply_chain_v1.Supplier"` — what was asked.
+- `related_via: "Supplier.places"` — present only on facts pulled in via `include_relations`.
+
+The full design (mapping doc shape, NL query playground, auto-scenarios
+per class, Neo4j connector, error semantics) lives in
+[docs/ontology.md](ontology.md).
 
 ---
 
@@ -302,7 +343,7 @@ logic.
 | Anti-pattern | The issue |
 |---|---|
 | Vague keywords | Every prompt routes here, classifier accuracy collapses |
-| Empty `facts:` AND `queries:` on a stage | Stage binds nothing, envelope is empty |
+| Empty `facts:` AND `ontology_queries:` on a stage | Stage binds nothing, envelope is empty |
 | `clarifying_question` repeats the prompt | Operator can't tell if the agent understood |
 | HITL scenario with `closing_messages` only for `approve` | Reject + more-info paths render blank |
 | `match_keywords` overlap with another scenario's | Top-K shows both with similar confidence — confusing |

@@ -7,7 +7,10 @@ interface Props {
   active: CaseFull | null;
   role: "operator" | "reviewer";
   composerLocked: boolean;
-  onSendPrompt: (text: string) => void;
+  onSendPrompt: (
+    text: string,
+    opts?: { try_ontology_fallback?: boolean; try_action_fallback?: boolean }
+  ) => void;
   onConfirm: () => void;
   onCancel: () => void;
   onSelectCase: (caseId: string | null) => void;
@@ -41,10 +44,22 @@ export function Console({
   const [text, setText] = useState("");
   const [replayOpen, setReplayOpen] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // Phase 3.D: per-prompt opt-in for the NL→ontology fallback. When on
+  // and the scenario classifier finds no match, the backend tries to
+  // parse the prompt as an ontology query and runs a one-shot autonomous
+  // lookup. Off by default to preserve existing behaviour.
+  const [tryOntologyFallback, setTryOntologyFallback] = useState(false);
+  // Phase 3.E: write-action fallback. If both flags are on, the cases
+  // endpoint tries ontology first, then actions — actions are always
+  // HITL by default (the safe choice for writes).
+  const [tryActionFallback, setTryActionFallback] = useState(false);
 
   const send = () => {
     if (!text.trim() || composerLocked) return;
-    onSendPrompt(text);
+    onSendPrompt(text, {
+      try_ontology_fallback: tryOntologyFallback,
+      try_action_fallback: tryActionFallback,
+    });
     setText("");
   };
 
@@ -115,7 +130,9 @@ export function Console({
       <div className="suggested-row">
         <div className="suggested-label">Suggested · click to use</div>
         <div className="suggested-chips">
-          {scenarios.map((sc) => (
+          {[...scenarios]
+            .sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))
+            .map((sc) => (
             <div key={sc.id} className="chip-row">
               <button
                 className="chip"
@@ -160,6 +177,59 @@ export function Console({
         <button onClick={send} disabled={composerLocked || !text.trim()}>
           Send
         </button>
+      </div>
+      <div
+        style={{
+          padding: "4px 12px 8px",
+          fontSize: 11,
+          color: "var(--ink-soft)",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+        title={
+          "If no scenario matches your prompt, the backend will try to " +
+          "parse it as an ontology query and run a read-only autonomous " +
+          "lookup against the matching mapped sources. Off by default."
+        }
+      >
+        <input
+          type="checkbox"
+          id="try-ontology-fallback"
+          checked={tryOntologyFallback}
+          disabled={composerLocked}
+          onChange={(e) => setTryOntologyFallback(e.target.checked)}
+        />
+        <label htmlFor="try-ontology-fallback" style={{ cursor: "pointer" }}>
+          Try ontology lookup if no scenario matches
+        </label>
+      </div>
+      <div
+        style={{
+          padding: "0 12px 8px",
+          fontSize: 11,
+          color: "var(--ink-soft)",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+        title={
+          "If still no match, try the write-action picker. The picked " +
+          "action is sent for human review by default — the executor " +
+          "(SQL UPDATE / HTTP POST / etc.) only runs after the reviewer " +
+          "approves. Off by default."
+        }
+      >
+        <input
+          type="checkbox"
+          id="try-action-fallback"
+          checked={tryActionFallback}
+          disabled={composerLocked}
+          onChange={(e) => setTryActionFallback(e.target.checked)}
+        />
+        <label htmlFor="try-action-fallback" style={{ cursor: "pointer" }}>
+          Try write action if no scenario or ontology matches (HITL)
+        </label>
       </div>
     </aside>
   );
@@ -400,7 +470,13 @@ function ChatThread({
           role="agent"
           html={
             sc
-              ? `I read this as: <em>${escapeHtml(active.interpreted_as || "")}</em>.<br><br>${
+              ? `${
+                  active.scenario_id?.startsWith("SC-ADHOC-")
+                    ? `<div style="font-size:11px;color:var(--cyan);margin-bottom:6px;">⤷ Routed via the ontology layer (no scenario matched). One-shot autonomous lookup.</div>`
+                    : active.scenario_id?.startsWith("SC-NLWRITE-")
+                    ? `<div style="font-size:11px;color:var(--amber);margin-bottom:6px;">⤷ Routed via the action registry (no scenario or ontology matched). HITL by default — the executor runs only on reviewer approve.</div>`
+                    : ""
+                }I read this as: <em>${escapeHtml(active.interpreted_as || "")}</em>.<br><br>${
                   active.phase === "awaiting_clarification"
                     ? active.clarifying_question || "Should I proceed with this action?"
                     : "Got it. Routing through the framework now."

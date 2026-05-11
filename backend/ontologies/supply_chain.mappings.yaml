@@ -1,0 +1,66 @@
+ontology_id: supply_chain
+mappings:
+  Supplier:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: supplier_id
+      attribute_map:
+        supplier_id: supplier_id
+        name: name
+        country: country
+        reliability_score: reliability_score
+      table: null
+      query_template: "MATCH (n:Supplier)\nWHERE ($supplier_id IS NULL OR n.supplier_id\
+        \ = $supplier_id)\n  AND ($country IS NULL OR n.country = $country)\nRETURN\
+        \ n.supplier_id AS id,\n       n.name AS title,\n       n.country + \" \xB7\
+        \ reliability \" + toString(n.reliability_score) AS summary\nORDER BY n.supplier_id\n\
+        LIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Cypher template scopes by supplier_id and/or country when supplied. Falls
+        back to listing all suppliers when both filter args are unset.
+    relations: {}
+  PurchaseOrder:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: po_id
+      attribute_map:
+        po_id: po_id
+        total_value: total_value
+      table: null
+      query_template: "MATCH (po:PurchaseOrder)<-[:PLACED]-(s:Supplier)\nWHERE ($po_id\
+        \ IS NULL OR po.po_id = $po_id)\nRETURN po.po_id AS id,\n       \"PO from\
+        \ \" + s.name AS title,\n       \"$\" + toString(po.total_value) + \" \xB7\
+        \ placed on \" + toString(po.placed_on) AS summary\nORDER BY po.placed_on\
+        \ DESC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Joins each PO back to the placing Supplier so the title shows the vendor
+        name.
+    relations: {}
+  Product:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: product_id
+      attribute_map:
+        product_id: product_id
+        name: name
+        category: category
+      table: null
+      query_template: "MATCH (p:Product)\nWHERE ($product_id IS NULL OR p.product_id\
+        \ = $product_id)\n  AND ($category IS NULL OR p.category = $category)\nRETURN\
+        \ p.product_id AS id,\n       p.name AS title,\n       \"category: \" + p.category\
+        \ AS summary\nORDER BY p.product_id\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: null
+    relations: {}

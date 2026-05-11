@@ -1,0 +1,60 @@
+id: SC-ONTO-PRODUCT-LOOKUP
+title: "Product lookup (ontology-aware)"
+domain: "Custom data sources"
+_custom_suggested_prompt: "Look up product P-EL-9001 (via ontology)"
+autonomous: true
+actor_id: "agent-data-lookup"
+operator_role: { label: "Operator", name: "data.analyst" }
+
+action_type: "data_lookup"
+action_payload:
+  product_id: "P-EL-9001"
+  scope: "data.read"
+
+match_keywords:
+  - product
+  - product lookup
+  - look up product
+  - p-el-9001
+  - p-el-9002
+  - p-el-9003
+interpreted_as: "look up a product through the ontology layer"
+clarifying_question: >-
+  Just to confirm — pull the product through the <code>smoke_v1.Product</code>
+  ontology class, fanning out to whichever sources the mapping covers.
+  Read-only; no human review required.
+
+auto_approval_guardrail: "GR-AUTO-LOOKUP"
+auto_approval_reason: "Read-only ontology query."
+
+closing_message: >-
+  Done — product <code>P-EL-9001</code> bound via <code>supply_chain_demo.Product</code>.
+
+stages:
+  agent_intake:
+    binder: "AutoLookupAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-AUTO-LOOKUP"
+        uri: "kf.tcs/policy/POL-AUTO-LOOKUP"
+        title: "Read-only lookup policy"
+        payload: "Read-only lookups are autonomous within data.read scope."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-data-lookup"
+        uri: "iam.tcs/actors/agent-data-lookup"
+        title: "Actor scope"
+        payload: "Scopes: data.read"
+  proposal:
+    binder: "OntologyProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain_demo
+        class: Product
+        where: { product_id: ":product_id" }
+        purpose: "Bind product through ontology"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — product bound via ontology"
+    detail: "Product retrieved through smoke_v1.Product mapping."

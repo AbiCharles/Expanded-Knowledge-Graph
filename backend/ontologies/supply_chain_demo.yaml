@@ -1,0 +1,53 @@
+id: supply_chain_demo
+title: Supply chain demo
+namespace: sc
+description: Built-in sample for testing the ontology layer end-to-end.
+classes:
+  Product:
+    description: "An item we sell \u2014 pairs with products_csv."
+    attributes:
+    - name: product_id
+      type: string
+      identifier: true
+      required: false
+      description: null
+    - name: name
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: category
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: eccn
+      type: string
+      identifier: false
+      required: false
+      description: null
+    relations: []
+  PriorOverride:
+    description: "A historical case \u2014 pairs with governance_sqlite.prior_cases."
+    attributes:
+    - name: case_id
+      type: string
+      identifier: true
+      required: false
+      description: null
+    - name: scenario_id
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: outcome
+      type: string
+      identifier: false
+      required: false
+      description: null
+    - name: rationale
+      type: string
+      identifier: false
+      required: false
+      description: null
+    relations: []

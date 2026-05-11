@@ -1,0 +1,37 @@
+id: tcs_core
+title: TCS Core Reference Ontology
+namespace: tcs
+description: Built-in ontology covering classes used by the seeded HITL demo scenarios.
+  Pairs with the seeded data sources via tcs_core.mappings.yaml. Marked default
+  so it cannot be deleted via the API.
+default: true
+classes:
+  Product:
+    description: Sales item / SKU sold to customers.
+    attributes:
+    - {name: product_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: eccn, type: string}
+    - {name: hts, type: string}
+    - {name: description, type: string}
+    - {name: category, type: string}
+  SanctionedEntity:
+    description: A counterparty appearing on a sanctions list (OFAC SDN-style).
+    attributes:
+    - {name: ent_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: programs, type: string}
+    - {name: country, type: string}
+  PriorOverride:
+    description: A historical reviewer decision on a similar case.
+    attributes:
+    - {name: case_id, type: string, identifier: true}
+    - {name: scenario_id, type: string}
+    - {name: outcome, type: string}
+    - {name: rationale, type: string}
+  PolicyExcerpt:
+    description: A semantic-search hit against the policy/SOP corpus.
+    attributes:
+    - {name: id, type: string, identifier: true}
+    - {name: title, type: string}
+    - {name: text, type: string}

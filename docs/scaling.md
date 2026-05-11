@@ -1,11 +1,12 @@
 # Scaling the HITL Context Framework
 
-This document covers three architectural questions that come up once the basic
+This document covers four architectural questions that come up once the basic
 HITL flow is working:
 
 1. **No-match UX** — what happens when the operator's prompt doesn't match a scenario?
 2. **Auto-generated scenarios** — should adding a data source automatically generate scenarios?
 3. **Scenario explosion** — how do we keep the system manageable as the catalog grows?
+4. **Ontology as a scaling lever** — can a shared schema collapse N scenarios into one?
 
 Each section explains the failure mode, the menu of options with trade-offs,
 and a recommendation for *when* to ship each one. Skip ahead to
@@ -162,6 +163,76 @@ of work.
 
 ---
 
+## 4. Ontology as a scaling lever
+
+The first three sections all play the same game: more scenarios, smarter
+classifier. The ontology layer changes the *unit* of scaling — instead
+of "one scenario per (intent × source)" you get "one ontology + N source
+mappings → M scenarios for free."
+
+> Full design in [docs/ontology.md](ontology.md). This section is the
+> scaling angle only.
+
+### What it collapses
+
+Today, three scenarios that bind the same `Supplier` from different
+sources are three near-identical YAMLs:
+
+```
+SC-PP-SUPPLIER-LOOKUP-CSV       queries: data_source: suppliers_csv
+SC-PP-SUPPLIER-LOOKUP-PG        queries: data_source: governance_postgres
+SC-PP-SUPPLIER-LOOKUP-NEO4J     queries: data_source: graph_local
+```
+
+With an ontology + mappings, all three become one:
+
+```
+SC-PP-SUPPLIER-LOOKUP           ontology_queries: { class: Supplier }
+```
+
+The mapping doc is the indirection that picks the source(s). Adding a
+fourth source for suppliers tomorrow is a mapping edit, not a new
+scenario.
+
+### What auto-generation looks like once you have it
+
+§2's Level-1 auto-lookup generates one chip per registered *source*. The
+ontology layer generates one chip per *class* (`SC-ONTO-supply_chain_v1-Supplier`,
+`SC-ONTO-supply_chain_v1-Product`, …) — same lifecycle hooks, but
+keyed off the ontology rather than the source registry. The chip
+explosion shrinks from O(sources) to O(classes), which is much smaller
+in practice.
+
+### When to add ontology vs. when to keep `queries:`
+
+Rule of thumb:
+
+- **Add an ontology entry** when 2+ scenarios touch the same entity
+  type, *or* when the data may move between sources over time, *or*
+  when an operator should be able to ask the ontology directly via the
+  NL playground.
+- **Keep a hand-tuned `queries:` block** for one-off custom aggregates
+  (e.g. "last 5 prior overrides for this scenario id, ranked by
+  decision recency") that don't fit the class/attribute shape, and for
+  scenarios where the source is genuinely the load-bearing thing
+  (sanctions list, governance audit trail).
+
+The two coexist on the same stage — see [docs/scenarios.md](scenarios.md#ontology-aware-scenarios-planned).
+
+### What it doesn't fix
+
+Hierarchical classification, vector retrieval, and usage telemetry
+(§3) are still useful at the *scenario* layer regardless of ontology.
+The ontology shrinks how many scenarios you need; it doesn't help the
+classifier pick between the ones you do have.
+
+**Status:** **shipped** in Phase 3. The ontology layer is now the
+authoritative schema; scenarios bind data through `ontology_queries:`;
+the legacy per-source `SC-AUTO-*` chip generation is gone — operators
+opt in per class via the Knowledge tile's Mappings tab.
+
+---
+
 ## Staged roadmap
 
 ```
@@ -183,6 +254,7 @@ of work.
 │                                                                 │
 │  Eventually                                                     │
 │  ───────────                                                    │
+│  ◯ Ontology layer + mappings + per-class auto-scenarios         │
 │  ◯ Action primitives + composition                              │
 │  ◯ On-demand LLM-drafted scenarios (Level 3)                    │
 │  ◯ General-purpose no-match fallback                            │

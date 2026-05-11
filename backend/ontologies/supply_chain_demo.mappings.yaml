@@ -1,0 +1,47 @@
+ontology_id: supply_chain_demo
+mappings:
+  Product:
+    sources:
+    - data_source: products_csv
+      identifier_column: product_id
+      attribute_map:
+        product_id: product_id
+        name: name
+        category: category
+        eccn: eccn
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table name and columns match the Product class exactly, with compatible
+        types and highly consistent sample values.
+    relations: {}
+  PriorOverride:
+    sources:
+    - data_source: governance_sqlite
+      identifier_column: case_id
+      attribute_map:
+        case_id: case_id
+        scenario_id: scenario_id
+        outcome: outcome
+        rationale: rationale
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table name and columns match the PriorOverride class exactly, with
+        compatible text types and sample values consistent with historical case records.
+    - data_source: outcome_stats
+      identifier_column: case_id
+      attribute_map:
+        case_id: case_id
+        scenario_id: scenario_id
+        outcome: outcome
+        rationale: rationale
+      confidence: 0.99
+      suggested_by: llm
+      confirmed_by: null
+      confirmed_at: null
+      notes: The table name and columns match the PriorOverride class directly, with
+        exact attribute-name and compatible text-type matches.
+    relations: {}
