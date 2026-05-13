@@ -91,19 +91,22 @@ function Overview() {
       </p>
 
       <p className="help-callout">
-        <strong>Example.</strong> An operator types "Override the SC-TC-001 block
-        on order ORD-44216." The framework matches that to the{" "}
-        <code>SC-TC-007</code> scenario (sanctions override). It binds the active
-        trade-compliance policy, the agent's IAM scope, the product master record,
-        the contract, prior similar overrides, and an applicable SOP — then
-        renders all of that as evidence for a compliance officer to review.
+        <strong>Example.</strong> An operator types "Override the{" "}
+        <code>SC-TC-001</code> block on order ORD-44216." The framework
+        matches that to the <code>SC-TC-007</code> scenario (sanctions
+        override). It binds the active trade-compliance policy, the agent's{" "}
+        <abbr title="Identity and Access Management">IAM</abbr> scope, the
+        product master record, the contract, prior similar overrides, and an
+        applicable <abbr title="Standard Operating Procedure">SOP</abbr> —
+        then renders all of that as evidence for a compliance officer to review.
       </p>
 
       <h3>What scenarios do</h3>
       <ol>
         <li>
-          <strong>Route prompts.</strong> When the operator types something, the
-          classifier scans every scenario's <code>match_keywords</code> and{" "}
+          <strong>Route prompts.</strong> When the operator types something,
+          the classifier (an <abbr title="Large Language Model">LLM</abbr>)
+          scans every scenario's <code>match_keywords</code> and{" "}
           <code>interpreted_as</code> phrasing and picks the best match.
         </li>
         <li>
@@ -113,8 +116,9 @@ function Overview() {
         </li>
         <li>
           <strong>Decide whether a human needs to look.</strong> Autonomous
-          scenarios skip review and execute directly. HITL scenarios stop at
-          the review stage and wait for a decision.
+          scenarios skip review and execute directly.{" "}
+          <strong>HITL (human-in-the-loop)</strong> scenarios stop at the
+          review stage and wait for a decision.
         </li>
         <li>
           <strong>Render the right surfaces.</strong> Scenarios determine the
@@ -142,28 +146,48 @@ function Overview() {
       </ul>
 
       <h3>Three lifecycle types</h3>
+      <p>
+        Scenario ids follow the convention{" "}
+        <code>SC-&lt;domain-prefix&gt;-&lt;number&gt;</code>. The current
+        prefixes are:
+      </p>
+      <ul>
+        <li><code>SC-TC-*</code> — <strong>Trade Compliance</strong></li>
+        <li><code>SC-PP-*</code> — <strong>Planning &amp; Procurement</strong></li>
+        <li><code>SC-LN-*</code> — <strong>Logistics &amp; Network</strong></li>
+        <li><code>SC-ONTO-*</code> — <strong>Ontology lookup</strong> (autonomous, generated from Mappings)</li>
+        <li><code>SC-ADHOC-*</code> — <strong>Ad-hoc</strong> ontology query (runtime fallback)</li>
+        <li><code>SC-NLWRITE-*</code> — <strong>Natural-language write action</strong> (runtime fallback)</li>
+      </ul>
+      <p>They split into three lifecycle types:</p>
       <ul>
         <li>
           <strong>Built-in</strong> (<code>SC-TC-*</code>, <code>SC-PP-*</code>,{" "}
-          <code>SC-LN-*</code>) — committed to the repo, hand-authored, can't be
-          deleted via the API.
+          <code>SC-LN-*</code>) — committed to the repo, hand-authored, can't
+          be deleted via the API.
         </li>
         <li>
-          <strong>Auto-generated</strong> (<code>SC-AUTO-&lt;source&gt;</code>) —
-          created automatically when an operator-registered data source is
-          added; removed when the source is removed.
+          <strong>Generated lookup chip</strong>{" "}
+          (<code>SC-ONTO-&lt;ontology&gt;-&lt;Class&gt;</code>) — created from
+          the <em>Knowledge → Ontologies → Mappings</em> tab by clicking
+          "Generate lookup chip" next to a class. Autonomous, runs an
+          ontology query, persists as YAML in <code>backend/scenarios/</code>.
         </li>
         <li>
-          <strong>Custom</strong> (<code>SC-CUSTOM-&lt;slug&gt;</code>) — created
-          via the Save-as-scenario form in the Query playground. Persist until
-          deleted.
+          <strong>Runtime fallback</strong>{" "}
+          (<code>SC-ADHOC-*</code> and <code>SC-NLWRITE-*</code>) — created
+          on-the-fly by the composer's two opt-in fallback toggles. Ephemeral;
+          they exist for the duration of one case. See the{" "}
+          <strong>HITL vs autonomous</strong> tab for what each path uses.
         </li>
       </ul>
 
       <p className="help-callout">
-        <strong>Where to start:</strong> if you want a quick read-only data
-        lookup, use <em>Save as scenario</em> in the Query playground. If you
-        need a human-review action, hand-author a YAML in{" "}
+        <strong>Where to start:</strong> for a quick read-only lookup against a
+        connected source, register the source under <em>Knowledge → Data
+        sources</em>, then go to <em>Ontologies → Mappings</em>, suggest
+        mappings, and click <strong>Generate lookup chip</strong>. For a
+        human-review action, hand-author a YAML in{" "}
         <code>backend/scenarios/</code> using the patterns shown in the{" "}
         <strong>Examples</strong> tab.
       </p>
@@ -187,7 +211,10 @@ function Anatomy() {
         <li><strong>Closing message</strong> — what the agent says at the end</li>
       </ol>
       <p className="help-callout">
-        Two ways to add a scenario: <strong>Save-from-playground</strong> (read-only data lookups, in-app, autonomous) or <strong>hand-authored YAML</strong> in <code>backend/scenarios/</code> (HITL or anything more structured).
+        Two ways to add a scenario: <strong>"Generate lookup chip"</strong> from
+        the Ontologies → Mappings tab (autonomous, ontology-driven, in-app), or{" "}
+        <strong>hand-authored YAML</strong> in <code>backend/scenarios/</code>{" "}
+        (HITL or anything more structured).
       </p>
     </>
   );
@@ -274,6 +301,40 @@ function Shapes() {
         HITL = "we want a human's name on this decision in the audit log."
         When in doubt, ship HITL first; you can promote a scenario to autonomous later by adding a guardrail and flipping the flag, but you can't easily un-execute an autonomous mistake.
       </p>
+
+      <h3>Two runtime fallback shapes  (created on the fly)</h3>
+      <p>
+        The composer has two opt-in checkboxes below the prompt. Each turns
+        the agent's normal "no scenario matched" outcome into a different
+        runtime-generated scenario instead of a dead end.
+      </p>
+
+      <h4>Ontology lookup — <code>SC-ADHOC-*</code></h4>
+      <p>
+        Triggered when <em>Try ontology lookup if no scenario matches</em> is
+        on. The LLM picks an ontology class from the registered ontologies,
+        extracts a <code>where</code> filter from the prompt (using sample
+        values from the actual data, so "Dutch suppliers" becomes{" "}
+        <code>country: NL</code>), and runs a one-shot{" "}
+        <code>ontology_queries</code> stage. Autonomous and read-only.
+      </p>
+
+      <h4>Natural-language (NL) write action — <code>SC-NLWRITE-*</code></h4>
+      <p>
+        Triggered when <em>Try write action if no scenario or ontology
+        matches</em> is on. The LLM picks an entry from the action registry
+        (typed write ops like <code>sql_update</code> /{" "}
+        <code>http_request</code>), fills its arguments from the prompt, and
+        drafts an action. HITL by default — the reviewer sees the proposed
+        write and the executor only runs after approve.
+      </p>
+
+      <p className="help-callout">
+        These two scenarios aren't authored; they're materialised at request
+        time by <code>backend/auto_scenario.py</code>. They share the same
+        envelope/lineage machinery as built-in scenarios, so the audit trail
+        looks identical.
+      </p>
     </>
   );
 }
@@ -281,11 +342,19 @@ function Shapes() {
 function StageKnowledge() {
   return (
     <>
-      <h3>Stage knowledge: <code>facts:</code> vs <code>queries:</code></h3>
-      <p>Each stage can hold either or both blocks. The combined facts populate the <code>StageContext</code>.</p>
+      <h3>Stage knowledge: <code>facts:</code> vs <code>ontology_queries:</code></h3>
+      <p>
+        Each stage can hold either or both blocks. The combined facts populate
+        the <code>StageContext</code>. The legacy{" "}
+        <code>queries:</code> block was removed in Phase 3 — scenarios that
+        still use it fail at load with a migration pointer.
+      </p>
 
       <h4><code>facts:</code> — inline literal facts</h4>
-      <p>Static, demo-stable data. Best for policies, actor scopes, anything that doesn't change between runs.</p>
+      <p>
+        Static, demo-stable data. Best for policies, actor scopes, anything
+        that doesn't change between runs.
+      </p>
       <pre>{`stages:
   agent_intake:
     binder: PolicyAndScopeAgentBinder/1.0
@@ -297,25 +366,49 @@ function StageKnowledge() {
         title: TC override policy
         payload: "Critical TC overrides require named compliance officer."`}</pre>
 
-      <h4><code>queries:</code> — live data via registered sources</h4>
-      <p>Resolved at bind time against the <code>DataSourceRegistry</code>. <code>filter:</code> is interpreted by the connector kind:</p>
+      <h4><code>ontology_queries:</code> — live data via the ontology</h4>
+      <p>
+        Scenarios name an <em>ontology class</em>, not a raw data source. At
+        bind time the <code>OntologyResolver</code> looks up the class's
+        mapping, dispatches the query to whichever connector(s) back it, and
+        returns rows tagged with provenance (which class asked · which source
+        answered).
+      </p>
       <ul>
-        <li><strong>CSV</strong> — column-name match</li>
-        <li><strong>SQLite/Postgres</strong> — named SQL params</li>
-        <li><strong>HTTP</strong> — path-template substitution</li>
-        <li><strong>Vector store</strong> — query string + top_k</li>
+        <li><code>ontology</code> — ontology id (e.g. <code>tcs_core</code>, <code>supply_chain</code>)</li>
+        <li><code>class</code> — class name within that ontology (e.g. <code>Product</code>, <code>SanctionedEntity</code>)</li>
+        <li><code>where</code> — optional dict of filter keys. Keys are translated to source columns via the mapping's <code>attribute_map</code>. Supports <code>:param</code> substitution from <code>action_payload</code>.</li>
+        <li><code>max_results</code> — optional integer cap (default 50)</li>
+        <li><code>purpose</code> — short human label, shown in lineage</li>
       </ul>
       <pre>{`stages:
   proposal:
-    binder: TradeOverrideProposalBinder/2.0-live
-    queries:
-      - data_source: products_csv
-        ontology_type: Product
-        filter: { product_id: P-EL-9001 }
-        purpose: "Bind product master record"`}</pre>
+    binder: TradeOverrideProposalBinder/2.0
+    ontology_queries:
+      - ontology: tcs_core
+        class: Product
+        where: { product_id: :product_id }   # filled from action_payload
+        purpose: "Bind product master record"
+      - ontology: tcs_core
+        class: SanctionedEntity
+        where: { entity_name: :counterparty_name }
+        purpose: "Confirm OFAC SDN match"`}</pre>
+
+      <h4>Filter-aware chips: <code>_filter_from_prompt: true</code></h4>
+      <p>
+        Generated lookup chips (<code>SC-ONTO-…</code>) ship with an empty{" "}
+        <code>where: {`{}`}</code>. Add <code>_filter_from_prompt: true</code>{" "}
+        at the top level and the orchestrator pre-parses the operator's prompt
+        into a partial <code>where</code> before the binder runs — so "show me
+        Dutch suppliers" becomes <code>country: NL</code> automatically. An
+        explicit <code>where</code> in the YAML always wins over an extracted
+        one.
+      </p>
 
       <p className="help-callout">
-        Mix freely. Agent intake almost always has inline facts (policy, scope). Proposal/review often combine inline facts with live queries.
+        Mix freely. Agent intake almost always has inline <code>facts:</code>{" "}
+        for policy + actor scope. Proposal/review usually combine inline facts
+        (reference data) with <code>ontology_queries</code> (live data).
       </p>
     </>
   );
@@ -477,22 +570,24 @@ stages:
         uri: "erp.tcs/products/P-EL-9001"
         title: "Encryption module"
         payload: "ECCN 5A002 · HTS 8517.62.00 · controlled"
-    queries:
-      - data_source: sanctions_csv
-        ontology_type: SanctionedEntity
-        filter: { name: "Sanctioned Pharma Holdings" }
+    ontology_queries:
+      - ontology: tcs_core
+        class: SanctionedEntity
+        where: { entity_name: :counterparty_name }
         purpose: "Confirm OFAC SDN match"
 
   review:
     binder: "TradeOverrideReviewBinder/1.0"
-    queries:
-      - data_source: governance_sqlite
-        ontology_type: PriorOverride
-        filter: { scenario_id: SC-TC-007, max_results: 3 }
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where: { scenario_id: SC-TC-007 }
+        max_results: 3
         purpose: "Surface prior similar overrides"
-      - data_source: policy_corpus
-        ontology_type: PolicyExcerpt
-        filter: { query: "OFAC override license verification", top_k: 3 }
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where: { query: "OFAC override license verification" }
+        max_results: 3
         purpose: "Retrieve relevant SOP excerpts"
 
 outcomes:
@@ -592,7 +687,9 @@ function QualityTips() {
         <thead><tr><th>Anti-pattern</th><th>The issue</th></tr></thead>
         <tbody>
           <tr><td>Vague keywords</td><td>Classifier hijacks every prompt</td></tr>
-          <tr><td>Empty <code>facts:</code> AND <code>queries:</code> on a stage</td><td>Stage binds nothing, envelope is empty</td></tr>
+          <tr><td>Empty <code>facts:</code> AND <code>ontology_queries:</code> on a stage</td><td>Stage binds nothing, envelope is empty</td></tr>
+          <tr><td>Legacy <code>queries:</code> block</td><td>Loader rejects the YAML — migrate to <code>ontology_queries:</code></td></tr>
+          <tr><td><code>ontology_queries</code> referencing a class with no mapping</td><td>Resolver returns zero facts; check Knowledge → Ontologies → Mappings</td></tr>
           <tr><td>Clarifying question that repeats the prompt</td><td>Operator can't tell if the agent understood</td></tr>
           <tr><td>HITL scenario with <code>closing_messages</code> only for approve</td><td>Reject + more-info paths render blank</td></tr>
           <tr><td>Keyword overlap with another scenario</td><td>Top-K shows both — confusing for the operator</td></tr>
@@ -606,10 +703,11 @@ function QualityTips() {
 function Lifecycle() {
   return (
     <>
-      <h3>Three kinds of scenario</h3>
+      <h3>Kinds of scenario in the chip list</h3>
       <p>
-        Three sources of scenarios coexist in the chip list. They differ in
-        how they get there, who can edit them, and how they're removed.
+        Three durable sources of scenarios coexist on the operator console,
+        plus two ephemeral kinds that are materialised at request time. They
+        differ in how they get there, who can edit them, and how they're removed.
       </p>
 
       <h4>Built-in — <code>SC-TC-*</code>, <code>SC-PP-*</code>, <code>SC-LN-*</code></h4>
@@ -623,49 +721,103 @@ function Lifecycle() {
         <li>Represents the canonical, version-controlled scenario catalogue.</li>
       </ul>
 
-      <h4>Auto — <code>SC-AUTO-&lt;source_id&gt;</code></h4>
+      <h4>Generated lookup chip — <code>SC-ONTO-&lt;ontology&gt;-&lt;Class&gt;</code></h4>
       <p>
-        Created automatically when an operator-registered data source is added
-        (CSV upload, Add SQLite/Postgres/HTTP/vector). Autonomous, bound to the
-        source's <code>queries:</code> block, with derived match_keywords.
-      </p>
-      <p>Two ways to remove:</p>
-      <ol>
-        <li><strong>Delete the source.</strong> The chip is removed at the same time. Usual path.</li>
-        <li><strong>Delete the chip only.</strong> Click the pencil on the chip → <strong>Remove this scenario</strong>. The source stays registered (still queryable in the playground), but the chip disappears.</li>
-      </ol>
-
-      <h4>Custom — <code>SC-CUSTOM-&lt;slug&gt;</code></h4>
-      <p>
-        Created via the <strong>Save as scenario</strong> form in the Query
-        playground. Autonomous, runs your saved SQL against the source, persists
-        in <code>backend/scenarios/</code> as YAML.
+        Created by clicking <strong>Generate lookup chip</strong> next to a
+        class in <em>Knowledge → Ontologies → Mappings</em>. Autonomous,
+        read-only; the proposal stage runs a single{" "}
+        <code>ontology_queries</code> entry against the class. The id is
+        stable, so regenerating overwrites rather than duplicating.
       </p>
       <ul>
-        <li><strong>Removed via the edit modal:</strong> pencil → <strong>Remove this scenario</strong>.</li>
-        <li><strong>Or via the API:</strong> <code>DELETE /api/scenarios/SC-CUSTOM-&lt;slug&gt;</code>.</li>
+        <li><strong>Filter-aware by default</strong> — ships with{" "}
+          <code>_filter_from_prompt: true</code>, so the operator can type
+          natural filters like "Dutch suppliers" and the orchestrator
+          extracts <code>country: NL</code> before bind.
+        </li>
+        <li><strong>Removable</strong> via the edit modal's Remove button or{" "}
+          <code>DELETE /api/scenarios/SC-ONTO-…</code>. Re-clicking{" "}
+          "Generate lookup chip" recreates it.
+        </li>
+      </ul>
+
+      <h4>Runtime fallback — <code>SC-ADHOC-*</code> and <code>SC-NLWRITE-*</code></h4>
+      <p>
+        Materialised at request time by the composer's two opt-in fallback
+        toggles (see the <strong>HITL vs autonomous</strong> tab). Ephemeral —
+        they're attached to one case and aren't stored as a chip on the
+        console.
+      </p>
+      <ul>
+        <li><code>SC-ADHOC-*</code> — autonomous, read-only ontology query.</li>
+        <li><code>SC-NLWRITE-*</code> — HITL by default; executor only runs after reviewer approve.</li>
       </ul>
 
       <h3>Quick reference</h3>
       <table className="help-fields">
         <thead>
-          <tr><th>Action</th><th>Built-in</th><th>Auto</th><th>Custom</th></tr>
+          <tr>
+            <th>Action</th>
+            <th>Built-in</th>
+            <th>SC-ONTO</th>
+            <th>SC-ADHOC / SC-NLWRITE</th>
+          </tr>
         </thead>
         <tbody>
-          <tr><td>Edit title / keywords / clarifier in UI</td><td>✅</td><td>✅</td><td>✅</td></tr>
-          <tr><td>Edit structural fields in UI</td><td>❌ (edit YAML)</td><td>❌</td><td>❌</td></tr>
-          <tr><td>Remove via Edit modal</td><td>❌</td><td>✅</td><td>✅</td></tr>
-          <tr><td>Remove via API <code>DELETE</code></td><td>❌ (400)</td><td>✅</td><td>✅</td></tr>
-          <tr><td>Removed automatically with its source</td><td>n/a</td><td>✅</td><td>❌</td></tr>
+          <tr><td>Persisted as YAML on disk</td><td>✅</td><td>✅</td><td>❌ (per-case only)</td></tr>
+          <tr><td>Edit title / keywords / clarifier in UI</td><td>✅</td><td>✅</td><td>n/a</td></tr>
+          <tr><td>Edit structural fields in UI</td><td>❌ (edit YAML)</td><td>❌</td><td>n/a</td></tr>
+          <tr><td>Remove via Edit modal</td><td>❌</td><td>✅</td><td>n/a</td></tr>
+          <tr><td>Remove via API <code>DELETE</code></td><td>❌ (400)</td><td>✅</td><td>n/a</td></tr>
         </tbody>
       </table>
 
-      <h3>Adding a custom YAML by hand</h3>
+      <h3>Adding a hand-authored YAML</h3>
       <ol>
         <li>Drop a new <code>SC-XX-NNN.yaml</code> into <code>backend/scenarios/</code>.</li>
         <li>Restart uvicorn (the directory is loaded once at startup).</li>
-        <li>Refresh the UI → new chip appears.</li>
+        <li>Refresh the UI → new chip appears at the top of the list (chips are sorted newest-first by file mtime).</li>
       </ol>
+
+      <h3>Glossary</h3>
+      <h4>Scenario / framework terms</h4>
+      <table className="help-fields">
+        <thead><tr><th>Acronym</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>HITL</strong></td><td>Human In The Loop — a scenario that pauses for a named reviewer before executing.</td></tr>
+          <tr><td><strong>LLM</strong></td><td>Large Language Model — used here only for classification and argument extraction, never for the action itself.</td></tr>
+          <tr><td><strong>NL</strong></td><td>Natural Language — operator's plain-English input.</td></tr>
+          <tr><td><strong>SC-TC</strong></td><td>Scenario, Trade Compliance domain.</td></tr>
+          <tr><td><strong>SC-PP</strong></td><td>Scenario, Planning &amp; Procurement domain.</td></tr>
+          <tr><td><strong>SC-LN</strong></td><td>Scenario, Logistics &amp; Network domain.</td></tr>
+          <tr><td><strong>SC-ONTO</strong></td><td>Scenario generated from an Ontology class (autonomous lookup).</td></tr>
+          <tr><td><strong>SC-ADHOC</strong></td><td>Ad-hoc runtime ontology lookup (composer fallback).</td></tr>
+          <tr><td><strong>SC-NLWRITE</strong></td><td>Runtime natural-language write action (HITL-gated composer fallback).</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Acronyms in the example YAMLs</h4>
+      <p>
+        The bundled examples reference real industry terms so the demo
+        feels concrete. They aren't part of the framework — your own
+        scenarios will use whatever vocabulary your domain uses.
+      </p>
+      <table className="help-fields">
+        <thead><tr><th>Acronym</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>OFAC</strong></td><td>U.S. Office of Foreign Assets Control — administers sanctions programmes.</td></tr>
+          <tr><td><strong>SDN</strong></td><td>Specially Designated Nationals — OFAC's sanctions list.</td></tr>
+          <tr><td><strong>ECCN</strong></td><td>Export Control Classification Number — U.S. dual-use export classification.</td></tr>
+          <tr><td><strong>HTS</strong></td><td>Harmonized Tariff Schedule — international trade classification.</td></tr>
+          <tr><td><strong>SOP</strong></td><td>Standard Operating Procedure.</td></tr>
+          <tr><td><strong>IAM</strong></td><td>Identity and Access Management — who the agent is allowed to act as.</td></tr>
+          <tr><td><strong>ETA</strong></td><td>Estimated Time of Arrival.</td></tr>
+          <tr><td><strong>SLA</strong></td><td>Service Level Agreement.</td></tr>
+          <tr><td><strong>ERP</strong></td><td>Enterprise Resource Planning system (e.g. SAP) — source of material/contract master data.</td></tr>
+          <tr><td><strong>TMS</strong></td><td>Transportation Management System — source of shipment/tracking data.</td></tr>
+          <tr><td><strong>KF</strong></td><td>Knowledge Fabric / Framework — the policy + ontology graph the agent reads from.</td></tr>
+        </tbody>
+      </table>
     </>
   );
 }
