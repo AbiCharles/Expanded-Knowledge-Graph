@@ -46,7 +46,7 @@ class CsvResolver:
 
     def _load(self) -> list[dict[str, str]]:
         if self._rows is None:
-            with self._path.open() as fh:
+            with self._path.open(encoding="utf-8", newline="") as fh:
                 self._rows = list(csv.DictReader(fh))
         return self._rows
 

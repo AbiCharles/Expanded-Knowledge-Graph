@@ -90,7 +90,7 @@ class DataSourceRegistry:
         reg._openai_api_key = openai_api_key
         reg._azure_embedding_config = azure_embedding_config
         if storage_path.exists():
-            data = yaml.safe_load(storage_path.read_text()) or {}
+            data = yaml.safe_load(storage_path.read_text(encoding="utf-8")) or {}
             for entry in data.get("sources", []):
                 spec_id = entry.pop("id")
                 spec_kind = entry.pop("kind")
@@ -112,7 +112,7 @@ class DataSourceRegistry:
     def _save(self) -> None:
         self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         data = {"sources": [s.to_yaml() for s in self._specs.values()]}
-        self._storage_path.write_text(yaml.safe_dump(data, sort_keys=False))
+        self._storage_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
     # -------------------------------------------------------------------------
     # Build a resolver from a spec

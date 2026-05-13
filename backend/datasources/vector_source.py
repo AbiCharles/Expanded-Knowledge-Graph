@@ -149,7 +149,7 @@ class VectorStoreResolver:
         # a warning, but the rest of the app keeps running.
         chunks: list[dict] = []
         for path in sorted(self._folder.glob("*.md")) + sorted(self._folder.glob("*.txt")):
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             for i, c in enumerate(_chunk_text(text)):
                 chunks.append({"file": path.name, "chunk_id": i, "text": c})
         if len(chunks) > _MAX_CHUNKS:
