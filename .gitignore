@@ -31,3 +31,9 @@ backend/data/app.sqlite-journal
 .vscode/
 .idea/
 *.swp
+
+# Claude Code — transient / per-machine files
+# (commit .claude/agents/ and .claude/skills/ for team sharing)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/.cache/
