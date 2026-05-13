@@ -102,7 +102,7 @@ def register(payload: RegisterIn, request: Request) -> TokenOut:
 
 @router.post("/login", response_model=TokenOut)
 @limiter.limit("10/minute")
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends()) -> TokenOut:
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(OAuth2PasswordRequestForm)) -> TokenOut:
     state = request.app.state.app_state
     with state.database.session() as session:
         user = session.execute(

@@ -1,0 +1,54 @@
+# Normalize all text files to LF in the repo, regardless of OS.
+# Windows checkouts get LF on disk too — modern editors and Python/Node
+# tooling handle this fine, and it eliminates noisy CRLF diffs.
+* text=auto eol=lf
+
+# Source files — explicit for clarity
+*.py        text eol=lf
+*.pyi       text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.sql       text eol=lf
+*.csv       text eol=lf
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Caddyfile   text eol=lf
+
+# Windows-specific scripts must keep CRLF or cmd.exe chokes
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+# Lockfiles — text but never diff-noise-worthy
+package-lock.json  text eol=lf -diff
+uv.lock            text eol=lf -diff
+
+# Binary files
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.pptx      binary
+*.xlsx      binary
+*.docx      binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.sqlite    binary
+*.npz       binary
+*.woff      binary
+*.woff2     binary
