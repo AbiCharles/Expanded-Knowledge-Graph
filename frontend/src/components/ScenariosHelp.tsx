@@ -7,7 +7,7 @@
  */
 import { useState } from "react";
 
-type Section = "overview" | "anatomy" | "shapes" | "stages" | "fields" | "examples" | "tips" | "lifecycle";
+type Section = "overview" | "anatomy" | "shapes" | "stages" | "ontologies" | "fields" | "examples" | "tips" | "lifecycle";
 
 export function ScenariosHelp({ onClose }: { onClose: () => void }) {
   const [section, setSection] = useState<Section>("overview");
@@ -40,6 +40,9 @@ export function ScenariosHelp({ onClose }: { onClose: () => void }) {
             <button className={section === "stages" ? "active" : ""} onClick={() => setSection("stages")}>
               Stage knowledge
             </button>
+            <button className={section === "ontologies" ? "active" : ""} onClick={() => setSection("ontologies")}>
+              Ontologies
+            </button>
             <button className={section === "fields" ? "active" : ""} onClick={() => setSection("fields")}>
               Field reference
             </button>
@@ -63,6 +66,7 @@ export function ScenariosHelp({ onClose }: { onClose: () => void }) {
             {section === "anatomy" && <Anatomy />}
             {section === "shapes" && <Shapes />}
             {section === "stages" && <StageKnowledge />}
+            {section === "ontologies" && <Ontologies />}
             {section === "fields" && <FieldReference />}
             {section === "examples" && <Examples />}
             {section === "tips" && <QualityTips />}
@@ -379,6 +383,148 @@ function StageKnowledge() {
         for policy + actor scope. Proposal/review usually combine inline facts
         (reference data) with <code>ontology_queries</code> (live data).
       </p>
+    </>
+  );
+}
+
+function Ontologies() {
+  return (
+    <>
+      <h3>What an ontology is</h3>
+      <p>
+        An <strong>ontology</strong> defines abstract domain classes —{" "}
+        <code>Product</code>, <code>SanctionedEntity</code>, <code>PolicyExcerpt</code> —
+        each with named, typed attributes. It knows nothing about CSV files, Postgres
+        tables, or HTTP APIs. A separate <strong>mapping document</strong> bridges each
+        class to the registered data sources that can answer it. Both live under{" "}
+        <code>backend/ontologies/</code>.
+      </p>
+
+      <h3>How a scenario plugs into an ontology</h3>
+      <p>
+        A scenario only mentions an ontology in two places: the <code>ontology</code>{" "}
+        and <code>class</code> fields inside an <code>ontology_queries:</code> block.
+        Those two strings are the glue — they have to match real names in three other
+        files, and the names line up like this:
+      </p>
+
+      <pre>{`scenario YAML          ontology YAML         mappings YAML         source registry
+────────────────       ────────────────      ─────────────────     ────────────────
+ontology: tcs_core ──▶ id: tcs_core
+class: Product   ────▶ classes:
+                         Product:    ──────▶ mappings:
+                           attributes:         Product:
+                             product_id          sources:
+                             name                  - data_source: ──▶ id: products_csv
+                             eccn                    products_csv
+                                                  attribute_map:
+                                                    product_id: product_id
+                                                    name: name
+                                                    eccn: eccn`}</pre>
+
+      <p>Walked through file by file:</p>
+
+      <ol>
+        <li>
+          <strong>Scenario</strong> — <code>backend/scenarios/SC-…-….yaml</code> —
+          declares the query. The two strings have to resolve:
+          <pre>{`stages:
+  proposal:
+    binder: OntologyProposalBinder/1.0
+    ontology_queries:
+      - ontology: tcs_core      # ← must match the ontology's "id" field
+        class: Product          # ← must match a class key in that ontology
+        where: { product_id: :product_id }
+        purpose: "Bind product through ontology"`}</pre>
+        </li>
+        <li>
+          <strong>Ontology</strong> —{" "}
+          <code>backend/ontologies/tcs_core.yaml</code> — defines the class shape and
+          its attributes. This is the schema the scenario's <code>class:</code> field
+          points at:
+          <pre>{`id: tcs_core                 # ← matches "ontology" in the scenario
+classes:
+  Product:                    # ← matches "class" in the scenario
+    attributes:
+      - {name: product_id, type: string, identifier: true}
+      - {name: name, type: string}
+      - {name: eccn, type: string}
+      - ...`}</pre>
+        </li>
+        <li>
+          <strong>Mapping</strong> —{" "}
+          <code>backend/ontologies/tcs_core.mappings.yaml</code> — binds the class to
+          one or more <em>registered data sources</em>. The <code>attribute_map</code>{" "}
+          translates ontology attribute names to source-specific column / field names:
+          <pre>{`ontology_id: tcs_core            # ← matches the ontology's "id"
+mappings:
+  Product:                       # ← matches the class key
+    sources:
+      - data_source: products_csv      # ← must match a registered source id
+        identifier_column: product_id
+        attribute_map:
+          product_id: product_id       # left = ontology attribute, right = source column
+          name: name
+          eccn: eccn`}</pre>
+        </li>
+        <li>
+          <strong>Source</strong> — the <code>products_csv</code> entry registered via
+          the Knowledge tile (or seeded from <code>backend/data/sources.yaml</code>)
+          points at the actual CSV / table / endpoint. The resolver runs the query,
+          applies the <code>attribute_map</code> in reverse to rename source columns
+          back to ontology attributes, and returns the rows as typed facts in the
+          case envelope.
+        </li>
+      </ol>
+
+      <p className="help-callout">
+        Break any link in the chain (typo in <code>class</code>, missing mapping
+        entry, deleted data source) and the scenario fails to bind at runtime — the
+        case lands in the error stage with a "no mapping for{" "}
+        <code>&lt;ontology&gt;.&lt;class&gt;</code>" or "unknown data source{" "}
+        <code>&lt;id&gt;</code>" message. There is no silent fallback.
+      </p>
+
+      <h3>The two hook points inside a scenario</h3>
+
+      <h4>1. <code>facts[].ontology_type</code> — passive type label</h4>
+      <p>
+        Every inline fact in a stage's <code>facts:</code> list carries an{" "}
+        <code>ontology_type</code> tag so the envelope stays typed for the UI and
+        audit log. It does <em>not</em> trigger a query — it's metadata on a
+        pre-resolved fact (e.g. the policy text you embed inline in{" "}
+        <code>agent_intake</code>).
+      </p>
+
+      <h4>2. <code>ontology_queries:</code> — active binding via the resolver</h4>
+      <p>
+        The block walked through above. Each entry produces a typed batch of facts at
+        bind time, fanning out across every source the mapping covers. See{" "}
+        <strong>Stage knowledge</strong> for the YAML reference (<code>where</code>,{" "}
+        <code>max_results</code>, <code>purpose</code>, <code>:param</code>{" "}
+        substitution from <code>action_payload</code>).
+      </p>
+
+      <h3>Why this layer exists</h3>
+      <ul>
+        <li>
+          <strong>One scenario, many sources.</strong> Register a new connector, add a
+          mapping entry for an existing class — every scenario that queries that
+          class picks it up. No scenario rewrites.
+        </li>
+        <li>
+          <strong>Auto-scaffolded lookup chips.</strong> The "Generate lookup chip"
+          button in the Knowledge tile produces an{" "}
+          <code>SC-ONTO-&lt;ontology&gt;-&lt;class&gt;.yaml</code> scenario per class —
+          instant operator UI for any class without writing YAML.
+        </li>
+        <li>
+          <strong>Cross-source provenance.</strong> The mapping doc declares
+          identifier columns and per-source confidence, so the system knows what's
+          bindable versus what needs human resolution. Each returned fact carries
+          which class asked · which source answered.
+        </li>
+      </ul>
     </>
   );
 }
