@@ -94,7 +94,7 @@ class ActionRegistry:
         directory.mkdir(parents=True, exist_ok=True)
         for path in sorted(directory.glob("*.yaml")):
             try:
-                with path.open() as fh:
+                with path.open(encoding="utf-8") as fh:
                     action = parse_action(fh.read())
             except ActionError as exc:
                 log.warning("skipping malformed action at %s: %s", path, exc)
@@ -126,7 +126,7 @@ class ActionRegistry:
     def register(self, action: Action) -> None:
         self._actions[action.id] = action
         path = self._directory / f"{action.id}.yaml"
-        path.write_text(yaml.safe_dump(action.model_dump(mode="json"), sort_keys=False))
+        path.write_text(yaml.safe_dump(action.model_dump(mode="json"), sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     def unregister(self, action_id: str) -> None:
         existing = self._actions.get(action_id)

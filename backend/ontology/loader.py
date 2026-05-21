@@ -99,7 +99,7 @@ class OntologyRegistry:
             if path.name.endswith(".mappings.yaml"):
                 continue
             try:
-                with path.open() as fh:
+                with path.open(encoding="utf-8") as fh:
                     onto = parse_ontology(fh.read())
             except OntologyError as exc:
                 log.warning("skipping malformed ontology at %s: %s", path, exc)
@@ -108,7 +108,7 @@ class OntologyRegistry:
             mapping_path = directory / f"{onto.id}.mappings.yaml"
             if mapping_path.exists():
                 try:
-                    with mapping_path.open() as fh:
+                    with mapping_path.open(encoding="utf-8") as fh:
                         reg._mappings[onto.id] = parse_mapping(fh.read())
                 except OntologyError as exc:
                     log.warning(
@@ -143,7 +143,7 @@ class OntologyRegistry:
     def register(self, ontology: Ontology) -> None:
         self._ontologies[ontology.id] = ontology
         path = self._directory / f"{ontology.id}.yaml"
-        path.write_text(yaml.safe_dump(ontology.model_dump(mode="json"), sort_keys=False))
+        path.write_text(yaml.safe_dump(ontology.model_dump(mode="json"), sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     def unregister(self, ontology_id: str) -> None:
         existing = self._ontologies.get(ontology_id)
@@ -163,4 +163,4 @@ class OntologyRegistry:
             )
         self._mappings[mapping.ontology_id] = mapping
         path = self._directory / f"{mapping.ontology_id}.mappings.yaml"
-        path.write_text(yaml.safe_dump(mapping.model_dump(mode="json"), sort_keys=False))
+        path.write_text(yaml.safe_dump(mapping.model_dump(mode="json"), sort_keys=False, allow_unicode=True), encoding="utf-8")

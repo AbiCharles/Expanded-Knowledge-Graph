@@ -57,7 +57,7 @@ class ScenarioRegistry:
     def from_directory(cls, directory: Path) -> "ScenarioRegistry":
         reg = cls({}, directory=directory)
         for path in sorted(directory.glob("*.yaml")):
-            with path.open() as fh:
+            with path.open(encoding="utf-8") as fh:
                 data = yaml.safe_load(fh)
             if not isinstance(data, dict) or "id" not in data:
                 raise RuntimeError(f"Scenario {path} is missing top-level `id`")
@@ -102,7 +102,7 @@ class ScenarioRegistry:
         self._scenarios[sid] = scenario
         if persist and self._directory is not None:
             path = self._directory / f"{sid}.yaml"
-            path.write_text(yaml.safe_dump(scenario, sort_keys=False))
+            path.write_text(yaml.safe_dump(scenario, sort_keys=False, allow_unicode=True), encoding="utf-8")
             self._mtimes[sid] = path.stat().st_mtime
         else:
             self._mtimes[sid] = time.time()

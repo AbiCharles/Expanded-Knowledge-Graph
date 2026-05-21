@@ -99,7 +99,7 @@ def _inspect_csv(
             source_id=spec.id, kind=spec.kind,
             note=f"csv file not found: {path}",
         )
-    with path.open() as fh:
+    with path.open(encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
         fieldnames = list(reader.fieldnames or [])
         sample_rows = []
