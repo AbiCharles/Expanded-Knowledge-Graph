@@ -156,10 +156,8 @@ function Overview() {
         <li><code>SC-PP-*</code> — <strong>Planning &amp; Procurement</strong></li>
         <li><code>SC-LN-*</code> — <strong>Logistics &amp; Network</strong></li>
         <li><code>SC-ONTO-*</code> — <strong>Ontology lookup</strong> (autonomous, generated from Mappings)</li>
-        <li><code>SC-ADHOC-*</code> — <strong>Ad-hoc</strong> ontology query (runtime fallback)</li>
-        <li><code>SC-NLWRITE-*</code> — <strong>Natural-language write action</strong> (runtime fallback)</li>
       </ul>
-      <p>They split into three lifecycle types:</p>
+      <p>They split into two lifecycle types:</p>
       <ul>
         <li>
           <strong>Built-in</strong> (<code>SC-TC-*</code>, <code>SC-PP-*</code>,{" "}
@@ -173,14 +171,12 @@ function Overview() {
           "Generate lookup chip" next to a class. Autonomous, runs an
           ontology query, persists as YAML in <code>backend/scenarios/</code>.
         </li>
-        <li>
-          <strong>Runtime fallback</strong>{" "}
-          (<code>SC-ADHOC-*</code> and <code>SC-NLWRITE-*</code>) — created
-          on-the-fly by the composer's two opt-in fallback toggles. Ephemeral;
-          they exist for the duration of one case. See the{" "}
-          <strong>HITL vs autonomous</strong> tab for what each path uses.
-        </li>
       </ul>
+      <p>
+        If the classifier can't match a prompt to one of these, the case is
+        refused (no scenario is invented at request time) — operators see
+        the chip catalogue and pick one explicitly.
+      </p>
 
       <p className="help-callout">
         <strong>Where to start:</strong> for a quick read-only lookup against a
@@ -302,38 +298,11 @@ function Shapes() {
         When in doubt, ship HITL first; you can promote a scenario to autonomous later by adding a guardrail and flipping the flag, but you can't easily un-execute an autonomous mistake.
       </p>
 
-      <h3>Two runtime fallback shapes  (created on the fly)</h3>
-      <p>
-        The composer has two opt-in checkboxes below the prompt. Each turns
-        the agent's normal "no scenario matched" outcome into a different
-        runtime-generated scenario instead of a dead end.
-      </p>
-
-      <h4>Ontology lookup — <code>SC-ADHOC-*</code></h4>
-      <p>
-        Triggered when <em>Try ontology lookup if no scenario matches</em> is
-        on. The LLM picks an ontology class from the registered ontologies,
-        extracts a <code>where</code> filter from the prompt (using sample
-        values from the actual data, so "Dutch suppliers" becomes{" "}
-        <code>country: NL</code>), and runs a one-shot{" "}
-        <code>ontology_queries</code> stage. Autonomous and read-only.
-      </p>
-
-      <h4>Natural-language (NL) write action — <code>SC-NLWRITE-*</code></h4>
-      <p>
-        Triggered when <em>Try write action if no scenario or ontology
-        matches</em> is on. The LLM picks an entry from the action registry
-        (typed write ops like <code>sql_update</code> /{" "}
-        <code>http_request</code>), fills its arguments from the prompt, and
-        drafts an action. HITL by default — the reviewer sees the proposed
-        write and the executor only runs after approve.
-      </p>
-
       <p className="help-callout">
-        These two scenarios aren't authored; they're materialised at request
-        time by <code>backend/auto_scenario.py</code>. They share the same
-        envelope/lineage machinery as built-in scenarios, so the audit trail
-        looks identical.
+        The classifier only ever picks from the closed set of authored
+        scenarios (built-in + persisted <code>SC-ONTO-*</code>). There is no
+        runtime "guess" path — if no scenario matches and the classifier
+        can't suggest one, the case is refused.
       </p>
     </>
   );
@@ -741,18 +710,6 @@ function Lifecycle() {
         </li>
       </ul>
 
-      <h4>Runtime fallback — <code>SC-ADHOC-*</code> and <code>SC-NLWRITE-*</code></h4>
-      <p>
-        Materialised at request time by the composer's two opt-in fallback
-        toggles (see the <strong>HITL vs autonomous</strong> tab). Ephemeral —
-        they're attached to one case and aren't stored as a chip on the
-        console.
-      </p>
-      <ul>
-        <li><code>SC-ADHOC-*</code> — autonomous, read-only ontology query.</li>
-        <li><code>SC-NLWRITE-*</code> — HITL by default; executor only runs after reviewer approve.</li>
-      </ul>
-
       <h3>Quick reference</h3>
       <table className="help-fields">
         <thead>
@@ -760,15 +717,14 @@ function Lifecycle() {
             <th>Action</th>
             <th>Built-in</th>
             <th>SC-ONTO</th>
-            <th>SC-ADHOC / SC-NLWRITE</th>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Persisted as YAML on disk</td><td>✅</td><td>✅</td><td>❌ (per-case only)</td></tr>
-          <tr><td>Edit title / keywords / clarifier in UI</td><td>✅</td><td>✅</td><td>n/a</td></tr>
-          <tr><td>Edit structural fields in UI</td><td>❌ (edit YAML)</td><td>❌</td><td>n/a</td></tr>
-          <tr><td>Remove via Edit modal</td><td>❌</td><td>✅</td><td>n/a</td></tr>
-          <tr><td>Remove via API <code>DELETE</code></td><td>❌ (400)</td><td>✅</td><td>n/a</td></tr>
+          <tr><td>Persisted as YAML on disk</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Edit title / keywords / clarifier in UI</td><td>✅</td><td>✅</td></tr>
+          <tr><td>Edit structural fields in UI</td><td>❌ (edit YAML)</td><td>❌</td></tr>
+          <tr><td>Remove via Edit modal</td><td>❌</td><td>✅</td></tr>
+          <tr><td>Remove via API <code>DELETE</code></td><td>❌ (400)</td><td>✅</td></tr>
         </tbody>
       </table>
 
@@ -791,8 +747,6 @@ function Lifecycle() {
           <tr><td><strong>SC-PP</strong></td><td>Scenario, Planning &amp; Procurement domain.</td></tr>
           <tr><td><strong>SC-LN</strong></td><td>Scenario, Logistics &amp; Network domain.</td></tr>
           <tr><td><strong>SC-ONTO</strong></td><td>Scenario generated from an Ontology class (autonomous lookup).</td></tr>
-          <tr><td><strong>SC-ADHOC</strong></td><td>Ad-hoc runtime ontology lookup (composer fallback).</td></tr>
-          <tr><td><strong>SC-NLWRITE</strong></td><td>Runtime natural-language write action (HITL-gated composer fallback).</td></tr>
         </tbody>
       </table>
 

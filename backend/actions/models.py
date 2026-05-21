@@ -107,11 +107,3 @@ class ActionExecutionResult(BaseModel):
     args: dict[str, Any] = Field(default_factory=dict)
 
 
-class NLActionMatch(BaseModel):
-    """What the LLM picker returns when it finds an action that fits
-    the operator's prompt."""
-
-    action_id: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    confidence: float = 0.0
-    rationale: str = ""

@@ -1,18 +1,16 @@
 import { useEffect, useState } from "react";
 import * as api from "../api";
-import { ActionSummary, NLActionPreview } from "../api";
+import { ActionSummary } from "../api";
 
 // Inline panel mounted inside the Knowledge modal's Actions tab.
-// Lists registered write actions, lets the operator upload a new one
-// (raw JSON document for now — YAML editor is a follow-up), preview a
-// natural-language pick, and delete non-default actions.
+// Lists registered write actions and lets the operator remove non-default
+// ones. Write actions are referenced by hand-authored scenarios via an
+// `_executor` block; the orchestrator runs them on autonomous or
+// post-approval paths.
 
 export function ActionsPanel() {
   const [actions, setActions] = useState<ActionSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<NLActionPreview | null>(null);
-  const [previewPrompt, setPreviewPrompt] = useState("");
 
   const refresh = async () => {
     try {
@@ -24,20 +22,6 @@ export function ActionsPanel() {
   useEffect(() => {
     refresh();
   }, []);
-
-  const onPreview = async () => {
-    setError(null);
-    setBusy(true);
-    setPreview(null);
-    try {
-      const p = await api.previewNLAction(previewPrompt);
-      setPreview(p);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const onDelete = async (id: string) => {
     if (!confirm(`Remove action "${id}"?`)) return;
@@ -52,12 +36,10 @@ export function ActionsPanel() {
   return (
     <div style={{ padding: 16, overflowY: "auto" }}>
       <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12, lineHeight: 1.5 }}>
-        Write actions are structured operations the agent can take when an
-        operator's prompt doesn't match a scenario. They're picked from
-        natural language by the LLM, sent for human review by default,
-        and only executed once the reviewer approves. Toggle{" "}
-        <strong>Try write action…</strong> on the operator console
-        composer to enable the fallback.
+        Registered write actions used by hand-authored scenarios. A
+        scenario opts in by adding an <code>_executor</code> block naming
+        an action id and its arguments; the orchestrator runs the named
+        executor on autonomous or post-approval paths.
       </div>
 
       {error && <div className="ds-error">{error}</div>}
@@ -119,66 +101,6 @@ export function ActionsPanel() {
           </div>
         ))}
       </div>
-
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-        Preview an NL pick
-      </div>
-      <div style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 6 }}>
-        Type a prompt to see which action the picker would propose plus
-        the extracted arguments. Nothing runs — this is a sanity check
-        before enabling the composer fallback.
-      </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-        <input
-          value={previewPrompt}
-          onChange={(e) => setPreviewPrompt(e.target.value)}
-          placeholder="e.g. reattribute case PR-2026-Q1-088 to compliance.officer.kchen"
-          disabled={busy}
-          style={{ flex: 1, fontSize: 12, padding: "4px 6px" }}
-        />
-        <button onClick={onPreview} disabled={busy || !previewPrompt.trim() || actions.length === 0}>
-          {busy ? "…" : "Preview"}
-        </button>
-      </div>
-      {preview && (
-        <div
-          style={{
-            padding: 10,
-            border: "1px solid var(--cyan)",
-            background: "rgba(0,201,183,0.05)",
-            borderRadius: 4,
-            fontSize: 12,
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>
-            Picked: <code>{preview.action_id}</code> ({preview.title})
-          </div>
-          <div style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 4 }}>
-            executor=<code>{preview.executor_kind}</code>
-            {preview.target_source && (
-              <> · target=<code>{preview.target_source}</code></>
-            )}{" "}
-            · confidence={(preview.confidence * 100).toFixed(0)}%
-            {preview.hitl ? " · HITL" : " · auto-execute"}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--ink-soft)", marginBottom: 4 }}>
-            <em>{preview.rationale}</em>
-          </div>
-          <pre
-            style={{
-              fontSize: 11,
-              padding: 6,
-              background: "white",
-              border: "1px solid var(--border)",
-              borderRadius: 3,
-              margin: 0,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {JSON.stringify(preview.arguments, null, 2)}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }

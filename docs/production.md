@@ -177,8 +177,6 @@ tackle first:
 | **No RDF/Turtle ontology import** | Teams with `.owl` ontologies must convert to YAML/JSON first | Add an `rdflib`-backed importer to `backend/ontology/loader.py` |
 | **No SHACL validation on ontologies** | Bad ontology shapes only surface at query time | Add `pyshacl` validation on upload |
 | **Neo4j connector deferred** | Graph queries unsupported; relational + vector only | Add a `kind: neo4j` connector — the binding-driven contract makes this a small lift now |
-| **LLM is generous → fallback rarely fires** | With gpt-4/5 the scenario classifier matches even semi-related prompts, so the NL→ontology fallback in the composer is a safety net, not a primary path | Tune `interpret_prompt`'s confidence threshold or add a "force ontology mode" toggle for ad-hoc data exploration |
-| **No NL→write-action support** | The fallback is read-only; no NL way to drive an HITL action | Wire a second classifier path that synthesizes an HITL scenario for write actions, gated behind explicit operator opt-in |
 
 The framework's `LineageRecorder` Protocol is designed to be swapped
 for a structured logger that emits to your governance audit store —

@@ -27,7 +27,7 @@ export function LoginScreen({ onAuth }: { onAuth: (u: AuthUser) => void }) {
   return (
     <div className="login-shell">
       <div className="login-card">
-        <div className="login-eyebrow">tcs · agentic · hitl</div>
+        <div className="login-eyebrow">TCS Knowledge Fabric</div>
         <div className="login-title">
           {mode === "login" ? "Sign in" : "Create an account"}
         </div>

@@ -33,19 +33,12 @@ export async function getCase(caseId: string): Promise<CaseFull> {
   return jsonOrThrow(await authedFetch(`/api/cases/${caseId}`));
 }
 
-export async function createCase(
-  prompt: string,
-  opts?: { try_ontology_fallback?: boolean; try_action_fallback?: boolean }
-): Promise<CreateCaseResponse> {
+export async function createCase(prompt: string): Promise<CreateCaseResponse> {
   return jsonOrThrow(
     await authedFetch("/api/cases", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        try_ontology_fallback: opts?.try_ontology_fallback ?? false,
-        try_action_fallback: opts?.try_action_fallback ?? false,
-      }),
+      body: JSON.stringify({ prompt }),
     })
   );
 }
@@ -573,17 +566,6 @@ export interface ActionSummary {
   default: boolean;
 }
 
-export interface NLActionPreview {
-  action_id: string;
-  title: string;
-  executor_kind: string;
-  target_source: string | null;
-  arguments: Record<string, unknown>;
-  confidence: number;
-  rationale: string;
-  hitl: boolean;
-}
-
 export async function listActions(): Promise<ActionSummary[]> {
   return jsonOrThrow(await authedFetch("/api/actions"));
 }
@@ -608,15 +590,5 @@ export async function uploadActionRaw(args: {
 export async function deleteAction(id: string): Promise<void> {
   await jsonOrThrow(
     await authedFetch(`/api/actions/${id}`, { method: "DELETE" })
-  );
-}
-
-export async function previewNLAction(prompt: string): Promise<NLActionPreview> {
-  return jsonOrThrow(
-    await authedFetch("/api/actions/preview-nl", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt }),
-    })
   );
 }

@@ -34,10 +34,7 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
   return (
     <div className="statusbar">
       <div className="brand">
-        <div className="brand-mark">
-          <em>tcs</em>agentic<em>·</em>hitl
-        </div>
-        <div className="brand-tag">Knowledge Context Framework</div>
+        <div className="brand-mark">TCS Knowledge Fabric</div>
       </div>
 
       <div className="status-meta">

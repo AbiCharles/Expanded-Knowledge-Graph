@@ -23,17 +23,8 @@ def list_scenarios(request: Request) -> list[dict]:
     rows: list[dict] = []
     for sc in state.scenarios.all():
         sid = sc["id"]
-        # Phase 3.D ad-hoc ontology + Phase 3.E NL-write scenarios live
-        # in-memory only and are tied to a single case. Hide them from the
-        # operator-console chip list — they're not catalog entries.
-        if (
-            sc.get("_adhoc")
-            or sc.get("_nlwrite")
-            or sid.startswith("SC-ADHOC-")
-            or sid.startswith("SC-NLWRITE-")
-        ):
-            continue
         h = history.get(sid, {})
+        source_kinds, source_ids = _backing_sources_for(sc, state)
         rows.append(
             {
                 "id": sid,
@@ -47,11 +38,43 @@ def list_scenarios(request: Request) -> list[dict]:
                 "approve_count": int(h.get("approve_count", 0)),
                 "reject_count": int(h.get("reject_count", 0)),
                 "auto_count": int(h.get("auto_count", 0)),
+                "source_kinds": source_kinds,
+                "source_ids": source_ids,
             }
         )
     # Newest first by file mtime so freshly added/edited chips float up.
     rows.sort(key=lambda r: r["mtime"] or 0, reverse=True)
     return rows
+
+
+def _backing_sources_for(sc: dict, state) -> tuple[list[str], list[str]]:
+    """Walk a scenario's ontology_queries blocks and return the unique
+    source kinds (csv, neo4j, …) plus source ids that back the named classes.
+    Empty lists for scenarios that have no ontology_queries (hand-authored
+    fact-only chips).
+    """
+    kind_by_source = {spec.id: spec.kind for spec in state.data_sources.specs()}
+    kinds: list[str] = []
+    ids: list[str] = []
+    seen_ids: set[str] = set()
+    seen_kinds: set[str] = set()
+    for stage in (sc.get("stages") or {}).values():
+        for oq in (stage.get("ontology_queries") or []):
+            mapping = state.ontologies.get_mapping(oq.get("ontology"))
+            cm = mapping.for_class(oq.get("class")) if mapping else None
+            if cm is None:
+                continue
+            for binding in cm.sources:
+                sid = binding.data_source
+                if sid in seen_ids:
+                    continue
+                seen_ids.add(sid)
+                ids.append(sid)
+                kind = kind_by_source.get(sid)
+                if kind and kind not in seen_kinds:
+                    seen_kinds.add(kind)
+                    kinds.append(kind)
+    return kinds, ids
 
 
 def _scenario_run_history(state) -> dict[str, dict[str, Any]]:

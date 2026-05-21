@@ -1,4 +1,4 @@
-"""Action-registry endpoints — manage write actions + preview NL picks.
+"""Action-registry endpoints — manage write actions used by hand-authored scenarios.
 
 Mirrors `backend/api/ontologies.py`. Mutations require admin (default
 seeded actions refuse delete).
@@ -10,12 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from ..actions import (
-    ActionError,
-    NLActionParseError,
-    parse_action,
-    parse_nl_action,
-)
+from ..actions import ActionError, parse_action
 
 router = APIRouter(tags=["actions"])
 
@@ -39,10 +34,6 @@ class RawActionIn(BaseModel):
 
     content: Optional[str] = None
     document: Optional[dict[str, Any]] = None
-
-
-class PreviewNLActionIn(BaseModel):
-    prompt: str
 
 
 # =============================================================================
@@ -118,26 +109,3 @@ def delete_action(action_id: str, request: Request):
         # Default actions refuse deletion.
         raise HTTPException(400, str(exc))
     return {"id": action_id, "removed": True}
-
-
-# =============================================================================
-# Preview (no execution) — operator can sanity-check what the LLM picked
-# =============================================================================
-@router.post("/actions/preview-nl")
-async def preview_nl(body: PreviewNLActionIn, request: Request):
-    state = request.app.state.app_state
-    try:
-        match = await parse_nl_action(body.prompt, state.actions, state.llm)
-    except NLActionParseError as exc:
-        raise HTTPException(400, str(exc))
-    action = state.actions.require(match.action_id)
-    return {
-        "action_id": match.action_id,
-        "title": action.title,
-        "executor_kind": action.executor.kind,
-        "target_source": getattr(action.executor, "data_source", None),
-        "arguments": match.arguments,
-        "confidence": match.confidence,
-        "rationale": match.rationale,
-        "hitl": action.hitl,
-    }

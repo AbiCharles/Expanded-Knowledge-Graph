@@ -1,7 +1,8 @@
-"""NL→write-action layer: action registry + LLM picker + executors.
+"""Write-action layer: action registry + executors.
 
-See backend/actions/models.py for the data model and
-docs/ontology.md (TODO: docs/actions.md) for the design rationale.
+See backend/actions/models.py for the data model. Actions are referenced
+by hand-authored scenarios via an `_executor` block; the orchestrator
+invokes the matching executor when the reviewer approves.
 """
 from .executors import execute_action
 from .loader import ActionError, ActionRegistry, parse_action
@@ -10,10 +11,8 @@ from .models import (
     ActionArgument,
     ActionExecutionResult,
     HttpRequestExecutor,
-    NLActionMatch,
     SqlUpdateExecutor,
 )
-from .nl_picker import NLActionParseError, parse_nl_action
 
 __all__ = [
     "Action",
@@ -22,10 +21,7 @@ __all__ = [
     "ActionExecutionResult",
     "ActionRegistry",
     "HttpRequestExecutor",
-    "NLActionMatch",
-    "NLActionParseError",
     "SqlUpdateExecutor",
     "execute_action",
     "parse_action",
-    "parse_nl_action",
 ]

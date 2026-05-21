@@ -35,7 +35,7 @@ export function KnowledgeModal({
                 ? "Connections & uploads"
                 : tab === "ontologies"
                   ? "Schema + source mappings"
-                  : "Write actions (NL → reviewer-approved execution)"}
+                  : "Write actions"}
             </div>
           </div>
           <button className="teams-close" onClick={onClose}>

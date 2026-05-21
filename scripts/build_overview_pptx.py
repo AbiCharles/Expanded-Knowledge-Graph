@@ -5,7 +5,8 @@ Slide 1 — Audiences and surfaces  (Operator / Reviewer / Engineer, each with
 Slide 2 — Architecture: diagram + mental model  (existing diagram on the left,
           the three nouns + three verbs stacked on the right)
 Slide 3 — How scenarios · ontology · actions · KnowledgeResolver interact
-          (mini-diagram of the four pieces, captions for each, fallback panel)
+          (mini-diagram of the four pieces, captions for each, deterministic-
+          classification panel — the LLM only picks from the closed set)
 Slide 4 — How a request flows through the system  (numbered walk-through of
           one operator prompt, tagging which layer activates at each step)
 
@@ -457,7 +458,7 @@ def slide_components(prs):
         _set_run(p.add_run(), c["tie"], size=8.5, italic=True, color=GREY,
                  name="Consolas")
 
-    # ----- Bottom right: fallback chain panel -----
+    # ----- Bottom right: deterministic-classification panel -----
     fb_left = Inches(8.15)
     fb_top = Inches(5.85)
     fb_w = Inches(5.1)
@@ -465,19 +466,19 @@ def slide_components(prs):
     tf = _add_text_box(slide, fb_left, fb_top, fb_w, fb_h,
                        fill=LIGHT_GREY, border=True)
     p = tf.paragraphs[0]
-    _set_run(p.add_run(), "Three composer paths  (one prompt, three lanes)",
+    _set_run(p.add_run(), "Deterministic classification",
              size=11, bold=True, color=NAVY)
     p.space_after = Pt(3)
 
     _bullet(tf,
-            "Scenario match — Scenario + Ontology + Resolver  (chip path)",
-            size=10, bold_lead=True)
+            "LLM picks from the closed set of authored scenarios only",
+            size=10, bold_lead=False)
     _bullet(tf,
-            "Ontology lookup — Ontology + Resolver only  (no scenario; opt-in fallback)",
-            size=10, bold_lead=True)
+            "No match → case is refused; operator picks a chip explicitly",
+            size=10, bold_lead=False)
     _bullet(tf,
-            "NL write action — Action + executor + HITL  (no scenario; opt-in fallback)",
-            size=10, bold_lead=True)
+            "Write actions run only via hand-authored `_executor` blocks (no NL invention)",
+            size=10, bold_lead=False)
 
     # Footer (left side, under the diagram)
     tf = _add_text_box(slide, Inches(0.3), Inches(7.0), Inches(7.7), Inches(0.45))

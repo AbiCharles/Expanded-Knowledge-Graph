@@ -1,4 +1,4 @@
-# System architecture
+# TCS Knowledge Fabric — system architecture
 
 A reference for engineers working in this codebase. Pairs with
 [overview.md](overview.md) (the non-technical version), [ontology.md](ontology.md)
@@ -99,25 +99,21 @@ see and act on:
   - **Schema introspection** ([backend/ontology/schema_introspect.py](../backend/ontology/schema_introspect.py)) — uniform per-source tables/columns/sample_values across all six connector kinds.
   - **Cypher safety** ([backend/ontology/cypher_safety.py](../backend/ontology/cypher_safety.py)) — `assert_read_only` rejects writes; used by every Cypher path.
 
-- **ActionRegistry** ([backend/actions/loader.py](../backend/actions/loader.py)) — write actions. Each YAML file under [backend/data/actions/](../backend/data/actions/) declares an `Action` with typed `ActionArgument`s and an `Executor` (`sql_update` against SQLite/Postgres or `http_request` against an HTTP source). Default-flagged actions refuse delete. Composes with:
-  - **NL picker** ([backend/actions/nl_picker.py](../backend/actions/nl_picker.py)) — `parse_nl_action(prompt, registry, llm)` → returns action_id + extracted arguments.
+- **ActionRegistry** ([backend/actions/loader.py](../backend/actions/loader.py)) — write actions. Each YAML file under [backend/data/actions/](../backend/data/actions/) declares an `Action` with typed `ActionArgument`s and an `Executor` (`sql_update` against SQLite/Postgres or `http_request` against an HTTP source). Default-flagged actions refuse delete. Hand-authored scenarios opt in by adding an `_executor: {action_id, arguments}` block. Composes with:
   - **Executors** ([backend/actions/executors.py](../backend/actions/executors.py)) — `execute_action(action, args, sources)` dispatches on `executor.kind`; returns an `ActionExecutionResult` (never raises).
 
 #### Scenario plane
 
 - **ScenarioRegistry** ([backend/scenario_loader.py](../backend/scenario_loader.py)) — loads `*.yaml` from [backend/scenarios/](../backend/scenarios/). Tracks per-scenario file mtime so the chip list sorts newest-first. Validates that no scenario uses the removed `queries:` block (raises `ScenarioSchemaError`).
 - **Built-in scenarios** — 6 hand-authored YAMLs (SC-TC-007/008, SC-PP-007/AUTO-014, SC-LN-002/STATUS-009).
-- **Generated scenarios** — three families, each in-memory or persisted with a marker that hides them from the chip list when ephemeral:
-  - `SC-ONTO-<ontology>-<class>` — opt-in via Mappings tab "Generate lookup chip" button. Persisted. Has `_filter_from_prompt: true` so the orchestrator merges prompt-extracted filters into its empty `where: {}`.
-  - `SC-ADHOC-<case_id>` — synthesized in-memory when the operator's NL→ontology fallback fires (`try_ontology_fallback=true` + no scenario match).
-  - `SC-NLWRITE-<case_id>` — synthesized in-memory when the NL→action fallback fires (`try_action_fallback=true` + no scenario match + no ontology match).
-- **Auto-scenario builder** ([backend/auto_scenario.py](../backend/auto_scenario.py)) — `make_ontology_scenario`, `make_adhoc_ontology_scenario`, `make_nlwrite_action_scenario`.
+- **Generated scenarios** — `SC-ONTO-<ontology>-<class>`, opt-in via the Mappings tab "Generate lookup chip" button. Persisted as YAML. Has `_filter_from_prompt: true` so the orchestrator merges prompt-extracted filters into its empty `where: {}`.
+- **Auto-scenario builder** ([backend/auto_scenario.py](../backend/auto_scenario.py)) — exposes `make_ontology_scenario` (no runtime-fallback builders; the classifier never invents scenarios).
 
 #### Orchestrator + binders
 
 - **AgentRuntime** ([backend/agent_runtime.py](../backend/agent_runtime.py)) — `interpret_prompt(text)` → LLM picks scenario from catalog (or keyword fallback under `LLM_PROVIDER=fake`); `draft_action(scenario)` → instantiates the framework's `AgentAction` from the scenario's `action_payload`.
 - **Binders** ([backend/binders.py](../backend/binders.py)) — three thin wrappers around `_facts_from_stage()` which reads each stage's `facts:` (inline) and `ontology_queries:` (live). Honours `:param` substitution from `action.payload` and merges `__prompt_filters__` for `_filter_from_prompt: true` chips.
-- **Orchestrator** ([backend/orchestrator.py](../backend/orchestrator.py)) — `run_case(state, case)` is the coroutine spawned on confirm. Stages: agent intake → proposal (with optional prompt-filter pre-extraction) → policy decision (auto-approve vs HITL) → review (await reviewer) → optional executor invocation (for SC-NLWRITE-*) → emit "decided" SSE event → close stream.
+- **Orchestrator** ([backend/orchestrator.py](../backend/orchestrator.py)) — `run_case(state, case)` is the coroutine spawned on confirm. Stages: agent intake → proposal (with optional prompt-filter pre-extraction) → policy decision (auto-approve vs HITL) → review (await reviewer) → optional executor invocation (for scenarios that wire an `_executor` block) → emit "decided" SSE event → close stream.
 
 #### State + persistence + auth
 
@@ -133,12 +129,12 @@ see and act on:
 | Router | Purpose |
 |---|---|
 | auth | login, register, logout, change-password, /me |
-| cases | create (with two opt-in fallback flags), confirm, cancel, replay, relink, delete, get, events (SSE) |
+| cases | create, confirm, cancel, replay, relink, delete, get, events (SSE) |
 | decisions | queue, post-decision (the reviewer-side action) |
-| scenarios | list (mtime-sorted, `_adhoc`/`_nlwrite` filtered), autofill |
+| scenarios | list (mtime-sorted), autofill |
 | datasources | list, add, upload-csv, test, schema, run-query, run-cypher, test-postgres, test-neo4j |
 | ontologies | upload, list, get, delete, classes, mappings (get/put), suggest-mappings, generate-chip per class, structured query, NL query |
-| actions | list, get, upload, delete, preview-nl |
+| actions | list, get, upload, delete |
 | metrics | summary (totals, decisions-by-scenario, top rejection reasons) |
 | exports | CSV download of cases + lineage |
 
@@ -147,7 +143,7 @@ see and act on:
 React + Vite + TypeScript. Single-page; everything mounts under `App.tsx`.
 
 - **StatusBar** — top bar with one **Knowledge** button (collapses Data sources + Ontologies + Actions into one modal with three tabs), Metrics button, Scenarios guide, role pill, logout.
-- **Console** — left pane: chat composer with two opt-in fallback toggles (ontology + write-action), suggested-prompt chips sorted newest-first, history view.
+- **Console** — left pane: chat composer, suggested-prompt chips sorted newest-first, history view.
 - **FlowStage** — middle pane: live four-stage envelope renderer (intake → proposal → review → execute), updated via SSE.
 - **LineagePanel** — right pane: append-only event log per case.
 - **KnowledgeModal** + **ActionsPanel** + **OntologyModal** + **DataSourcesModal** — three-tab knowledge management.
@@ -165,12 +161,13 @@ Operator types prompt
       ▼
 POST /api/cases ── AgentRuntime.interpret_prompt ──┐
       │                                            ▼
-      │                                   1. Scenario classifier (LLM)
-      │                                   2. NL→ontology fallback (opt-in)
-      │                                   3. NL→action fallback (opt-in)
+      │                                   Scenario classifier (LLM)
+      │                                   picks from the closed set of
+      │                                   authored scenarios — refuses
+      │                                   when nothing matches.
       │
       ▼
-CaseRecord {phase: "awaiting_clarification"}
+CaseRecord {phase: "awaiting_clarification" or "cancelled"}
       │  (UI shows clarifier + Did-You-Mean candidates)
       ▼
 POST /api/cases/{id}/confirm ── orchestrator.run_case ──┐
@@ -186,8 +183,8 @@ POST /api/cases/{id}/confirm ── orchestrator.run_case ──┐
                                        │                            │
                                        ▼                            ▼
                             _finalise_autonomous          submit_for_review
-                            (run executor if               (writes ticket to
-                             SC-NLWRITE && hitl=false,     queue, awaits
+                            (run executor if scenario      (writes ticket to
+                             wires `_executor` block,      queue, awaits
                              emit auto_approved)            decision_event)
                                                                    │
                                                                    ▼
@@ -196,42 +193,25 @@ POST /api/cases/{id}/confirm ── orchestrator.run_case ──┐
                                                                    ▼
                                                        collect_decision +
                                                        _maybe_run_executor
-                                                       (SC-NLWRITE on approve)
+                                                       (if scenario wires
+                                                        `_executor` on approve)
                                                                    │
                                                                    ▼
                                                        SSE "decided" + close
 ```
 
-### B. The fallback chain (in `create_case`)
+### B. Classification (in `create_case`)
 
 ```
 prompt
   │
   ▼
-1. classifier ── matched? ──yes──▶ return scenario (chip wins)
-  │ no
-  ▼
-2. try_ontology_fallback ON?
-  │ yes ── parse_nl_query against each ontology ──┐
-  │                                                ▼
-  │                                        class has mapping?
-  │                                                │ yes
-  │                                                ▼
-  │                              synthesize SC-ADHOC-<case_id>
-  │                              (autonomous, in-memory)
-  │ no  / failed
-  ▼
-3. try_action_fallback ON?
-  │ yes ── parse_nl_action against action registry ──┐
-  │                                                   ▼
-  │                                          action found + args extracted?
-  │                                                   │ yes
-  │                                                   ▼
-  │                                  synthesize SC-NLWRITE-<case_id>
-  │                                  (HITL by default, in-memory)
-  │ no
-  ▼
-return scenario_id=None (UI shows "I'm not sure I can act on that")
+classifier (LLM)
+  │
+  ├── matched scenario_id ─▶ return scenario (chip wins, operator confirms)
+  │
+  └── no match              ─▶ case `cancelled` (no scenario invented)
+                                operator picks a chip explicitly
 ```
 
 ### C. Ontology resolution (per query)
@@ -289,7 +269,7 @@ for each SourceBinding:
 
 ## Test gates
 
-- **Backend:** 124 pytest cases across 8 files (auth, cases, scenarios+sources, neo4j, nl-writes, ontology loader/mapper/nl_query/resolver, ontology fallback). FakeLLM + mocked Neo4j driver — no live infra needed.
+- **Backend:** pytest cases across auth, cases, scenarios+sources, neo4j, and ontology loader/mapper/nl_query/resolver. FakeLLM + mocked Neo4j driver — no live infra needed.
 - **Framework:** 90 framework tests in [hitl-context/tests/verify_package.py](../hitl-context/tests/verify_package.py).
 - **Frontend:** `npx tsc --noEmit` plus `npm run build` for bundle check.
 

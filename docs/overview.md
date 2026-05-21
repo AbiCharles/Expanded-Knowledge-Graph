@@ -1,4 +1,4 @@
-# System overview
+# TCS Knowledge Fabric — system overview
 
 A short, non-technical walkthrough of what the system is, who uses it,
 and how a request flows from "operator types something" to "action
@@ -112,9 +112,7 @@ the orchestrator picks the case back up where it left off.
 ### Operator-facing
 
 - **Suggested-prompt chips** sorted newest-first so freshly added recipes surface to the top.
-- **Two opt-in fallback toggles** below the composer:
-  - *Try ontology lookup if no scenario matches* — converts a prompt like *"show me Dutch suppliers"* into a one-shot read-only data lookup, no scenario authoring needed.
-  - *Try write action if no scenario or ontology matches* — picks a structured write action from a catalog, fills its arguments from the prompt, sends to a human reviewer for approval before running.
+- **Deterministic classification** — the LLM only picks from the closed set of authored scenarios (built-in + persisted `SC-ONTO-*` lookup chips). If nothing matches, the case is refused with a clear message rather than guessed at.
 - **Live envelope view** — the operator can watch each stage's bound facts populate as the agent works.
 - **History panel** — past conversations, search, replay with a forced reviewer decision (so authors can compare "what would have happened if approved instead of rejected").
 
@@ -157,7 +155,7 @@ the orchestrator picks the case back up where it left off.
 
 - **214 automated tests passing** (124 backend + 90 framework).
 - **Frontend type-check clean** + **production bundle builds**.
-- **Live demo verified** through every chip + the Neo4j graph + the ontology Query playground + the NL write-action preview.
+- **Live demo verified** through every chip + the Neo4j graph + the ontology Query playground.
 
 ---
 

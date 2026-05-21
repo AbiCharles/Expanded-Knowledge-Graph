@@ -149,12 +149,9 @@ export default function App() {
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
-  const onSendPrompt = async (
-    text: string,
-    opts?: { try_ontology_fallback?: boolean; try_action_fallback?: boolean }
-  ) => {
+  const onSendPrompt = async (text: string) => {
     try {
-      const result = await api.createCase(text, opts);
+      const result = await api.createCase(text);
       setActiveId(result.case_id);
       refreshCases();
     } catch (e) {

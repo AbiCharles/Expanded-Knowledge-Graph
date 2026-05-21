@@ -24,6 +24,13 @@ export interface ScenarioRow {
   approve_count?: number;
   reject_count?: number;
   auto_count?: number;
+  // Unique backing-source kinds (csv | sqlite | postgres | http |
+  // vector_store | neo4j) and source ids that the scenario's
+  // ontology_queries resolve through. Empty for hand-authored fact-only
+  // chips. Surfaced as a badge on the chip so operators can tell at a
+  // glance which physical store(s) a chip routes to.
+  source_kinds?: string[];
+  source_ids?: string[];
 }
 
 export interface FactRow {

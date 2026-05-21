@@ -20,7 +20,7 @@ export function TeamsCardModal({
         <div className="teams-header">
           <div className="teams-icon">T</div>
           <div>
-            <div className="teams-app-name">TCS Agentic Platform · Reviewer</div>
+            <div className="teams-app-name">TCS Knowledge Fabric · Reviewer</div>
             <div className="teams-channel">{sc.teams_channel}</div>
           </div>
           <button className="teams-close" onClick={onClose}>

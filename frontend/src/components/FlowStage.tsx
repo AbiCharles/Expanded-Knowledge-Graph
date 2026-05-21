@@ -28,7 +28,7 @@ export function FlowStage({ active, role, onOpenReview }: Props) {
     <main className={`flow-stage${role === "reviewer" ? " reviewer-mode" : ""}`}>
       <div className="flow-header">
         <div className={`flow-eyebrow${role === "reviewer" ? " reviewer" : ""}`}>
-          <span>{role === "reviewer" ? "Reviewer view · TCS Agentic Platform" : "Live Demo · HITL Context Framework"}</span>
+          <span>{role === "reviewer" ? "Reviewer view · TCS Knowledge Fabric" : "Live Demo · TCS Knowledge Fabric"}</span>
           {stepCounter && <span className="step-counter">{stepCounter}</span>}
         </div>
         <h1 className="flow-title">

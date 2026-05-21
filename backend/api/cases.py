@@ -27,16 +27,6 @@ class CreateCaseIn(BaseModel):
     """Body for POST /api/cases — operator's natural-language request."""
 
     prompt: str
-    # Phase 3.D: when true, and the scenario classifier finds no match,
-    # try parsing the prompt as an ontology NL query and synthesize a
-    # one-shot autonomous SC-ADHOC-* scenario for it. Off by default so
-    # existing behaviour is preserved.
-    try_ontology_fallback: bool = False
-    # Phase 3.E: when true, and the prior steps (classifier + ontology
-    # fallback if enabled) found nothing, try the NL action picker. If
-    # an action matches, synthesize an HITL SC-NLWRITE-* scenario whose
-    # reviewer-approval phase invokes the action's executor.
-    try_action_fallback: bool = False
 
 
 class CandidateOut(BaseModel):
@@ -89,68 +79,6 @@ async def create_case(
 
     case_id = f"case-{uuid.uuid4().hex[:10]}"
 
-    # Phase 3.D ad-hoc ontology fallback: when the classifier found no
-    # scenario AND the operator opted in, try the NL→ontology parser
-    # against every loaded ontology. First class with a non-empty mapping
-    # wins. The resulting scenario is registered in-memory only (persist
-    # =False, marker `_adhoc: True`) and is filtered out of the chip list.
-    # Note: `interpreted.candidates` may still be populated (the classifier
-    # surfaces a generic catalog on no-match), so `scenario_id is None` is
-    # the load-bearing signal.
-    if payload.try_ontology_fallback and interpreted.scenario_id is None:
-        match = await _try_ontology_fallback(state, payload.prompt)
-        if match is not None:
-            from ..auto_scenario import (
-                adhoc_scenario_id_for,
-                make_adhoc_ontology_scenario,
-            )
-
-            adhoc_id = adhoc_scenario_id_for(case_id)
-            scenario_dict = make_adhoc_ontology_scenario(
-                case_id=case_id,
-                ontology_id=match["ontology_id"],
-                class_name=match["class"],
-                where=match["where"],
-                purpose=match["purpose"],
-                prompt=payload.prompt,
-            )
-            state.scenarios.register(scenario_dict, persist=False)
-            interpreted = type(interpreted)(
-                scenario_id=adhoc_id,
-                interpreted_as=scenario_dict["interpreted_as"],
-                clarifying_question=scenario_dict["clarifying_question"],
-                confidence=0.0,  # synthesized — no real classifier confidence
-                candidates=[],
-            )
-
-    # Phase 3.E action fallback: only fires if the scenario classifier AND
-    # the ontology fallback (if enabled) produced nothing. HITL by default
-    # — write actions go through reviewer approval.
-    if payload.try_action_fallback and interpreted.scenario_id is None:
-        action_match = await _try_action_fallback(state, payload.prompt)
-        if action_match is not None:
-            from ..auto_scenario import (
-                make_nlwrite_action_scenario,
-                nlwrite_scenario_id_for,
-            )
-
-            action = state.actions.require(action_match.action_id)
-            scenario_dict = make_nlwrite_action_scenario(
-                case_id=case_id,
-                action=action,
-                arguments=action_match.arguments,
-                rationale=action_match.rationale,
-                prompt=payload.prompt,
-            )
-            state.scenarios.register(scenario_dict, persist=False)
-            interpreted = type(interpreted)(
-                scenario_id=nlwrite_scenario_id_for(case_id),
-                interpreted_as=scenario_dict["interpreted_as"],
-                clarifying_question=scenario_dict["clarifying_question"],
-                confidence=action_match.confidence,
-                candidates=[],
-            )
-
     candidates_payload = [c.model_dump() for c in interpreted.candidates]
     # phase: we keep "awaiting_clarification" as long as we have at least one
     # candidate to suggest — the UI shows top-K buttons when confidence is low.
@@ -175,58 +103,6 @@ async def create_case(
         confidence=interpreted.confidence,
         candidates=[CandidateOut(**c) for c in candidates_payload],
     )
-
-
-async def _try_action_fallback(state, prompt: str):
-    """Try the NL→action picker. Returns the NLActionMatch on success,
-    None when nothing matches (or the registry is empty)."""
-    from ..actions import NLActionParseError, parse_nl_action
-
-    if not state.actions.all():
-        return None
-    try:
-        return await parse_nl_action(prompt, state.actions, state.llm)
-    except NLActionParseError as exc:
-        log.info("action fallback: no match (%s)", exc)
-        return None
-
-
-async def _try_ontology_fallback(state, prompt: str):
-    """Try parsing the prompt against every loaded ontology in turn.
-    Return the first successful parse whose class has at least one source
-    binding in the mapping, as a dict suitable for `make_adhoc_ontology_scenario`.
-    Returns None if no ontology produced a usable match."""
-    from ..ontology import NLParseError, collect_attribute_samples, parse_nl_query
-
-    for onto in state.ontologies.all():
-        # Schema-aware NL parse: collect per-attribute sample values from
-        # the bound sources so the LLM can match human filter forms
-        # ("Dutch") to the actual data shape ("NL").
-        mapping = state.ontologies.get_mapping(onto.id)
-        samples = collect_attribute_samples(onto, mapping, state.data_sources)
-        try:
-            oq = await parse_nl_query(
-                prompt, onto, state.llm, attribute_samples=samples
-            )
-        except NLParseError:
-            continue
-        # Class must be backed by at least one source for the fallback to do
-        # anything useful — otherwise the case would auto-execute and bind
-        # zero facts.
-        cm = mapping.for_class(oq.class_) if mapping else None
-        if cm is None or not cm.sources:
-            log.info(
-                "ontology fallback: %s.%s parsed but has no source bindings; skipping",
-                onto.id, oq.class_,
-            )
-            continue
-        return {
-            "ontology_id": onto.id,
-            "class": oq.class_,
-            "where": oq.where,
-            "purpose": oq.purpose,
-        }
-    return None
 
 
 def _own_case_or_403(state: AppState, case_id: str, user: CurrentUser) -> CaseRecord:

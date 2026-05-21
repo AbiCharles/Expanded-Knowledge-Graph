@@ -1,4 +1,4 @@
-# Scaling the HITL Context Framework
+# Scaling TCS Knowledge Fabric
 
 This document covers four architectural questions that come up once the basic
 HITL flow is working:

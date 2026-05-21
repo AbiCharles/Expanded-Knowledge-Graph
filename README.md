@@ -1,4 +1,4 @@
-# HITL Context Framework
+# TCS Knowledge Fabric
 
 A working full-stack implementation of a Human-In-The-Loop agent runtime
 for enterprise supply-chain workflows. The agent reads a natural-language
@@ -69,15 +69,15 @@ isn't your own laptop.
 - **Ontology layer** — upload a YAML/JSON ontology, the LLM proposes
   column-to-attribute mappings against your registered sources, and
   scenarios bind data via ontology classes instead of hard-coding
-  source ids. Includes an NL→ontology query playground for ad-hoc
-  questions and an opt-in NL→ontology fallback in the operator
-  console. See [docs/ontology.md](docs/ontology.md).
-- **Action registry (NL→write)** — register structured write actions
+  source ids. Includes an NL→ontology query playground in the Knowledge
+  tile for ad-hoc, read-only exploration. See
+  [docs/ontology.md](docs/ontology.md).
+- **Action registry** — register structured write actions
   (SQL UPDATE, HTTP POST/PUT/PATCH/DELETE) with typed argument schemas
-  and an executor; the LLM picks an action from a natural-language
-  prompt, the case goes through HITL review by default, and the
-  executor runs only on reviewer approval. Opt in per-prompt via the
-  composer's "Try write action" toggle.
+  and an executor. Hand-authored scenarios opt in by adding an
+  `_executor: {action_id, arguments}` block; the orchestrator runs the
+  named executor on autonomous or post-approval paths. The classifier
+  never invents an action at request time.
 - **LLM adapter** with three drop-in clients: `OpenAIClient`,
   `AzureOpenAIClient`, `FakeLLMClient`
 - **Top-K classifier suggestions** when prompt confidence is low
@@ -147,15 +147,15 @@ HITL/
 │   │                             (csv, sqlite, postgres, http, vector, neo4j)
 │   ├── ontology/                 OntologyRegistry, mapper, OntologyResolver,
 │   │                             NL→ontology query parser, cypher safety
-│   ├── actions/                  ActionRegistry, NL action picker, executors
+│   ├── actions/                  ActionRegistry + executors
 │   │                             (sql_update, http_request)
 │   ├── persistence/              SQLite-backed CaseStore + LineageRecorder
 │   ├── agent_runtime.py          LLM-driven classification + action drafting
 │   ├── binders.py                Fixture- and source-driven stage binders
 │   │                             (also dispatches `ontology_queries:` blocks)
 │   ├── auth.py                   Hash, JWT, FastAPI dependencies
-│   ├── auto_scenario.py          Generate a chip per ontology class +
-│   │                             synthesize SC-ADHOC / SC-NLWRITE scenarios
+│   ├── auto_scenario.py          Generate a chip per ontology class
+│   │                             (SC-ONTO-<ontology>-<Class>)
 │   ├── orchestrator.py           Drives a case through all 4 nodes;
 │   │                             invokes action executors on approve
 │   └── main.py                   App entry point
@@ -188,7 +188,7 @@ need, keep the framework's typed envelope + binder Protocols.
 | Path | Topic | Audience |
 |---|---|---|
 | [docs/overview.md](docs/overview.md) | What the system is, who uses it, the mental model, an end-to-end walkthrough, what's been built, what's next. | Non-technical / managers / new joiners |
-| [docs/architecture.md](docs/architecture.md) | Big-picture diagram, layer-by-layer breakdown with file paths, the three core flows (case lifecycle, fallback chain, ontology resolution), extension seams. | Engineers |
+| [docs/architecture.md](docs/architecture.md) | Big-picture diagram, layer-by-layer breakdown with file paths, the three core flows (case lifecycle, classification, ontology resolution), extension seams. | Engineers |
 | [docs/scenarios.md](docs/scenarios.md) | Scenario authoring: anatomy, HITL vs autonomous, stage knowledge, full examples, lifecycle (built-in / auto / custom). | Scenario authors |
 | [docs/ontology.md](docs/ontology.md) | Ontology layer: document format, source mappings, `ontology_queries:` block, NL playground, Neo4j connector, authoring tutorial. | Engineers + ontology authors |
 | [docs/scaling.md](docs/scaling.md) | When to add scenarios vs. when to manage growth. Top-K UX, auto-generation patterns, ontology as a scaling lever, the staged roadmap. | Architects |

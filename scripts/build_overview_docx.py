@@ -78,7 +78,7 @@ def render_diagram(out: Path) -> None:
     GREY_FILL = "#f3f5f9"
 
     # Title
-    ax.text(8, 13.05, "HITL agent runtime — system architecture",
+    ax.text(8, 13.05, "TCS Knowledge Fabric — system architecture",
             ha="center", fontsize=13, fontweight="bold", color=NAVY)
 
     # =========== FRONTEND BAND (top) ===========
@@ -112,8 +112,8 @@ def render_diagram(out: Path) -> None:
     _draw_box(ax, 0.4, 5.7, 3.7, 2.0,
               "Agent runtime\n\n"
               "interpret_prompt\n"
-              "(LLM classifier +\n"
-              "NL fallback chain)",
+              "(LLM classifier over\n"
+              "the closed scenario set)",
               fill=AMBER_FILL, fontsize=8)
 
     _draw_box(ax, 4.3, 5.7, 3.7, 2.0,
@@ -281,7 +281,7 @@ def build_doc(out: Path, diagram_png: Path) -> None:
     style.font.size = Pt(11)
 
     # ---- Title ----
-    _h1(doc, "HITL Agent Runtime — System Overview")
+    _h1(doc, "TCS Knowledge Fabric — System Overview")
     sub = doc.add_paragraph()
     r = sub.add_run("A non-technical walkthrough for stakeholders. "
                     "Pairs with docs/architecture.md (engineering view).")
@@ -415,7 +415,7 @@ def build_doc(out: Path, diagram_png: Path) -> None:
     _h3(doc, "Operator-facing")
     _bullets(doc, [
         "Suggested-prompt chips sorted newest-first so freshly added recipes surface to the top.",
-        "Two opt-in fallback toggles below the composer: Try ontology lookup if no scenario matches (one-shot read-only data lookup) and Try write action (HITL-gated NL writes).",
+        "Deterministic classification — the LLM only picks from the closed set of authored scenarios. If nothing matches, the case is refused with a clear message rather than guessed at.",
         "Live envelope view — the operator can watch each stage's bound facts populate as the agent works.",
         "History panel — past conversations, search, replay with a forced reviewer decision.",
     ])
@@ -464,7 +464,7 @@ def build_doc(out: Path, diagram_png: Path) -> None:
     _bullets(doc, [
         "214 automated tests passing (124 backend + 90 framework).",
         "Frontend type-check clean and production bundle builds.",
-        "Live demo verified through every chip + the Neo4j graph + the ontology Query playground + the NL write-action preview.",
+        "Live demo verified through every chip + the Neo4j graph + the ontology Query playground.",
     ])
 
     # ---- Recommended next ----

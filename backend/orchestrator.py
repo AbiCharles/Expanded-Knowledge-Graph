@@ -125,9 +125,9 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     case.rationale = rd.rationale or None
     case.closing_message = _closing_message_for(scenario, case)
 
-    # Phase 3.E: when the case approves an SC-NLWRITE-* scenario, run
-    # the action's executor. Result is stashed on the case so the
-    # detail endpoint and the audit trail both surface it.
+    # If the scenario wires an `_executor` block, run the action on
+    # approve. Result is stashed on the case so the detail endpoint and
+    # the audit trail both surface it.
     if rd.decision.value == "approve":
         _maybe_run_executor(state, case, scenario)
 
@@ -170,8 +170,7 @@ async def _finalise_autonomous(state: AppState, case: CaseRecord, pd: policy.Pol
     case.decision_kind = "auto_execute"
     case.closing_message = scenario.get("closing_message", "")
 
-    # Phase 3.E: an SC-NLWRITE-* scenario with action.hitl=false can
-    # land in the autonomous path. Run the executor here too.
+    # Autonomous scenarios that wire an `_executor` block run here too.
     _maybe_run_executor(state, case, scenario)
 
     state.cases.save(case)
@@ -273,12 +272,17 @@ async def _extract_prompt_filters(
 
 
 def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> None:
-    """If the scenario carries an `_executor` block (synthesized SC-NLWRITE-*
-    scenarios do), look up the action, invoke it, and record the outcome.
+    """If the scenario carries an `_executor` block, look up the action,
+    invoke it, and record the outcome.
 
-    No-op for any other scenario kind. Failures don't raise — they're
-    captured into `case.execution_result` so the audit trail tells the
-    truth and the case completion path continues.
+    Hand-authored scenarios opt in by adding an `_executor: {action_id,
+    arguments}` block. The orchestrator dispatches the named action's
+    executor (sql_update / http_request) on autonomous or post-approval
+    paths. No-op for any scenario that doesn't carry an `_executor` block.
+
+    Failures don't raise — they're captured into `case.execution_result`
+    so the audit trail tells the truth and the case completion path
+    continues.
     """
     executor_cfg = scenario.get("_executor")
     if not executor_cfg:

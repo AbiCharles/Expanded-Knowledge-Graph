@@ -35,6 +35,31 @@ def test_create_case_classifies_known_prompt(client: TestClient, admin_headers: 
     assert body["candidates"]
 
 
+def test_create_case_refuses_unclassifiable_prompt(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """When the classifier can't pick a scenario and produces no candidates,
+    the case lands in `cancelled` phase rather than synthesising a fallback
+    scenario. This is the deterministic-retrieval guarantee — the LLM only
+    picks from the closed set of authored scenarios.
+    """
+    resp = client.post(
+        "/api/cases",
+        json={"prompt": "asldkjf qwoeiruaslkdjf nonsense gibberish 90283"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    case = client.get(f"/api/cases/{body['case_id']}", headers=admin_headers).json()
+    # No fallback scenario was synthesised — either the classifier offered a
+    # candidate list (awaiting_clarification) or it didn't (cancelled). Either
+    # way the scenario_id is one of the catalog entries or None, never an
+    # SC-ADHOC or SC-NLWRITE prefix.
+    sid = case.get("scenario_id") or ""
+    assert not sid.startswith("SC-ADHOC-")
+    assert not sid.startswith("SC-NLWRITE-")
+
+
 def test_full_hitl_flow_reject(client: TestClient, admin_headers: dict) -> None:
     create = client.post(
         "/api/cases",
