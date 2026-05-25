@@ -7,21 +7,22 @@ operator_role: { label: "Operator", name: "planner.lvenkat" }
 
 action_type: "dispute_demurrage_charge"
 action_payload:
-  charge_id: "DEM-S-700412-01"
-  shipment_id: "S-700412"
-  port_code: "DEHAM"
-  claim_amount_usd: 450
+  charge_id: "DEM-S-700499-SMALL"
+  shipment_id: "S-700499"
+  port_code: "NLRTM"
+  claim_amount_usd: 385
   scope: "logistics.write_carrier_dispute_low"
 
 match_keywords: ["auto dispute", "auto-dispute", "small demurrage", "low value dispute", "auto challenge", "envelope dispute", "auto-file dispute"]
-interpreted_as: "auto-file a dispute on a small demurrage charge per the envelope policy"
+interpreted_as: "auto-file a dispute on the small demurrage charge DEM-S-700499-SMALL ($385) per the envelope policy"
 clarifying_question: >-
-  Confirm — auto-file a dispute on a low-value demurrage charge. Envelope
-  per <code>GR-LN-AUTO-DEM-003</code>: charge <$500 AND prior_dispute_outcome
-  on this carrier is "won". I'll bind the charge, the shipment, and the
-  carrier's prior dispute outcomes (from the demurrage_charges historical
-  rows where status=waived/paid) so you can see the autonomous decision was
-  data-grounded. No human review required if envelope holds. Proceed?
+  Confirm — auto-file a dispute on charge <code>DEM-S-700499-SMALL</code>
+  ($385 detention on shipment <code>S-700499</code> at NLRTM). Envelope per
+  <code>GR-LN-AUTO-DEM-003</code>: total &lt; $500 AND
+  prior_dispute_outcome=won on similar charges. I'll bind the target charge,
+  the source shipment, and a sample of historically waived small charges
+  (status=waived AND prior=won AND total ≤ $500) as the evidence pattern.
+  No human review required if envelope holds. Proceed?
 
 auto_approval_guardrail: "GR-LN-AUTO-DEM-003"
 auto_approval_reason: "Charge under $500 AND prior carrier dispute outcomes are 'won' for this lane. Policy GR-LN-AUTO-DEM-003 permits autonomous dispute filing for low-risk recoveries."
@@ -63,8 +64,10 @@ stages:
         class: DemurrageCharge
         where:
           status: waived
+          prior_dispute_outcome: won
+          max_total_usd: 500
         max_results: 5
-        purpose: "Prior 'won' dispute pattern — the data that grounded the envelope decision"
+        purpose: "Historical pattern grounding the envelope: small waived charges with prior wins (status=waived AND prior=won AND total ≤ $500)"
 
 outcomes:
   auto_execute:
@@ -74,9 +77,9 @@ outcomes:
 _executor:
   action_id: dispute_demurrage_charge
   arguments:
-    charge_id: DEM-S-700412-01
-    shipment_id: S-700412
-    dispute_reason: "Auto-filed per GR-LN-AUTO-DEM-003: charge under $500 + prior carrier dispute outcomes positive on this lane"
-    claim_amount_usd: "450"
+    charge_id: DEM-S-700499-SMALL
+    shipment_id: S-700499
+    dispute_reason: "Auto-filed per GR-LN-AUTO-DEM-003 — charge under $500 + prior carrier dispute outcomes positive on this lane"
+    claim_amount_usd: "385"
 
 _filter_from_prompt: true

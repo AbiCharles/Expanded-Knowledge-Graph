@@ -285,9 +285,11 @@ mappings:
                  || ' · prior ' || prior_dispute_outcome
                  || ' · resp ' || responsible_party AS summary
         FROM demurrage_charges
-        WHERE (:charge_id   IS NULL OR charge_id   = :charge_id)
-          AND (:shipment_id IS NULL OR shipment_id = :shipment_id)
-          AND (:status      IS NULL OR status      = :status)
+        WHERE (:charge_id             IS NULL OR charge_id             = :charge_id)
+          AND (:shipment_id           IS NULL OR shipment_id           = :shipment_id)
+          AND (:status                IS NULL OR status                = :status)
+          AND (:prior_dispute_outcome IS NULL OR prior_dispute_outcome = :prior_dispute_outcome)
+          AND (:max_total_usd         IS NULL OR total_charge_usd     <= :max_total_usd)
         ORDER BY total_charge_usd DESC
         LIMIT :max_results
       http_path_template: null

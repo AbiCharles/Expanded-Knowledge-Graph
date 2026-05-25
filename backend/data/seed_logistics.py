@@ -491,13 +491,61 @@ CREATE INDEX idx_demurrage_status   ON demurrage_charges(status);
 # reference. Targets the high-variance S-700412 (long delay → port stuck at
 # Hamburg → demurrage accrues).
 SEED_DEMURRAGE: list[dict[str, str]] = [
+    # Big-ticket charge — what the HITL dispute scenario (SC-LN-DEMURRAGE-
+    # DISPUTE-024) targets. Routes to planner because total > envelope.
     {
         "charge_id": "DEM-S-700412-01", "shipment_id": "S-700412",
         "port_code": "DEHAM", "charge_type": "demurrage",
         "free_time_expired_at": "2026-04-21T08:00Z",
         "days_overage": "4.0", "daily_rate_usd": "1200",
         "total_charge_usd": "4800", "status": "billed",
-        "responsible_party": "consignee", "prior_dispute_outcome": "n/a",
+        "responsible_party": "consignee", "prior_dispute_outcome": "won",
+    },
+    # Small charge with prior wins — what the autonomous scenario (SC-LN-
+    # DEMURRAGE-AUTO-025) targets. Auto-dispute envelope: total < $500 AND
+    # prior_dispute_outcome=won. This row satisfies both.
+    {
+        "charge_id": "DEM-S-700499-SMALL", "shipment_id": "S-700499",
+        "port_code": "NLRTM", "charge_type": "detention",
+        "free_time_expired_at": "2026-04-29T12:00Z",
+        "days_overage": "2.0", "daily_rate_usd": "192",
+        "total_charge_usd": "385", "status": "billed",
+        "responsible_party": "consignee", "prior_dispute_outcome": "won",
+    },
+    # A handful of small waived rows so the AUTO scenario's "historical
+    # pattern" query returns relevant small wins instead of the biggest
+    # waived charges. Hand-pinned so the narrative reproduces across re-seeds.
+    {
+        "charge_id": "DEM-HIST-WON-01", "shipment_id": "S-700499",
+        "port_code": "NLRTM", "charge_type": "detention",
+        "free_time_expired_at": "2026-01-12T08:00Z",
+        "days_overage": "1.5", "daily_rate_usd": "180",
+        "total_charge_usd": "270", "status": "waived",
+        "responsible_party": "carrier", "prior_dispute_outcome": "won",
+    },
+    {
+        "charge_id": "DEM-HIST-WON-02", "shipment_id": "S-700502",
+        "port_code": "USNYC", "charge_type": "per_diem",
+        "free_time_expired_at": "2026-02-04T08:00Z",
+        "days_overage": "3.0", "daily_rate_usd": "120",
+        "total_charge_usd": "360", "status": "waived",
+        "responsible_party": "carrier", "prior_dispute_outcome": "won",
+    },
+    {
+        "charge_id": "DEM-HIST-WON-03", "shipment_id": "S-700503",
+        "port_code": "GBFXT", "charge_type": "storage",
+        "free_time_expired_at": "2026-02-18T08:00Z",
+        "days_overage": "2.5", "daily_rate_usd": "160",
+        "total_charge_usd": "400", "status": "waived",
+        "responsible_party": "carrier", "prior_dispute_outcome": "won",
+    },
+    {
+        "charge_id": "DEM-HIST-WON-04", "shipment_id": "S-700504",
+        "port_code": "USLAX", "charge_type": "detention",
+        "free_time_expired_at": "2026-03-02T08:00Z",
+        "days_overage": "1.0", "daily_rate_usd": "440",
+        "total_charge_usd": "440", "status": "waived",
+        "responsible_party": "carrier", "prior_dispute_outcome": "won",
     },
 ]
 
