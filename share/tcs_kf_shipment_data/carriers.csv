@@ -1,0 +1,26 @@
+carrier_id,name,scac,mode,headquarters_country,reliability_score,on_time_rate_90d,damage_rate_90d,contract_id,contract_renewal_date
+CR-MAEU,Maersk,MAEU,ocean,Denmark,0.93,0.91,0.004,CT-MAEU-2026,2026-12-31
+CR-MSCU,MSC Mediterranean Shipping,MSCU,ocean,Switzerland,0.89,0.87,0.005,CT-MSCU-2026,2026-09-30
+CR-CMDU,CMA CGM,CMDU,ocean,France,0.91,0.89,0.004,CT-CMDU-2026,2026-08-31
+CR-HLCU,Hapag-Lloyd,HLCU,ocean,Germany,0.94,0.92,0.003,CT-HLCU-2026,2027-03-31
+CR-COSU,COSCO Shipping,COSU,ocean,China,0.88,0.86,0.005,CT-COSU-2026,2026-11-30
+CR-ONEY,Ocean Network Express,ONEY,ocean,Singapore,0.90,0.88,0.004,CT-ONEY-2026,2027-01-31
+CR-EGLV,Evergreen Marine,EGLV,ocean,Taiwan,0.87,0.85,0.006,CT-EGLV-2026,2026-10-31
+CR-YMLU,Yang Ming Line,YMLU,ocean,Taiwan,0.85,0.83,0.007,CT-YMLU-2026,2026-12-15
+CR-ZIMU,ZIM Integrated Shipping,ZIMU,ocean,Israel,0.86,0.84,0.006,CT-ZIMU-2026,2027-02-28
+CR-HMMU,HMM,HMMU,ocean,South Korea,0.88,0.86,0.005,CT-HMMU-2026,2026-09-15
+CR-PILU,PIL Pacific International Lines,PILU,ocean,Singapore,0.84,0.82,0.007,CT-PILU-2026,2027-01-15
+CR-WHLU,Wan Hai Lines,WHLU,ocean,Taiwan,0.83,0.81,0.008,CT-WHLU-2026,2026-08-15
+CR-FDXA,FedEx Express,FDXA,air,United States,0.97,0.96,0.001,CT-FDXA-2026,2026-12-01
+CR-DHLA,DHL Aviation,DHLA,air,Germany,0.96,0.95,0.001,CT-DHLA-2026,2026-11-15
+CR-UPSA,UPS Airlines,UPSA,air,United States,0.96,0.95,0.001,CT-UPSA-2026,2027-04-30
+CR-LHCA,Lufthansa Cargo,LHCA,air,Germany,0.95,0.94,0.001,CT-LHCA-2026,2026-10-30
+CR-AFKA,Air France-KLM Cargo,AFKA,air,France,0.94,0.93,0.002,CT-AFKA-2026,2026-09-30
+CR-EKCA,Emirates SkyCargo,EKCA,air,United Arab Emirates,0.95,0.94,0.001,CT-EKCA-2026,2027-03-15
+CR-QTRA,Qatar Airways Cargo,QTRA,air,Qatar,0.95,0.94,0.001,CT-QTRA-2026,2027-02-15
+CR-CXCA,Cathay Cargo,CXCA,air,Hong Kong,0.93,0.92,0.002,CT-CXCA-2026,2026-11-30
+CR-DBSC,DB Schenker,DBSC,rail,Germany,0.91,0.89,0.003,CT-DBSC-2026,2026-12-31
+CR-DSVS,DSV Air & Sea,DSVS,ocean,Denmark,0.90,0.88,0.004,CT-DSVS-2026,2027-01-31
+CR-KNES,Kuehne+Nagel,KNES,ocean,Switzerland,0.92,0.90,0.003,CT-KNES-2026,2026-12-15
+CR-XPOT,XPO Logistics,XPOT,road,United States,0.88,0.86,0.005,CT-XPOT-2026,2026-10-15
+CR-DACH,Dachser,DACH,road,Germany,0.91,0.89,0.003,CT-DACH-2026,2026-11-30

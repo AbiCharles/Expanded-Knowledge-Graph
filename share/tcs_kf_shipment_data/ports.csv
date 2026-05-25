@@ -1,0 +1,47 @@
+port_code,name,country,region,congestion_level,berth_wait_p50_days,berth_wait_p95_days,customs_clearance_p50_hours,labor_action_flag,weather_disruption_flag
+NLRTM,Rotterdam,Netherlands,Northwest Europe,LOW,0.4,1.2,18,false,false
+DEHAM,Hamburg,Germany,Northwest Europe,HIGH,3.2,6.5,24,false,false
+DEBRV,Bremerhaven,Germany,Northwest Europe,MEDIUM,1.4,3.0,22,false,false
+BEANR,Antwerp,Belgium,Northwest Europe,MEDIUM,1.1,2.7,20,false,false
+GBFXT,Felixstowe,United Kingdom,Northwest Europe,MEDIUM,0.9,2.4,28,false,false
+FRMRS,Marseille,France,Mediterranean,LOW,0.5,1.5,26,false,false
+FRLEH,Le Havre,France,Northwest Europe,MEDIUM,1.0,2.6,22,false,false
+ESBCN,Barcelona,Spain,Mediterranean,LOW,0.6,1.7,24,false,false
+ESVLC,Valencia,Spain,Mediterranean,LOW,0.5,1.6,22,false,false
+ITGOA,Genoa,Italy,Mediterranean,MEDIUM,1.2,2.8,30,false,false
+USNYC,New York/New Jersey,United States,US East Coast,MEDIUM,1.6,3.4,16,false,false
+USCHS,Charleston,United States,US East Coast,LOW,0.7,1.9,14,false,false
+USORF,Norfolk,United States,US East Coast,LOW,0.6,1.8,15,false,false
+USBOS,Boston,United States,US East Coast,LOW,0.4,1.2,14,false,false
+USLAX,Los Angeles,United States,US West Coast,HIGH,2.6,5.3,18,false,false
+USOAK,Oakland,United States,US West Coast,MEDIUM,1.4,3.1,17,false,false
+USSEA,Seattle,United States,US West Coast,LOW,0.8,2.1,15,false,false
+USSFO,San Francisco,United States,US West Coast,LOW,0.7,1.9,16,false,false
+CASOG,Vancouver,Canada,Canada West,LOW,0.6,1.7,18,false,false
+CAHAL,Halifax,Canada,Canada East,LOW,0.3,1.0,16,false,false
+CNSHA,Shanghai,China,Greater China,MEDIUM,1.3,3.0,32,false,false
+CNNGB,Ningbo,China,Greater China,MEDIUM,1.4,3.2,30,false,false
+CNYTN,Yantian,China,Greater China,MEDIUM,1.5,3.4,28,false,false
+CNQIN,Qingdao,China,Greater China,MEDIUM,1.2,2.9,30,false,false
+CNTAO,Tianjin,China,Greater China,HIGH,2.5,4.8,34,false,false
+HKHKG,Hong Kong,Hong Kong,Greater China,LOW,0.8,2.1,20,false,false
+SGSIN,Singapore,Singapore,Southeast Asia,LOW,0.4,1.3,12,false,false
+MYPKG,Port Klang,Malaysia,Southeast Asia,MEDIUM,1.1,2.7,24,false,false
+KRPUS,Busan,South Korea,Northeast Asia,MEDIUM,1.0,2.5,20,false,false
+JPYOK,Yokohama,Japan,Northeast Asia,MEDIUM,1.4,3.1,22,false,false
+JPTYO,Tokyo,Japan,Northeast Asia,LOW,0.9,2.2,20,false,false
+INNSA,Nhava Sheva,India,South Asia,HIGH,2.8,5.6,42,false,false
+INMUN,Mundra,India,South Asia,MEDIUM,1.6,3.5,38,false,false
+AEDXB,Jebel Ali (Dubai),United Arab Emirates,Middle East,LOW,0.7,2.0,16,false,false
+OMSLL,Salalah,Oman,Middle East,LOW,0.5,1.5,18,false,false
+EGPSD,Port Said,Egypt,Mediterranean,MEDIUM,1.3,3.0,30,false,false
+ZADUR,Durban,South Africa,Sub-Saharan Africa,MEDIUM,1.5,3.4,32,false,false
+BRSSZ,Santos,Brazil,South America,MEDIUM,1.7,3.8,40,false,false
+MXVER,Veracruz,Mexico,Central America,MEDIUM,1.3,3.0,36,false,false
+PEMRI,Callao (Lima),Peru,South America,LOW,0.9,2.2,28,false,false
+DEFRA,Frankfurt am Main Airport,Germany,Northwest Europe,LOW,0.1,0.4,4,false,false
+USORD,Chicago O'Hare Airport,United States,US Central,LOW,0.1,0.5,3,false,false
+AUSYD,Sydney Kingsford Smith Airport,Australia,Oceania,LOW,0.1,0.4,6,false,false
+DEDUS,Düsseldorf Rail Terminal,Germany,Northwest Europe,LOW,0.2,0.6,8,false,false
+PLLDZ,Łódź Rail Terminal,Poland,Central Europe,LOW,0.2,0.7,10,false,false
+LHRGB,London Heathrow Airport,United Kingdom,Northwest Europe,LOW,0.1,0.4,4,false,false
