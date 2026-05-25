@@ -1,0 +1,36 @@
+id: retender_booking
+title: Re-tender a booking to a new carrier
+description: Update an existing bookings row to swap carrier_id + cost + status.
+  Targets logistics.sqlite. Used by SC-LN-TENDER-021 and the rewired SC-LN-002
+  (mode switch) — both confirm with the planner before the SQL runs.
+hitl: true
+arguments:
+  - { name: booking_id, type: string, required: true,
+      description: The active booking to mutate.,
+      example: BK-700412-01 }
+  - { name: new_carrier_id, type: string, required: true,
+      description: The carrier the booking is being re-tendered to.,
+      example: CR-MAEU }
+  - { name: new_total_cost_usd, type: decimal, required: true,
+      description: Total cost (base + fuel) under the new tender.,
+      example: "5175" }
+  - { name: new_status, type: string, required: false,
+      description: Defaults to 'tendered' when not supplied.,
+      example: tendered }
+executor:
+  kind: sql_update
+  data_source: logistics_sqlite
+  sql: |
+    UPDATE bookings
+       SET carrier_id     = :new_carrier_id,
+           total_cost_usd = :new_total_cost_usd,
+           status         = COALESCE(:new_status, 'tendered'),
+           tendered_at    = strftime('%Y-%m-%dT%H:%MZ', 'now')
+     WHERE booking_id = :booking_id
+match_keywords:
+  - retender
+  - re-tender
+  - switch carrier
+  - change carrier
+  - tender booking
+default: true

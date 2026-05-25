@@ -58,6 +58,10 @@ Given an operator's natural-language request, you must:
      Use null for scenario_id only when the request is genuinely outside every scenario in the catalog.
   2. Paraphrase the request as a single short clause beginning with a verb (no preamble).
   3. Draft a one-sentence clarifying question that confirms the best-matching action.
+     If the scenario title implies multiple bindings (e.g. "scorecard + recent shipments",
+     "trace and milestones", "scorecard and shipments"), the clarifier MUST confirm that
+     BOTH bindings will be returned together — never ask the operator to pick between
+     them. End the clarifier with "Proceed?" so it reads as a yes/no confirmation.
   4. Confidence scores are between 0.0 and 1.0; the top candidate's confidence reflects how
      well it matches versus the runners-up.
 

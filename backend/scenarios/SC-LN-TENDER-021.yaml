@@ -1,0 +1,127 @@
+id: SC-LN-TENDER-021
+title: "Re-tender booking to a new carrier"
+domain: "Logistics & Network"
+teams_channel: "#logistics-planning"
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+reviewer_role: { label: "Reviewer", name: "logistics.planner.lead" }
+autonomous: false
+
+action_type: "retender_booking"
+action_payload:
+  shipment_id: "S-700412"
+  booking_id: "BK-700412-01"
+  current_carrier_id: "CR-MSCU"
+  new_carrier_id: "CR-MAEU"
+  lane_id: "L-CNSHA-DEHAM"
+  cost_delta_usd: 345.0
+  originating_guardrail_id: "POL-LN-TENDER-2026"
+
+teams_headline: "Re-tender booking · S-700412 from MSC to Maersk"
+execute_message: >-
+  Approve to update the bookings row in <code>logistics.sqlite</code>: carrier
+  flips from <code>CR-MSCU</code> to <code>CR-MAEU</code>, total cost adjusts,
+  status returns to <code>tendered</code>. The action is a real <code>sql_update</code>
+  against the registered SQLite source.
+
+match_keywords: ["retender", "re-tender", "switch carrier", "swap carrier", "change carrier", "tender booking", "rebook", "bk-700412", "s-700412 booking"]
+interpreted_as: "re-tender booking BK-700412-01 from MSC to Maersk"
+clarifying_question: >-
+  Confirm — re-tender booking <code>BK-700412-01</code> on shipment
+  <code>S-700412</code> (Shanghai → Hamburg) from <code>CR-MSCU</code> (MSC) to
+  <code>CR-MAEU</code> (Maersk). Cost delta ≈ +$345 (within the $5k autonomous
+  envelope, but per policy <code>POL-LN-TENDER-2026</code> all carrier swaps need
+  planner approval). I'll bind the current booking, MSC + Maersk scorecards, and
+  the current rate cards on lane <code>L-CNSHA-DEHAM</code> so you can compare.
+  Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Planner approved the re-tender.</strong> The <code>retender_booking</code>
+    action ran against <code>logistics.sqlite</code>; the booking row was updated to
+    Maersk with status <code>tendered</code>.
+  reject: >-
+    <strong>Planner rejected the re-tender.</strong> Reason given:
+    <em>"{rationale}"</em><br><br>The booking row was not modified.
+  request_more_info: >-
+    <strong>Planner needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Maersk's on-time-90d isn't materially better than MSC's on this lane — switch isn't worth the relationship cost."
+    - "Cost delta is positive — staying with the original contract carrier."
+    - "Re-tender pattern on this lane is excessive; structural negotiation needed instead."
+  request_more_info:
+    - "Need the latest spot quote from CMA CGM before committing to Maersk."
+    - "Need confirmation that Maersk has equipment available on the next sailing."
+    - "Need finance sign-off on the cost variance."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-TENDER-2026"
+        uri: "kf.tcs/policy/POL-LN-TENDER-2026"
+        title: "Carrier-tender policy"
+        payload: "All carrier swaps on confirmed bookings require planner approval, regardless of cost delta. Auto-approval envelope (≤ $5k delta, same mode) is reserved for re-tender within the same carrier."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this case writes to logistics_sqlite after approval"
+  proposal:
+    binder: "TenderProposalBinder/2.0-live"
+    ontology_queries:
+      - ontology: logistics
+        class: Booking
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Bind the current active booking (logistics.Booking → logistics_sqlite)"
+      - ontology: logistics
+        class: Carrier
+        where:
+          carrier_id: ":current_carrier_id"
+        purpose: "Current carrier scorecard for comparison"
+      - ontology: logistics
+        class: Carrier
+        where:
+          carrier_id: ":new_carrier_id"
+        purpose: "Proposed carrier scorecard for comparison"
+      - ontology: logistics
+        class: FreightRate
+        where:
+          lane_id: ":lane_id"
+        max_results: 5
+        purpose: "Current rate cards on the lane (compare both carriers' contract/spot)"
+  review:
+    binder: "TenderReviewBinder/2.0-live"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-LN-002
+        max_results: 3
+        purpose: "Surface prior mode-switch / re-tender decisions on similar lanes"
+
+outcomes:
+  approve:
+    headline: "Approved — booking re-tendered"
+    detail: "Planner approved; logistics.sqlite booking row was updated to the new carrier. Execution result + audit event on the lineage."
+  reject:
+    headline: "Rejected — booking unchanged"
+    detail: "Planner declined the re-tender. Original booking stands; reason captured in lineage."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requested additional carrier/finance data before committing. Case loops back to review."
+
+_executor:
+  action_id: retender_booking
+  arguments:
+    booking_id: BK-700412-01
+    new_carrier_id: CR-MAEU
+    new_total_cost_usd: 5175
+    new_status: tendered

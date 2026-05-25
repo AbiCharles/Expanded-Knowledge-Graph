@@ -14,8 +14,9 @@ action_payload:
 match_keywords: ["eta", "status", "where is", "track", "shipment status", "current status", "s-700499", "look up"]
 interpreted_as: "look up the current status and ETA on shipment S-700499"
 clarifying_question: >-
-  Just to confirm — you want the current status and ETA on shipment <code>S-700499</code>
-  (Singapore → Rotterdam, 8 pallets).<br><br>
+  Just to confirm — you want the current status and ETA on shipment <code>S-700499</code>.
+  I'll bind it via <code>logistics.Shipment</code> against the registered
+  <code>shipments_csv</code> source.<br><br>
   This is a read-only query within my <code>logistics.read</code> scope; per policy
   <code>GR-LN-AUTO-001</code>, no human review is required. Proceed?
 
@@ -23,8 +24,8 @@ auto_approval_guardrail: "GR-LN-AUTO-001"
 auto_approval_reason: "Read-only logistics query within agent scope. Policy GR-LN-AUTO-001 permits autonomous status checks."
 closing_message: >-
   Done — the status query was auto-approved by <code>GR-LN-AUTO-001</code> (read-only within
-  my scope).<br><br><strong>Shipment S-700499</strong>: ETA now <strong>Apr 30</strong>
-  (was Apr 28). Vessel MV NORDIC CRYSTAL · 12 nm off Rotterdam · port congestion LOW. No action required.
+  my scope). Shipment record was bound from <code>shipments_csv</code> via
+  <code>logistics.Shipment</code>; see the audit trail for per-fact provenance.
 
 stages:
   agent_intake:
@@ -43,28 +44,15 @@ stages:
         title: "Actor scope"
         payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this query: logistics.read only"
   proposal:
-    binder: "ShipmentLookupProposalBinder/1.0"
-    facts:
-      - source: "tms:shipments"
-        ontology_type: "Shipment"
-        id: "S-700499"
-        uri: "tms.tcs/shipments/S-700499"
-        title: "Shipment record"
-        payload: "Origin Singapore · Dest Rotterdam · 8 pallets · cust order #ORD-44291 · ocean booking"
-      - source: "tms:tracking"
-        ontology_type: "LiveTrack"
-        id: "TRK-S-700499"
-        uri: "tms.tcs/tracking/TRK-S-700499"
-        title: "Live tracking"
-        payload: "Vessel MV NORDIC CRYSTAL · IMO 9876123 · current position 12 nm off Rotterdam · ETA Apr 30 04:00 UTC"
-      - source: "tms:port_status"
-        ontology_type: "PortCongestion"
-        id: "PORT-NLRTM-2026-0501"
-        uri: "tms.tcs/ports/NLRTM"
-        title: "Rotterdam congestion"
-        payload: "Berth wait 0.4d · congestion LOW · operations normal"
+    binder: "ShipmentLookupProposalBinder/2.0-live"
+    ontology_queries:
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Bind live shipment record (via logistics.Shipment → shipments_csv)"
 
 outcomes:
   auto_execute:
     headline: "Auto-executed — status retrieved"
-    detail: "ETA confirmed as Apr 30 (was Apr 28). Vessel MV NORDIC CRYSTAL is 12 nm off Rotterdam · port congestion LOW. No action required."
+    detail: "Shipment record bound from shipments_csv via logistics.Shipment. ETA, vessel, position, and port congestion are on the envelope."

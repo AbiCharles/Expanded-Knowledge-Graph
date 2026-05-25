@@ -1,0 +1,104 @@
+id: SC-LN-PORT-DISRUPTION-020
+title: "Port disruption — recommend reroute"
+domain: "Logistics & Network"
+teams_channel: "#logistics-planning"
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+reviewer_role: { label: "Reviewer", name: "logistics.planner.lead" }
+autonomous: false
+
+action_type: "port_disruption_assessment"
+action_payload:
+  port_code: "DEHAM"
+  originating_guardrail_id: "POL-LN-DISRUPT-2026"
+
+teams_headline: "Port disruption — Hamburg congestion CRITICAL"
+execute_message: >-
+  The agent will compile a recommendation list of shipments routed through Hamburg
+  that could be re-routed to alternate ports. <strong>No bookings will be modified</strong>
+  by this case — the planner reviews and triggers any actual reroutes via individual
+  re-tender cases.
+
+match_keywords: ["port", "disruption", "congestion", "reroute", "hamburg", "deham", "shanghai", "los angeles", "usnla", "usnyc", "tianjin", "cntao", "exposed", "what's stuck", "strike"]
+interpreted_as: "Hamburg port congestion is CRITICAL — show what's exposed and recommend reroutes"
+clarifying_question: >-
+  Just to confirm — you want a disruption-exposure report for port <code>DEHAM</code>
+  (Hamburg). I'll fetch the port master (via <code>logistics.Port</code>) and every
+  active shipment currently routed there (via <code>logistics.Shipment</code> filtered
+  by <code>port_code=DEHAM</code>), plus the master list of available lanes
+  (<code>logistics.Lane</code>) to surface reroute alternates.<br><br>
+  This is a HITL recommendation — no bookings get modified by this case. Per policy
+  <code>POL-LN-DISRUPT-2026</code>, the planner reviews and triggers any actual
+  re-tenders separately. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Planner accepted the recommendation set.</strong> Individual re-tender
+    cases will be opened for the approved shipments; the disruption exposure report
+    is preserved on the audit trail.
+  reject: >-
+    <strong>Planner rejected the reroute recommendation.</strong> Reason given:
+    <em>"{rationale}"</em><br><br>No follow-up cases opened; original routings stand.
+  request_more_info: >-
+    <strong>Planner needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review with these added queries.
+
+rationale_reasons:
+  reject:
+    - "Congestion likely to clear before any reroute would dock — hold steady."
+    - "Reroute capacity at alternate ports is fully booked; not actionable."
+    - "Customer-facing cost of reroute exceeds the avoided demurrage exposure."
+  request_more_info:
+    - "Need an alternate-carrier capacity check on the proposed reroute lanes."
+    - "Need today's berth-wait forecast from the port authority before deciding."
+    - "Need cost deltas from finance before committing to bulk reroutes."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-DISRUPT-2026"
+        uri: "kf.tcs/policy/POL-LN-DISRUPT-2026"
+        title: "Port-disruption response policy"
+        payload: "When a port reaches CRITICAL congestion, recommend reroutes for exposed shipments but require planner approval before any re-tender. Bulk reroutes never autonomous."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this case stops at propose"
+  proposal:
+    binder: "PortDisruptionProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Port
+        where:
+          port_code: ":port_code"
+        purpose: "Bind the affected port's master + operational state (via logistics.Port → ports_csv)"
+      - ontology: logistics
+        class: Shipment
+        where:
+          port_code: ":port_code"
+        max_results: 30
+        purpose: "Bind active shipments currently routed through this port (via logistics.Shipment → shipments_csv)"
+  review:
+    binder: "PortDisruptionReviewBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Lane
+        where: {}
+        max_results: 15
+        purpose: "Surface alternate-lane options for reroute candidates (via logistics.Lane → lanes_csv)"
+
+outcomes:
+  approve:
+    headline: "Approved — recommendation set accepted"
+    detail: "Planner accepted the reroute recommendations. Individual re-tender cases will be opened for the affected shipments."
+  reject:
+    headline: "Rejected — hold current routings"
+    detail: "Planner declined the reroute. Reason captured in lineage; original bookings stand."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requested additional alternate-capacity and cost-delta data before deciding. Case loops back to review."

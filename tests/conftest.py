@@ -37,7 +37,25 @@ def tmp_app_data(tmp_path: Path) -> Iterator[Path]:
     data_dir = tmp_path / "backend" / "data"
     data_dir.mkdir(parents=True)
     seed = REPO_ROOT / "backend" / "data"
-    for f in ("sources.yaml", "products.csv", "sanctions_sdn_sample.csv", "governance.sqlite"):
+    for f in (
+        "sources.yaml",
+        "products.csv",
+        "sanctions_sdn_sample.csv",
+        "governance.sqlite",
+        # Logistics Phase 1 datasets — needed for the logistics ontology to resolve
+        # cleanly at test boot. shipments.csv / shipment_events.csv are
+        # script-generated; the rest are hand-maintained masters.
+        "shipments.csv",
+        "shipment_performance.csv",
+        "shipment_events.csv",
+        "carriers.csv",
+        "lanes.csv",
+        "ports.csv",
+        # Logistics Phase 2 datasets
+        "customer_orders.csv",
+        "freight_rates.csv",
+        "logistics.sqlite",
+    ):
         if (seed / f).exists():
             shutil.copy(seed / f, data_dir / f)
     if (seed / "policy_corpus").exists():

@@ -1,0 +1,257 @@
+ontology_id: logistics
+mappings:
+  Shipment:
+    sources:
+    - data_source: shipments_csv
+      identifier_column: shipment_id
+      attribute_map:
+        shipment_id: shipment_id
+        customer_order: customer_order
+        sku: sku
+        origin: origin
+        destination: destination
+        pallets: pallets
+        mode: mode
+        vessel: vessel
+        imo: imo
+        current_position: current_position
+        eta: eta
+        port_code: port_code
+        port_congestion: port_congestion
+        berth_wait_days: berth_wait_days
+        carrier_id: carrier_id
+        lane_id: lane_id
+        weight_kg: weight_kg
+        volume_m3: volume_m3
+        value_usd: value_usd
+        incoterms: incoterms
+        hazmat_class: hazmat_class
+        priority_tier: priority_tier
+        scheduled_eta: scheduled_eta
+        variance_days: variance_days
+        exception_flag: exception_flag
+        last_event_at: last_event_at
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Direct column-name alignment between shipments_csv and Shipment.
+    relations:
+      handled_by:
+        target: Carrier
+        join: {via_source: carriers_csv, local_attribute: carrier_id, remote_attribute: carrier_id}
+      transported_on:
+        target: Lane
+        join: {via_source: lanes_csv, local_attribute: lane_id, remote_attribute: lane_id}
+      current_port:
+        target: Port
+        join: {via_source: ports_csv, local_attribute: port_code, remote_attribute: port_code}
+      events:
+        target: ShipmentEvent
+        join: {via_source: shipment_events_csv, local_attribute: shipment_id, remote_attribute: shipment_id}
+  ShipmentPerformance:
+    sources:
+    - data_source: shipment_performance_csv
+      identifier_column: sku
+      attribute_map:
+        sku: sku
+        period: period
+        on_time_rate: on_time_rate
+        late_count: late_count
+        total_shipments: total_shipments
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Aggregated per-SKU performance, one row per (sku, period).
+    relations: {}
+  Carrier:
+    sources:
+    - data_source: carriers_csv
+      identifier_column: carrier_id
+      attribute_map:
+        carrier_id: carrier_id
+        name: name
+        scac: scac
+        mode: mode
+        headquarters_country: headquarters_country
+        reliability_score: reliability_score
+        on_time_rate_90d: on_time_rate_90d
+        damage_rate_90d: damage_rate_90d
+        contract_id: contract_id
+        contract_renewal_date: contract_renewal_date
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Direct column alignment with carriers_csv master.
+    relations: {}
+  Lane:
+    sources:
+    - data_source: lanes_csv
+      identifier_column: lane_id
+      attribute_map:
+        lane_id: lane_id
+        origin_port: origin_port
+        destination_port: destination_port
+        mode: mode
+        transit_days_target: transit_days_target
+        transit_days_p50: transit_days_p50
+        transit_days_p95: transit_days_p95
+        weekly_capacity: weekly_capacity
+        current_delay_days: current_delay_days
+        congestion_index: congestion_index
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Direct column alignment with lanes_csv master.
+    relations: {}
+  Port:
+    sources:
+    - data_source: ports_csv
+      identifier_column: port_code
+      attribute_map:
+        port_code: port_code
+        name: name
+        country: country
+        region: region
+        congestion_level: congestion_level
+        berth_wait_p50_days: berth_wait_p50_days
+        berth_wait_p95_days: berth_wait_p95_days
+        customs_clearance_p50_hours: customs_clearance_p50_hours
+        labor_action_flag: labor_action_flag
+        weather_disruption_flag: weather_disruption_flag
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Direct column alignment with ports_csv master.
+    relations: {}
+  ShipmentEvent:
+    sources:
+    - data_source: shipment_events_csv
+      identifier_column: event_id
+      attribute_map:
+        event_id: event_id
+        shipment_id: shipment_id
+        event_at: event_at
+        event_type: event_type
+        location: location
+        lat: lat
+        lon: lon
+        milestone_planned_at: milestone_planned_at
+        milestone_actual_at: milestone_actual_at
+        variance_hours: variance_hours
+        note: note
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: One row per milestone or exception event, joined back to Shipment via
+        shipment_id.
+    relations: {}
+  CustomerOrder:
+    sources:
+    - data_source: customer_orders_csv
+      identifier_column: order_id
+      attribute_map:
+        order_id: order_id
+        customer_id: customer_id
+        customer_name: customer_name
+        sku: sku
+        qty: qty
+        promised_delivery_date: promised_delivery_date
+        shipment_id: shipment_id
+        sla_tier: sla_tier
+        penalty_per_day_usd: penalty_per_day_usd
+        total_value_usd: total_value_usd
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: One row per customer order; joins to Shipment via shipment_id.
+    relations: {}
+  Booking:
+    sources:
+    - data_source: logistics_sqlite
+      identifier_column: booking_id
+      attribute_map:
+        booking_id: booking_id
+        shipment_id: shipment_id
+        carrier_id: carrier_id
+        lane_id: lane_id
+        mode: mode
+        tendered_at: tendered_at
+        base_cost_usd: base_cost_usd
+        fuel_surcharge_usd: fuel_surcharge_usd
+        total_cost_usd: total_cost_usd
+        status: status
+      table: bookings
+      # Custom SQL: lookup by shipment_id (the most common Phase-2 scenario
+      # entry point) and return the active booking for that shipment. Lifts
+      # the cost components into the summary so the reviewer card surfaces
+      # them without expanding the fact.
+      query_template: |
+        SELECT booking_id AS id,
+               'Booking ' || booking_id AS title,
+               carrier_id || ' · ' || lane_id || ' · $' || total_cost_usd
+                 || ' (' || status || ') · tendered ' || tendered_at AS summary
+        FROM bookings
+        WHERE shipment_id = :shipment_id
+        ORDER BY tendered_at DESC
+        LIMIT :max_results
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Filter by shipment_id; one (or a small history) of bookings per
+        shipment.
+    relations: {}
+  FreightRate:
+    sources:
+    - data_source: freight_rates_csv
+      identifier_column: rate_id
+      attribute_map:
+        rate_id: rate_id
+        lane_id: lane_id
+        carrier_id: carrier_id
+        mode: mode
+        contract_or_spot: contract_or_spot
+        base_rate_usd: base_rate_usd
+        fuel_surcharge_usd: fuel_surcharge_usd
+        total_rate_usd: total_rate_usd
+        container_type: container_type
+        valid_from: valid_from
+        valid_to: valid_to
+      table: null
+      query_template: null
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Filter by lane_id and/or carrier_id to compare current rate cards.
+    relations: {}

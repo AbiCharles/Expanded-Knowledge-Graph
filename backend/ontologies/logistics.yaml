@@ -1,0 +1,163 @@
+id: logistics
+title: Logistics & Network
+namespace: ln
+description: Logistics ontology covering individual shipments (operational), per-SKU
+  shipment performance aggregates (analytical), and the master entities that
+  shipments reference (Carrier, Lane, Port) plus the multi-row event stream that
+  traces a shipment's journey. Pairs with shipments_csv, shipment_performance_csv,
+  carriers_csv, lanes_csv, ports_csv, shipment_events_csv via
+  logistics.mappings.yaml.
+default: false
+classes:
+  Shipment:
+    description: An in-flight or recently completed shipment with carrier, route,
+      and live-tracking attributes.
+    attributes:
+    - {name: shipment_id, type: string, identifier: true}
+    - {name: customer_order, type: string}
+    - {name: sku, type: string}
+    - {name: origin, type: string}
+    - {name: destination, type: string}
+    - {name: pallets, type: integer}
+    - {name: mode, type: string}
+    - {name: vessel, type: string}
+    - {name: imo, type: string}
+    - {name: current_position, type: string}
+    - {name: eta, type: string}
+    - {name: port_code, type: string}
+    - {name: port_congestion, type: string}
+    - {name: berth_wait_days, type: decimal}
+    - {name: carrier_id, type: string}
+    - {name: lane_id, type: string}
+    - {name: weight_kg, type: decimal}
+    - {name: volume_m3, type: decimal}
+    - {name: value_usd, type: decimal}
+    - {name: incoterms, type: string}
+    - {name: hazmat_class, type: string}
+    - {name: priority_tier, type: string}
+    - {name: scheduled_eta, type: string}
+    - {name: variance_days, type: decimal}
+    - {name: exception_flag, type: string}
+    - {name: last_event_at, type: string}
+    relations:
+    - {name: handled_by, target: Carrier, cardinality: '1', inverse: handles}
+    - {name: transported_on, target: Lane, cardinality: '1', inverse: carries}
+    - {name: current_port, target: Port, cardinality: 0..1, inverse: hosts}
+    - {name: events, target: ShipmentEvent, cardinality: 1..*, inverse: for_shipment}
+    - {name: fulfills, target: CustomerOrder, cardinality: '0..1', inverse: fulfilled_by}
+    - {name: current_booking, target: Booking, cardinality: '0..1', inverse: for_shipment}
+  ShipmentPerformance:
+    description: Aggregated on-time performance for a SKU within a reporting period.
+      Used for analytical lookups (on-time rate, late count, total shipments).
+    attributes:
+    - {name: sku, type: string, identifier: true}
+    - {name: period, type: string}
+    - {name: on_time_rate, type: decimal}
+    - {name: late_count, type: integer}
+    - {name: total_shipments, type: integer}
+  Carrier:
+    description: A freight carrier (ocean line, airline cargo division, road carrier).
+      Includes performance scorecard fields used by carrier-selection scenarios.
+    attributes:
+    - {name: carrier_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: scac, type: string, description: 'Standard Carrier Alpha Code'}
+    - {name: mode, type: string}
+    - {name: headquarters_country, type: string}
+    - {name: reliability_score, type: decimal}
+    - {name: on_time_rate_90d, type: decimal}
+    - {name: damage_rate_90d, type: decimal}
+    - {name: contract_id, type: string}
+    - {name: contract_renewal_date, type: date}
+  Lane:
+    description: An origin-destination corridor served by one or more carriers.
+      Captures target vs. actual transit performance and current congestion.
+    attributes:
+    - {name: lane_id, type: string, identifier: true}
+    - {name: origin_port, type: string}
+    - {name: destination_port, type: string}
+    - {name: mode, type: string}
+    - {name: transit_days_target, type: decimal}
+    - {name: transit_days_p50, type: decimal}
+    - {name: transit_days_p95, type: decimal}
+    - {name: weekly_capacity, type: integer}
+    - {name: current_delay_days, type: decimal}
+    - {name: congestion_index, type: decimal}
+    relations:
+    - {name: current_rates, target: FreightRate, cardinality: 1..*, inverse: applies_to}
+  Port:
+    description: A seaport or airport identified by UN/LOCODE. Carries current
+      operational state (congestion, berth wait, customs throughput, disruption
+      flags) used by routing and exception scenarios.
+    attributes:
+    - {name: port_code, type: string, identifier: true, description: 'UN/LOCODE'}
+    - {name: name, type: string}
+    - {name: country, type: string}
+    - {name: region, type: string}
+    - {name: congestion_level, type: string, description: 'LOW|MEDIUM|HIGH|CRITICAL'}
+    - {name: berth_wait_p50_days, type: decimal}
+    - {name: berth_wait_p95_days, type: decimal}
+    - {name: customs_clearance_p50_hours, type: decimal}
+    - {name: labor_action_flag, type: boolean}
+    - {name: weather_disruption_flag, type: boolean}
+  ShipmentEvent:
+    description: One milestone or exception on a shipment's journey. Multi-row per
+      shipment — sorted by event_at gives the full trace.
+    attributes:
+    - {name: event_id, type: string, identifier: true}
+    - {name: shipment_id, type: string}
+    - {name: event_at, type: string}
+    - {name: event_type, type: string, description: 'booked|picked_up|in_transit|port_arrival|customs_hold|customs_cleared|port_departure|vessel_change|delayed|delivered|exception'}
+    - {name: location, type: string}
+    - {name: lat, type: decimal}
+    - {name: lon, type: decimal}
+    - {name: milestone_planned_at, type: string}
+    - {name: milestone_actual_at, type: string}
+    - {name: variance_hours, type: decimal}
+    - {name: note, type: string}
+  CustomerOrder:
+    description: A confirmed customer order tied to a single shipment. Carries the
+      SLA tier and dollar penalty per day late — drives commercial scenarios where
+      the planner weighs expedite cost against penalty exposure.
+    attributes:
+    - {name: order_id, type: string, identifier: true}
+    - {name: customer_id, type: string}
+    - {name: customer_name, type: string}
+    - {name: sku, type: string}
+    - {name: qty, type: integer}
+    - {name: promised_delivery_date, type: date}
+    - {name: shipment_id, type: string}
+    - {name: sla_tier, type: string, description: 'premium|standard|economy'}
+    - {name: penalty_per_day_usd, type: decimal}
+    - {name: total_value_usd, type: decimal}
+  Booking:
+    description: The carrier booking that physically moves a shipment. The write
+      target for re-tender, cancel, and confirm actions. Multi-row history per
+      shipment is possible; status filters to the current/active row.
+    attributes:
+    - {name: booking_id, type: string, identifier: true}
+    - {name: shipment_id, type: string}
+    - {name: carrier_id, type: string}
+    - {name: lane_id, type: string}
+    - {name: mode, type: string}
+    - {name: tendered_at, type: string}
+    - {name: base_cost_usd, type: decimal}
+    - {name: fuel_surcharge_usd, type: decimal}
+    - {name: total_cost_usd, type: decimal}
+    - {name: status, type: string, description: 'proposed|tendered|confirmed|cancelled|completed'}
+  FreightRate:
+    description: Current contract or spot rate card per (lane, carrier, container
+      type). Used by cost-aware scenarios to surface alternates when re-tendering
+      or evaluating mode switches.
+    attributes:
+    - {name: rate_id, type: string, identifier: true}
+    - {name: lane_id, type: string}
+    - {name: carrier_id, type: string}
+    - {name: mode, type: string}
+    - {name: contract_or_spot, type: string, description: 'contract|spot'}
+    - {name: base_rate_usd, type: decimal}
+    - {name: fuel_surcharge_usd, type: decimal}
+    - {name: total_rate_usd, type: decimal}
+    - {name: container_type, type: string, description: "20'|40'|40HC|reefer|LCL|air-kg"}
+    - {name: valid_from, type: date}
+    - {name: valid_to, type: date}

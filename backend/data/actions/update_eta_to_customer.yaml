@@ -1,0 +1,38 @@
+id: update_eta_to_customer
+title: Push updated ETA to customer system
+description: Notify the customer's order-management system of a revised ETA. Wired
+  against the registered public test API (jsonplaceholder) so the demo can fire a
+  real HTTP POST without external creds. Used by SC-LN-ETA-PUSH-023 — autonomous
+  when ETA variance ≤3 days, otherwise routes to HITL.
+hitl: false
+arguments:
+  - { name: order_id, type: string, required: true,
+      description: The customer order receiving the update.,
+      example: ORD-44291 }
+  - { name: shipment_id, type: string, required: true,
+      description: Source shipment.,
+      example: S-700499 }
+  - { name: new_eta, type: string, required: true,
+      description: The revised ETA in ISO-8601 UTC.,
+      example: 2026-04-30T04:00Z }
+  - { name: variance_days, type: decimal, required: true,
+      description: Days late vs the originally scheduled ETA. Positive = late.,
+      example: "2.0" }
+executor:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: POST
+  path_template: /posts
+  content_type: application/json
+  body_template: |
+    {{
+      "title": "ETA update for order {order_id}",
+      "body": "Shipment {shipment_id} now ETA {new_eta} (variance {variance_days} days)",
+      "userId": 1
+    }}
+match_keywords:
+  - push eta
+  - update eta
+  - notify customer
+  - send eta
+default: true

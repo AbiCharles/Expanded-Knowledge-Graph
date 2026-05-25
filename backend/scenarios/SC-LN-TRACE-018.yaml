@@ -1,0 +1,64 @@
+id: SC-LN-TRACE-018
+title: "Shipment trace — full event history"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "shipment_trace_lookup"
+action_payload:
+  shipment_id: "S-700499"
+  query_type: "event_history"
+  scope: "logistics.read"
+
+match_keywords: ["trace", "history", "events", "milestones", "journey", "timeline", "what happened to", "trace shipment", "show events", "event history", "shipment history", "full history", "milestone trace", "full journey", "complete history"]
+interpreted_as: "trace the full event history for shipment S-700499"
+clarifying_question: >-
+  Just to confirm — you want the full milestone + exception event history for shipment
+  <code>S-700499</code>. I'll fetch the shipment record (via <code>logistics.Shipment</code>)
+  and every event tied to that shipment_id (via <code>logistics.ShipmentEvent</code>),
+  sorted by <code>event_at</code>.<br><br>
+  Read-only within my <code>logistics.read</code> scope; per policy
+  <code>GR-LN-AUTO-001</code>, no human review is required. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-001"
+auto_approval_reason: "Read-only logistics trace query within agent scope. Policy GR-LN-AUTO-001 permits autonomous status/history checks."
+closing_message: >-
+  Done — bound the shipment record and its full event timeline. See the audit trail
+  for per-fact provenance (shipments_csv + shipment_events_csv).
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-READONLY-2026"
+        uri: "kf.tcs/policy/POL-LN-READONLY-2026"
+        title: "Read-only logistics policy"
+        payload: "Read-only queries (status, ETA, trace, lane data) are autonomous within logistics.read scope. No human review required."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this query: logistics.read only"
+  proposal:
+    binder: "ShipmentTraceProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Bind the shipment record (via logistics.Shipment → shipments_csv)"
+      - ontology: logistics
+        class: ShipmentEvent
+        where:
+          shipment_id: ":shipment_id"
+        max_results: 25
+        purpose: "Bind every event for this shipment (via logistics.ShipmentEvent → shipment_events_csv)"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — full trace retrieved"
+    detail: "Bound the shipment record plus all milestone + exception events. Event payload column is event_type/location/variance_hours."

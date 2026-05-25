@@ -78,6 +78,18 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
             prompt_filters = {}
         if prompt_filters:
             action.payload["__prompt_filters__"] = prompt_filters
+            # Also overlay extracted keys onto the action payload so any
+            # `:payload-ref` substitution in OTHER ontology_queries (queries
+            # against a different class than the one the parser identified)
+            # picks up the same filter value. Without this, two queries that
+            # share a key (e.g. carrier dashboard binding both Carrier and
+            # Shipment by carrier_id) end up inconsistent: the parsed class
+            # gets the prompt value, the other gets the hardcoded default.
+            for where in prompt_filters.values():
+                for k, v in where.items():
+                    if v is None:
+                        continue
+                    action.payload[k] = v
     state.service.attach_proposal(ctx, action)
     await state.bus.emit(case.case_id, _stage_event(ctx, Stage.PROPOSAL))
 

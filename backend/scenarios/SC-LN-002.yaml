@@ -10,34 +10,44 @@ autonomous: false
 action_type: "switch_mode"
 action_payload:
   shipment_id: "S-700412"
-  lane_id: "L-CN-DE-007"
+  booking_id: "BK-700412-01"
+  order_id: "ORD-44218"
+  lane_id: "L-CNSHA-DEHAM"
   mode_from: "ocean"
   mode_to: "air"
+  current_carrier_id: "CR-MSCU"
+  new_carrier_id: "CR-LHCA"
   cost_uplift_pct: 18.0
   schedule_recovery_days: 11
   originating_guardrail_id: "SC-LN-002"
 
 teams_headline: "Ocean → air mode switch · lane CN-DE"
 execute_message: >-
-  The agent will tender shipment <strong>S-700412</strong> for air freight (Shanghai → Hamburg).
-  The original ocean booking will be cancelled and the customer will be notified of the new ETA.
+  Approve to update the active booking for <code>S-700412</code> from ocean
+  (MSC) to air (Lufthansa Cargo) on lane <code>L-CNSHA-DEHAM</code>. The
+  <code>retender_booking</code> action runs against <code>logistics.sqlite</code>;
+  customer SLA + recovery rationale captured in lineage.
 
-match_keywords: ["switch", "ocean", "air", "expedite", "mode", "s-700412", "hamburg", "shanghai", "shipment", "recover"]
+match_keywords: ["switch", "ocean", "air", "expedite", "mode", "s-700412", "hamburg", "shanghai", "shipment", "recover", "mode switch", "swap mode"]
 interpreted_as: "switch shipment S-700412 from ocean to air to recover the schedule"
 clarifying_question: >-
-  Just to confirm — switch shipment <code>S-700412</code> (Shanghai → Hamburg, 14 pallets,
-  customer order ORD-44218) from ocean to air, accepting a <strong>+18% cost uplift</strong>
-  to recover ~11 days.<br><br>
-  This is within the 25% cost envelope, but per policy mode switches always require planner approval. Proceed?
+  Confirm — switch shipment <code>S-700412</code> (Shanghai → Hamburg) from
+  ocean (booking <code>BK-700412-01</code>, MSC) to air (Lufthansa Cargo) to
+  recover ~11 days. Cost uplift ~+18%; customer is Wayne Enterprises on a
+  premium SLA. I'll bind the current booking, both carriers' scorecards, the
+  customer order, and the ocean + air rate cards on this lane so you can
+  weigh the call. Proceed?
 
 closing_messages:
   approve: >-
-    <strong>Planner approved the switch.</strong> One-time air upgrade authorized given
-    customer SLA exposure. They flagged the lane for structural review given the recurring
-    pattern. Air freight is being booked now.
+    <strong>Planner approved the switch.</strong> One-time air upgrade authorized
+    given customer SLA exposure. They flagged the lane for structural review given
+    the recurring pattern. The <code>retender_booking</code> action ran and the
+    booking row is now tendered to Lufthansa.
   reject: >-
     <strong>Planner rejected the switch.</strong> Reason given:
-    <em>"{rationale}"</em><br><br>Customer is being notified of revised ETA via the original ocean booking.
+    <em>"{rationale}"</em><br><br>Customer is being notified of revised ETA via
+    the original ocean booking; no DB change.
   request_more_info: >-
     <strong>Planner needs more information.</strong> Specifically:
     <em>"{rationale}"</em><br><br>Case is back in review with these added queries.
@@ -54,7 +64,7 @@ rationale_reasons:
 
 stages:
   agent_intake:
-    binder: "LogisticsPlanningAgentBinder/1.0"
+    binder: "LogisticsPlanningAgentBinder/2.0-live"
     facts:
       - source: "kf:graph"
         ontology_type: "Policy"
@@ -69,49 +79,64 @@ stages:
         title: "Actor scope"
         payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review"
   proposal:
-    binder: "ModeSwitchProposalBinder/1.0"
-    facts:
-      - source: "tms:shipments"
-        ontology_type: "Shipment"
-        id: "S-700412"
-        uri: "tms.tcs/shipments/S-700412"
-        title: "Shipment record"
-        payload: "Origin Shanghai · Dest Hamburg · 14 pallets · cust order #ORD-44218 · committed Apr 28"
-      - source: "tms:lane_master"
-        ontology_type: "Lane"
-        id: "L-CN-DE-007"
-        uri: "tms.tcs/lanes/L-CN-DE-007"
-        title: "Lane master"
-        payload: "Ocean transit 32d · air 4d · current ocean delay +9d · port congestion HIGH"
-      - source: "finance:expedite"
-        ontology_type: "CostDelta"
-        id: "CD-S-700412"
-        uri: "finance.tcs/expedite/CD-S-700412"
-        title: "Cost analysis"
-        payload: "Ocean $4.2k · air $4.96k · delta +$760 · uplift 18% (within 25% envelope)"
+    binder: "ModeSwitchProposalBinder/2.0-live"
+    ontology_queries:
+      - ontology: logistics
+        class: Booking
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Current active booking on this shipment (logistics.Booking → logistics_sqlite)"
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Shipment record (origin/dest/cargo, current variance)"
+      - ontology: logistics
+        class: Carrier
+        where:
+          carrier_id: ":current_carrier_id"
+        purpose: "Current carrier scorecard"
+      - ontology: logistics
+        class: Carrier
+        where:
+          carrier_id: ":new_carrier_id"
+        purpose: "Proposed air-carrier scorecard"
+      - ontology: logistics
+        class: FreightRate
+        where:
+          lane_id: ":lane_id"
+        max_results: 6
+        purpose: "Both ocean + air rate cards on this lane for cost comparison"
   review:
-    binder: "ModeSwitchReviewBinder/1.0"
-    facts:
-      - source: "governance:case_history"
-        ontology_type: "RecentMS"
-        id: "MS-PATTERN-Q2"
-        uri: "governance.tcs/patterns/MS-PATTERN-Q2"
-        title: "Mode-switch frequency"
-        payload: "This lane: 4 switches in last 30d · structural pattern · planning team flagged Apr 22"
-      - source: "erp:customer"
-        ontology_type: "CustomerSLA"
-        id: "ORD-44218-SLA"
-        uri: "erp.tcs/orders/ORD-44218"
-        title: "Customer SLA"
-        payload: "On-time priority · penalty $12k/week late · customer relationship strategic"
+    binder: "ModeSwitchReviewBinder/2.0-live"
+    ontology_queries:
+      - ontology: logistics
+        class: CustomerOrder
+        where:
+          order_id: ":order_id"
+        purpose: "Customer order — SLA tier + penalty exposure"
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-LN-002
+        max_results: 3
+        purpose: "Prior mode-switch decisions on similar lanes (governance)"
 
 outcomes:
   approve:
     headline: "Approved — air freight authorized"
-    detail: "Planner approved one-time air upgrade given customer SLA exposure. Flagged the lane for structural review given the recurring pattern."
+    detail: "Planner approved one-time air upgrade given customer SLA exposure. retender_booking action ran; booking now tendered to Lufthansa."
   reject:
     headline: "Rejected — switch denied"
     detail: "Planner rejected the mode switch. Cost recovery does not justify the precedent given recurring pattern. Customer to be notified of revised ETA."
   request_more_info:
     headline: "More information requested"
-    detail: "Reviewer asked for the structural lane review status and an alternative ocean carrier quote before deciding. ReviewBinder will re-run with additional queries; case loops back to review."
+    detail: "Reviewer asked for the structural lane review status and an alternative ocean carrier quote before deciding. Case loops back to review."
+
+_executor:
+  action_id: retender_booking
+  arguments:
+    booking_id: BK-700412-01
+    new_carrier_id: CR-LHCA
+    new_total_cost_usd: 13570
+    new_status: tendered

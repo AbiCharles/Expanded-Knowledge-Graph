@@ -1,0 +1,73 @@
+id: SC-LN-ETA-PUSH-023
+title: "Push updated ETA to customer system"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "update_eta_to_customer"
+action_payload:
+  shipment_id: "S-700499"
+  order_id: "ORD-44291"
+  new_eta: "2026-04-30T04:00Z"
+  variance_days: 2.0
+  scope: "logistics.write_customer_eta"
+
+match_keywords: ["push eta", "update eta", "notify customer", "send eta", "tell the customer", "eta update", "customer notification", "s-700499 eta", "ord-44291"]
+interpreted_as: "push the updated ETA for shipment S-700499 to the customer system"
+clarifying_question: >-
+  Confirm — push the revised ETA for shipment <code>S-700499</code> (order
+  <code>ORD-44291</code>, Acme Industrial) to the customer's order-management
+  system via an authenticated HTTP POST. Variance is 2 days (within the ±3 day
+  autonomous envelope per <code>GR-LN-AUTO-ETA-002</code>); no human review
+  required. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-ETA-002"
+auto_approval_reason: "ETA variance ≤ 3 days within autonomous envelope. Policy GR-LN-AUTO-ETA-002 permits the agent to push updates directly to customer systems for variance under threshold."
+closing_message: >-
+  Done — the <code>update_eta_to_customer</code> action ran. HTTP POST to the
+  customer endpoint with the new ETA. Execution result + status code on the
+  audit trail.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "GR-LN-AUTO-ETA-002"
+        uri: "kf.tcs/policy/GR-LN-AUTO-ETA-002"
+        title: "Autonomous ETA-push policy"
+        payload: "Agent may push updated ETAs to customer systems autonomously when the variance is within ±3 days and the SLA tier is standard or premium. Variance > 3 days routes to HITL planner review."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.write_customer_eta · http_request to public_jsonplaceholder permitted"
+  proposal:
+    binder: "ETAUpdateProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Bind the shipment record with current/revised ETA"
+      - ontology: logistics
+        class: CustomerOrder
+        where:
+          order_id: ":order_id"
+        purpose: "Bind the customer order for SLA + penalty context"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — ETA pushed to customer"
+    detail: "Bound the shipment + customer order; ran update_eta_to_customer via HTTP POST. Audit trail captures the response status."
+
+_executor:
+  action_id: update_eta_to_customer
+  arguments:
+    order_id: ORD-44291
+    shipment_id: S-700499
+    new_eta: "2026-04-30T04:00Z"
+    variance_days: 2.0

@@ -1,0 +1,111 @@
+id: SC-LN-SLA-RISK-022
+title: "Customer SLA risk — expedite or accept penalty"
+domain: "Logistics & Network"
+teams_channel: "#logistics-planning"
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+reviewer_role: { label: "Reviewer", name: "logistics.planner.lead" }
+autonomous: false
+
+action_type: "sla_risk_assessment"
+action_payload:
+  shipment_id: "S-700412"
+  order_id: "ORD-44218"
+  lane_id: "L-CNSHA-DEHAM"
+  variance_days: 9.0
+  originating_guardrail_id: "POL-LN-SLA-2026"
+
+teams_headline: "SLA risk · Wayne Enterprises ORD-44218 (S-700412)"
+execute_message: >-
+  The planner reviews exposure: customer SLA penalty × variance days vs the cost of
+  expediting via air. <strong>No automatic action</strong> — this case ends in a
+  recorded judgement; if the decision is to expedite, the planner opens a follow-up
+  re-tender case (SC-LN-TENDER-021) for the air rate.
+
+match_keywords: ["sla", "penalty", "expedite", "exposure", "premium customer", "at risk", "ord-44218", "wayne", "customer order risk", "late penalty"]
+interpreted_as: "evaluate SLA penalty exposure on shipment S-700412 against expedite cost"
+clarifying_question: >-
+  Confirm — assess SLA risk on shipment <code>S-700412</code> (customer order
+  <code>ORD-44218</code>, Wayne Enterprises). I'll bind the customer order
+  (penalty $/day, SLA tier), the shipment (current variance), and the air-freight
+  rate cards on lane <code>L-CNSHA-DEHAM</code> so you can compare penalty
+  exposure vs expedite cost. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Planner decided to expedite.</strong> Recorded rationale:
+    <em>"{rationale}"</em><br><br>Open a separate <code>SC-LN-TENDER-021</code>
+    case to swap the booking to air; this assessment case is closed.
+  reject: >-
+    <strong>Planner decided to accept the penalty.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The customer will be notified of the revised
+    ETA; no booking change.
+  request_more_info: >-
+    <strong>Planner needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Penalty exposure (~$108k over 9 days) is below the air expedite cost (~$140k for this volume)."
+    - "Wayne's customer-relationship value justifies absorbing the penalty rather than precedent-setting expedites."
+    - "Carrier offers a goodwill credit that closes most of the gap; expedite isn't worth the cost."
+  request_more_info:
+    - "Need confirmation that air capacity is actually available on the next 2 days."
+    - "Need account-team input — is the customer flexible on the promised date?"
+    - "Need finance's view on whether the penalty is fully recoverable from MSC."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-SLA-2026"
+        uri: "kf.tcs/policy/POL-LN-SLA-2026"
+        title: "Customer SLA policy"
+        payload: "Premium-tier SLA exposure > $50k requires planner sign-off before any expedite is committed. Penalty acceptance is also a planner decision, not autonomous."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose · this case is propose-only (no write)"
+  proposal:
+    binder: "SLARiskProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: CustomerOrder
+        where:
+          order_id: ":order_id"
+        purpose: "Bind the customer order (SLA tier, penalty $/day, total value)"
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Bind the at-risk shipment (current variance, exception flag, ETA)"
+      - ontology: logistics
+        class: FreightRate
+        where:
+          lane_id: ":lane_id"
+        max_results: 6
+        purpose: "Surface ocean + air rate alternatives on the lane"
+  review:
+    binder: "SLARiskReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-LN-002
+        max_results: 3
+        purpose: "Prior planner decisions on expedite-vs-penalty calls"
+
+outcomes:
+  approve:
+    headline: "Decision: expedite"
+    detail: "Planner chose to expedite. Follow-up SC-LN-TENDER-021 case should be opened to swap the booking."
+  reject:
+    headline: "Decision: accept penalty"
+    detail: "Planner accepted the SLA penalty. Customer to be notified; no booking change."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer needs additional capacity / account / finance input before committing."

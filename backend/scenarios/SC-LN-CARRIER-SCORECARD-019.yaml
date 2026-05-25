@@ -1,0 +1,69 @@
+id: SC-LN-CARRIER-SCORECARD-019
+title: "Carrier overview (scorecard AND recent shipments together)"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "carrier_dashboard_lookup"
+action_payload:
+  carrier_id: "CR-MAEU"
+  query_type: "scorecard_and_shipments"
+  scope: "logistics.read"
+
+match_keywords: ["carrier", "scorecard", "carrier performance", "how is", "maersk", "hapag", "msc", "fedex", "dhl", "cma cgm", "cosco", "evergreen", "show me carrier", "show me maersk", "show me msc", "shipments by carrier", "carrier shipments", "maersk shipments", "msc shipments"]
+interpreted_as: "look up the carrier scorecard plus recent shipments handled by that carrier"
+clarifying_question: >-
+  Just to confirm — you want a carrier dashboard. I'll fetch the carrier
+  scorecard (via <code>logistics.Carrier</code>) plus the recent shipments
+  handled by them (via <code>logistics.Shipment</code> filtered by carrier).
+  Default carrier is <code>CR-MAEU</code> (Maersk) when the prompt doesn't
+  name one explicitly.<br><br>
+  Read-only within my <code>logistics.read</code> scope; per policy
+  <code>GR-LN-AUTO-001</code>, no human review is required. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-001"
+auto_approval_reason: "Read-only carrier dashboard query within agent scope. Policy GR-LN-AUTO-001 permits autonomous lookups."
+closing_message: >-
+  Done — bound the carrier scorecard plus recent shipments handled by them.
+  Scorecard came from <code>carriers_csv</code> via <code>logistics.Carrier</code>;
+  shipments came from <code>shipments_csv</code> via <code>logistics.Shipment</code>
+  filtered by <code>carrier_id</code>.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-READONLY-2026"
+        uri: "kf.tcs/policy/POL-LN-READONLY-2026"
+        title: "Read-only logistics policy"
+        payload: "Read-only queries (status, ETA, trace, lane data, carrier scorecards) are autonomous within logistics.read scope. No human review required."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this query: logistics.read only"
+  proposal:
+    binder: "CarrierDashboardProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Carrier
+        where:
+          carrier_id: ":carrier_id"
+        purpose: "Bind the carrier scorecard (via logistics.Carrier → carriers_csv)"
+      - ontology: logistics
+        class: Shipment
+        where:
+          carrier_id: ":carrier_id"
+        max_results: 15
+        purpose: "Bind recent shipments handled by this carrier (via logistics.Shipment → shipments_csv)"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — carrier dashboard retrieved"
+    detail: "Bound the carrier scorecard plus recent shipments handled by them. Reliability, on-time-90d, damage-90d, contract renewal, plus per-shipment route + ETA on the envelope."
+
+_filter_from_prompt: true

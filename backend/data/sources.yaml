@@ -16,6 +16,101 @@ sources:
   default: true
   description: Synthetic OFAC-style SDN list (~30 entries, schema-compatible with
     the real feed)
+- id: shipments_csv
+  kind: csv
+  path: backend/data/shipments.csv
+  id_field: shipment_id
+  title_field: shipment_id
+  summary_template: "{origin} → {destination} \xB7 {pallets} pallets \xB7 cust\
+    \ order #{customer_order} \xB7 {mode} \xB7 vessel {vessel} (IMO {imo}) \xB7 pos\
+    \ {current_position} \xB7 ETA {eta} \xB7 port {port_code} congestion {port_congestion}\
+    \ (berth wait {berth_wait_days}d)"
+  default: true
+  description: Synthetic shipment master + live-tracking snapshot (30 rows). Backs
+    logistics.Shipment.
+- id: shipment_performance_csv
+  kind: csv
+  path: backend/data/shipment_performance.csv
+  id_field: sku
+  title_field: sku
+  summary_template: "{sku} \xB7 {period} \xB7 on-time {on_time_rate} \xB7 late {late_count}\
+    \ of {total_shipments}"
+  default: true
+  description: Synthetic per-SKU shipment performance aggregates (3 quarters \xD7\
+    \ 15 SKUs). Backs logistics.ShipmentPerformance.
+- id: carriers_csv
+  kind: csv
+  path: backend/data/carriers.csv
+  id_field: carrier_id
+  title_field: name
+  summary_template: "{name} ({scac}) \xB7 {mode} \xB7 {headquarters_country} \xB7\
+    \ on-time 90d {on_time_rate_90d} \xB7 damage 90d {damage_rate_90d} \xB7 contract\
+    \ {contract_id} renews {contract_renewal_date}"
+  default: true
+  description: Hand-curated freight-carrier master (25 rows, real SCACs). Backs
+    logistics.Carrier.
+- id: lanes_csv
+  kind: csv
+  path: backend/data/lanes.csv
+  id_field: lane_id
+  title_field: lane_id
+  summary_template: "{origin_port} → {destination_port} ({mode}) \xB7 target\
+    \ {transit_days_target}d \xB7 p50 {transit_days_p50}d \xB7 p95 {transit_days_p95}d\
+    \ \xB7 capacity {weekly_capacity}/wk \xB7 current delay +{current_delay_days}d\
+    \ \xB7 congestion {congestion_index}"
+  default: true
+  description: Origin-destination corridor master (40 rows). Backs logistics.Lane.
+- id: ports_csv
+  kind: csv
+  path: backend/data/ports.csv
+  id_field: port_code
+  title_field: name
+  summary_template: "{name} ({port_code}, {country}) \xB7 congestion {congestion_level}\
+    \ \xB7 berth wait p50 {berth_wait_p50_days}d / p95 {berth_wait_p95_days}d \xB7\
+    \ customs p50 {customs_clearance_p50_hours}h \xB7 labor action {labor_action_flag}\
+    \ \xB7 weather {weather_disruption_flag}"
+  default: true
+  description: UN/LOCODE port master with live operational state (40 rows). Backs
+    logistics.Port.
+- id: shipment_events_csv
+  kind: csv
+  path: backend/data/shipment_events.csv
+  id_field: event_id
+  title_field: event_type
+  summary_template: "{event_at} \xB7 {event_type} @ {location} \xB7 variance {variance_hours}h\
+    \ \xB7 {note}"
+  default: true
+  description: Per-shipment milestone + exception event stream (~19k rows, avg ~6
+    per shipment). Backs logistics.ShipmentEvent.
+- id: customer_orders_csv
+  kind: csv
+  path: backend/data/customer_orders.csv
+  id_field: order_id
+  title_field: customer_name
+  summary_template: "{customer_name} (#{order_id}) \xB7 {qty} \xD7 {sku} \xB7 SLA\
+    \ {sla_tier} \xB7 promised {promised_delivery_date} \xB7 shipment {shipment_id}\
+    \ \xB7 penalty ${penalty_per_day_usd}/day"
+  default: true
+  description: Customer orders tied to shipments (~750 rows). Drives SLA-risk
+    scenarios via penalty_per_day_usd. Backs logistics.CustomerOrder.
+- id: freight_rates_csv
+  kind: csv
+  path: backend/data/freight_rates.csv
+  id_field: rate_id
+  title_field: rate_id
+  summary_template: "{lane_id} \xB7 {carrier_id} \xB7 {mode}/{container_type} \xB7\
+    \ {contract_or_spot} \xB7 ${total_rate_usd} (base ${base_rate_usd} +\
+    \ fuel ${fuel_surcharge_usd}) \xB7 valid {valid_from}→{valid_to}"
+  default: true
+  description: Current rate cards per lane \xD7 carrier \xD7 container type
+    (~60 rows). Mix of contract + spot rates. Backs logistics.FreightRate.
+- id: logistics_sqlite
+  kind: sqlite
+  path: backend/data/logistics.sqlite
+  default: true
+  description: 'Logistics write target: bookings table (Phase 2) +
+    demurrage_charges (Phase 3). Re-tender + waive actions hit this DB. Seeded
+    by backend/data/seed_logistics.py.'
 - id: governance_sqlite
   kind: sqlite
   path: backend/data/governance.sqlite
