@@ -108,6 +108,18 @@ export interface CaseFull extends CaseSummary {
   lineage: LineageEvent[];
   scenario?: ScenarioMeta;
   closing_message?: string;
+  execution_result?: ExecutionResult | null;
+}
+
+// Result of a write action's executor (sql_update or http_request). Populated
+// by the orchestrator on autonomous + post-approve paths. Used by the UI to
+// render a before/after diff in the closing message.
+export interface ExecutionResult {
+  action_id: string;
+  ok: boolean;
+  detail: string;
+  response_status?: number | null;
+  args?: Record<string, unknown>;
 }
 
 export interface QueueRow {

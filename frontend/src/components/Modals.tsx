@@ -301,23 +301,19 @@ export function AutoApproveModal({
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop">
-      <div className="auto-card">
-        <div className="auto-header">
-          <div className="auto-eyebrow">Autonomous decision</div>
-          <div className="auto-title">Auto-approved by guardrail</div>
-        </div>
-        <div className="auto-body">
-          <div className="auto-guardrail">{guardrailId}</div>
-          <div className="auto-reason">{reason}</div>
-        </div>
-        <div className="auto-footer">
-          <span>No human review required · executing autonomously</span>
-          <button className="auto-dismiss" onClick={onClose} type="button">
-            Dismiss
-          </button>
-        </div>
-      </div>
+    <div className="auto-toast" role="status" aria-live="polite">
+      <button
+        className="auto-toast-close"
+        onClick={onClose}
+        type="button"
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+      <div className="auto-toast-eyebrow">Autonomous decision · auto-approved</div>
+      <div className="auto-toast-guardrail">{guardrailId}</div>
+      <div className="auto-toast-reason">{reason}</div>
+      <div className="auto-toast-progress" aria-hidden="true" />
     </div>
   );
 }

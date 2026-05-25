@@ -514,6 +514,9 @@ function ChatThread({
             }
           />
           <ChatBubble role="agent" html={active.closing_message} />
+          {active.execution_result && (
+            <ExecutionResultCard active={active} />
+          )}
           {active.decision_kind && active.decision_kind !== "auto_execute" && (
             <DemoHelper
               isReplay={!!active.replay_decision}
@@ -529,6 +532,92 @@ function ChatThread({
       {active.phase === "cancelled" && (
         <ChatBubble role="agent" html="OK, cancelled. Nothing was sent through the framework." />
       )}
+    </div>
+  );
+}
+
+// Renders a small before/after diff for write actions. Targets the
+// well-known retender_booking + update_eta_to_customer actions; falls back to
+// a compact status line for any other action.
+function ExecutionResultCard({ active }: { active: CaseFull }) {
+  const er = active.execution_result;
+  if (!er) return null;
+
+  // Find the original Booking fact (proposal stage) so we can show BEFORE.
+  const bookingFact = active.stages
+    .flatMap((s) => s.facts)
+    .find((f) => f.ontology_type === "Booking");
+
+  if (er.action_id === "retender_booking" && bookingFact) {
+    // Booking summary format: "CARRIER · LANE · $TOTAL (status) · tendered TIMESTAMP"
+    const parts = (bookingFact.summary || "").split(" · ");
+    const beforeCarrier = parts[0] || "—";
+    const beforeCostMatch = (parts[2] || "").match(/\$([\d.]+)\s*\((\w+)\)/);
+    const beforeCost = beforeCostMatch ? `$${Number(beforeCostMatch[1]).toLocaleString()}` : "—";
+    const beforeStatus = beforeCostMatch ? beforeCostMatch[2] : "—";
+    const args = (er.args || {}) as Record<string, string | number>;
+    const afterCarrier = String(args.new_carrier_id ?? "—");
+    const afterCostNum = Number(args.new_total_cost_usd);
+    const afterCost = Number.isFinite(afterCostNum) ? `$${afterCostNum.toLocaleString()}` : "—";
+    const afterStatus = String(args.new_status ?? "tendered");
+    return (
+      <div className="exec-result-card exec-result-ok">
+        <div className="exec-result-header">
+          <span className="exec-result-tag">Action ran</span>
+          <span className="exec-result-id">retender_booking</span>
+          <span className={`exec-result-status${er.ok ? " ok" : " err"}`}>
+            {er.ok ? "✓ committed" : "✗ failed"}
+          </span>
+        </div>
+        <div className="exec-result-title">
+          Booking <code>{String(args.booking_id ?? bookingFact.id)}</code>
+        </div>
+        <table className="exec-result-diff">
+          <thead>
+            <tr><th></th><th>Before</th><th>After</th></tr>
+          </thead>
+          <tbody>
+            <tr><th>Carrier</th><td>{beforeCarrier}</td><td className="diff-new">{afterCarrier}</td></tr>
+            <tr><th>Cost</th><td>{beforeCost}</td><td className="diff-new">{afterCost}</td></tr>
+            <tr><th>Status</th><td>{beforeStatus}</td><td className="diff-new">{afterStatus}</td></tr>
+          </tbody>
+        </table>
+        {!er.ok && <div className="exec-result-detail">{er.detail}</div>}
+      </div>
+    );
+  }
+
+  if (er.action_id === "update_eta_to_customer") {
+    const args = (er.args || {}) as Record<string, string | number>;
+    return (
+      <div className={`exec-result-card${er.ok ? " exec-result-ok" : " exec-result-err"}`}>
+        <div className="exec-result-header">
+          <span className="exec-result-tag">Action ran</span>
+          <span className="exec-result-id">update_eta_to_customer</span>
+          <span className={`exec-result-status${er.ok ? " ok" : " err"}`}>
+            {er.ok ? `✓ HTTP ${er.response_status ?? "200"}` : "✗ failed"}
+          </span>
+        </div>
+        <div className="exec-result-detail">
+          Pushed new ETA <code>{String(args.new_eta ?? "—")}</code> (variance
+          {" "}{String(args.variance_days ?? "—")} days) to the customer system
+          for order <code>{String(args.order_id ?? "—")}</code>.
+        </div>
+      </div>
+    );
+  }
+
+  // Generic fallback for any other registered action.
+  return (
+    <div className={`exec-result-card${er.ok ? " exec-result-ok" : " exec-result-err"}`}>
+      <div className="exec-result-header">
+        <span className="exec-result-tag">Action ran</span>
+        <span className="exec-result-id">{er.action_id}</span>
+        <span className={`exec-result-status${er.ok ? " ok" : " err"}`}>
+          {er.ok ? "✓ committed" : "✗ failed"}
+        </span>
+      </div>
+      <div className="exec-result-detail">{er.detail}</div>
     </div>
   );
 }
@@ -633,6 +722,15 @@ function shouldShowCandidates(active: CaseFull): boolean {
   return false;
 }
 
+// Map a 0-1 classifier confidence to a plain-English label + a CSS class so
+// non-engineers don't have to interpret a percentage.
+function confidenceLabel(conf: number): { word: string; tone: string } {
+  if (conf >= 0.85) return { word: "Strong match", tone: "strong" };
+  if (conf >= 0.65) return { word: "Likely match", tone: "likely" };
+  if (conf >= 0.40) return { word: "Possible match", tone: "possible" };
+  return { word: "Weak match", tone: "weak" };
+}
+
 function DidYouMeanRow({
   active,
   onPick,
@@ -644,32 +742,54 @@ function DidYouMeanRow({
   const lead =
     active.scenario_id == null
       ? "Pick the closest fit:"
-      : `Or did you mean…?  (current confidence ${(active.confidence * 100).toFixed(0)}%)`;
+      : "Or did you mean…?";
   return (
     <div className="did-you-mean">
       <div className="did-you-mean-label">{lead}</div>
       <div className="did-you-mean-buttons">
-        {candidates.map((c) => (
-          <button
-            key={c.scenario_id}
-            className={`did-you-mean-btn${c.scenario_id === active.scenario_id ? " current" : ""}`}
-            onClick={() => onPick(c.scenario_id)}
-            disabled={c.scenario_id === active.scenario_id}
-            title={`confidence ${(c.confidence * 100).toFixed(0)}%`}
-          >
-            <span className="did-you-mean-title">{c.title}</span>
-            <span className="did-you-mean-conf">{(c.confidence * 100).toFixed(0)}%</span>
-          </button>
-        ))}
+        {candidates.map((c) => {
+          const lbl = confidenceLabel(c.confidence);
+          return (
+            <button
+              key={c.scenario_id}
+              className={`did-you-mean-btn${c.scenario_id === active.scenario_id ? " current" : ""}`}
+              onClick={() => onPick(c.scenario_id)}
+              disabled={c.scenario_id === active.scenario_id}
+              title={`Classifier confidence ${(c.confidence * 100).toFixed(0)}% · ${c.scenario_id}`}
+            >
+              <span className="did-you-mean-title">{c.title}</span>
+              <span className={`did-you-mean-conf conf-${lbl.tone}`}>{lbl.word}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function WelcomeState({ historyCount }: { historyCount: number }) {
+  const [dismissed, setDismissed] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("kf-onboarding-dismissed") === "1"
+  );
+  const onDismiss = () => {
+    try { localStorage.setItem("kf-onboarding-dismissed", "1"); } catch { /* private mode */ }
+    setDismissed(true);
+  };
   return (
     <div className="welcome-state">
-      <div className="welcome-eyebrow">Knowledge envelope</div>
+      {!dismissed && historyCount === 0 && (
+        <div className="onboarding-hint">
+          <div className="onboarding-hint-eyebrow">First time? Try this</div>
+          <div className="onboarding-hint-body">
+            Open <strong>Suggestions</strong> below and click any chip — or
+            type a question like <code>trace shipment S-700499 milestones and journey</code>{" "}
+            in the box below. The agent will read your request, gather facts
+            from registered data sources, and either act or ask for your approval.
+          </div>
+          <button className="onboarding-hint-dismiss" onClick={onDismiss}>Got it</button>
+        </div>
+      )}
+      <div className="welcome-eyebrow">What the agent gathered</div>
       <div className="welcome-headline">
         Each case <em>builds an envelope</em> of bound knowledge as it moves through the flow.
       </div>
@@ -677,7 +797,7 @@ function WelcomeState({ historyCount }: { historyCount: number }) {
         <ul>
           <li>Pick a suggested prompt below, or write your own.</li>
           <li>The agent will read your request, propose an action, and bind facts at every stage.</li>
-          <li>If the action needs human review, you'll see a Teams card.</li>
+          <li>If the action needs human review, you'll see a reviewer card.</li>
           <li>Lineage on the right records every step.</li>
         </ul>
         {historyCount > 0 && (

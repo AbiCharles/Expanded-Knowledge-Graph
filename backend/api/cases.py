@@ -360,6 +360,7 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
     out["stages"] = []
     out["lineage"] = []
     out["closing_message"] = c.closing_message
+    out["execution_result"] = c.execution_result
     scenario = state.scenarios.get(c.scenario_id) if c.scenario_id else None
     if scenario:
         out["scenario"] = {

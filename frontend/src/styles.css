@@ -582,6 +582,292 @@ body {
 }
 
 /* ---------- Composer ---------- */
+/* Glossary modal — triggered by the "?" next to "What the agent gathered".
+   Single panel with definitions for every label that appears in the envelope:
+   badges, source-pill kinds, stage names, actor-scope vocabulary, confidence
+   labels. Click backdrop or Esc to close. */
+.glossary-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 28, 44, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: glossary-fade 180ms ease;
+}
+@keyframes glossary-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.glossary-modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 760px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: glossary-rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes glossary-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.glossary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.glossary-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+.glossary-title {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--navy-deep);
+  font-variation-settings: "opsz" 60, "SOFT" 80;
+}
+.glossary-close {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.glossary-close:hover { background: var(--paper-warm); color: var(--ink); }
+.glossary-body {
+  padding: 16px 24px 24px;
+  overflow-y: auto;
+}
+.glossary-body section {
+  margin-bottom: 22px;
+}
+.glossary-body section:last-child { margin-bottom: 4px; }
+.glossary-body h3 {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--navy-deep);
+  font-weight: 600;
+  margin: 0 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--rule);
+}
+.glossary-body p {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.55;
+  margin: 8px 0 12px;
+}
+.glossary-body code {
+  font-family: 'DM Mono', monospace;
+  font-size: 11.5px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--navy-deep);
+}
+.glossary-dl {
+  display: grid;
+  grid-template-columns: minmax(150px, max-content) 1fr;
+  gap: 8px 16px;
+  margin: 8px 0 0;
+}
+.glossary-dl dt {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+}
+.glossary-dl dt strong {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 14px;
+}
+.glossary-dl dt code {
+  font-size: 12px;
+}
+.glossary-dl dd {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.glossary-conf-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.glossary-conf-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+/* First-time onboarding hint. Sits at the top of WelcomeState when the user
+   has no prior conversations and hasn't dismissed it. Persisted in
+   localStorage so it only ever shows once per browser. */
+.onboarding-hint {
+  position: relative;
+  background: rgba(0, 201, 183, 0.06);
+  border: 1px solid rgba(0, 201, 183, 0.3);
+  border-radius: 6px;
+  padding: 14px 18px 16px;
+  margin-bottom: 18px;
+}
+.onboarding-hint-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.onboarding-hint-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.onboarding-hint-body code {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.onboarding-hint-dismiss {
+  margin-top: 10px;
+  background: white;
+  border: 1px solid var(--cyan);
+  color: var(--navy-deep);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+.onboarding-hint-dismiss:hover { background: var(--paper-warm); }
+
+/* Execution-result card — shown after a write action runs. For
+   retender_booking renders a before/after diff table; other actions get
+   a compact status line. Lives in the chat thread under the closing message. */
+.exec-result-card {
+  margin: 8px 0 8px 30px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid #2f7d5f;
+  background: rgba(47, 125, 95, 0.04);
+  border-radius: 4px;
+  font-size: 12px;
+  max-width: 520px;
+}
+.exec-result-card.exec-result-err {
+  border-left-color: #c14a4a;
+  background: rgba(193, 74, 74, 0.04);
+}
+.exec-result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.exec-result-tag {
+  color: #2f7d5f;
+  font-weight: 600;
+}
+.exec-result-err .exec-result-tag { color: #c14a4a; }
+.exec-result-id {
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: none;
+}
+.exec-result-status {
+  margin-left: auto;
+  letter-spacing: 0.05em;
+}
+.exec-result-status.ok  { color: #2f7d5f; }
+.exec-result-status.err { color: #c14a4a; }
+.exec-result-title {
+  font-family: 'Fraunces', serif;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--ink);
+}
+.exec-result-title code,
+.exec-result-detail code {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: rgba(0,0,0,0.04);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.exec-result-diff {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.exec-result-diff th {
+  text-align: left;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  font-weight: 500;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--rule);
+}
+.exec-result-diff tbody th {
+  width: 22%;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.exec-result-diff td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--paper-deep);
+}
+.exec-result-diff tbody tr:last-child td,
+.exec-result-diff tbody tr:last-child th { border-bottom: none; }
+.exec-result-diff td.diff-new {
+  color: #1f7a4a;
+  font-weight: 600;
+}
+.exec-result-detail {
+  color: var(--ink);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
 /* Animated three-dot "agent is thinking" indicator. Used inline inside the
    binding system bubble while the orchestrator is fanning out queries. */
 .thinking-dots {
@@ -1100,6 +1386,35 @@ details[open] > .suggested-summary .suggested-chevron {
   font-variation-settings: "opsz" 60, "SOFT" 80;
   color: var(--ink);
   letter-spacing: -0.005em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+/* "?" trigger that opens the glossary modal. Sits next to the envelope
+   title; visible but unobtrusive. Hover swaps to cyan to invite the click. */
+.glossary-trigger {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  color: var(--ink-muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 160ms ease;
+}
+.glossary-trigger:hover {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  color: white;
 }
 .envelope-counter {
   font-family: 'DM Mono', monospace;
@@ -1205,18 +1520,138 @@ details[open] > .suggested-summary .suggested-chevron {
   font-size: 12px;
   animation: factIn 360ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
 }
+/* Accent borders for facts that signal a condition worth noticing. */
+.fact-accent-risk    { border-left-color: #c14a4a; background: rgba(193, 74, 74, 0.04); }
+.fact-accent-warning { border-left-color: #b46d00; background: rgba(214, 158, 46, 0.04); }
+.fact-accent-premium { border-left-color: #a07b00; background: rgba(160, 123, 0, 0.04); }
+.fact-accent-badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border-radius: 2px;
+  margin-left: auto;
+}
+.fact-accent-badge.risk    { color: #c14a4a; background: rgba(193, 74, 74, 0.12); }
+.fact-accent-badge.warning { color: #b46d00; background: rgba(214, 158, 46, 0.12); }
+.fact-accent-badge.premium { color: #a07b00; background: rgba(160, 123, 0, 0.12); }
+/* Replaces the long pipe-delimited summary string with one chip per
+   segment. Wraps naturally; small monospace so values stay aligned. */
+.fact-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.fact-chip {
+  font-family: 'DM Mono', monospace;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.035);
+  border-radius: 2px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.fact-accent-risk    .fact-chip { background: rgba(193, 74, 74, 0.07); }
+.fact-accent-warning .fact-chip { background: rgba(214, 158, 46, 0.07); }
+.fact-accent-premium .fact-chip { background: rgba(160, 123, 0, 0.07); }
+.facts-show-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  background: transparent;
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.facts-show-more:hover {
+  background: var(--paper-warm);
+  border-color: var(--cyan);
+  color: var(--navy-deep);
+}
 @keyframes factIn {
   from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: translateX(0); }
 }
 .fact-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.fact-ontology-type {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  margin-bottom: 3px;
 }
+
+/* Source pills replace the old "[csv:source_name]" string. Two segments:
+   kind (CSV, SQLite, Graph, IAM…) in solid color + name in lighter shade. */
+.source-pill {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 3px;
+  overflow: hidden;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+.source-pill-kind {
+  padding: 1px 6px;
+  font-weight: 600;
+  background: currentColor;
+  /* The inner text needs to contrast the colored background. Use a CSS
+     trick: set text-shadow to nothing and rely on mix-blend / inversion.
+     Simpler: explicitly set the text color per pill below via the kind class. */
+  color: white;
+}
+.source-pill-name {
+  padding: 1px 6px;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+/* One accent per source kind. Border + kind-bg use this color; the name
+   segment inherits a softened tint via the rgba background. */
+.source-pill-csv      { color: #b46d00; }
+.source-pill-csv .source-pill-name      { background: rgba(214,158,46,0.08); }
+.source-pill-sqlite   { color: #2f7d5f; }
+.source-pill-sqlite .source-pill-name   { background: rgba(47,125,95,0.08); }
+.source-pill-postgres { color: #4a3a8f; }
+.source-pill-postgres .source-pill-name { background: rgba(74,58,143,0.08); }
+.source-pill-http     { color: #305cb0; }
+.source-pill-http .source-pill-name     { background: rgba(48,92,176,0.08); }
+.source-pill-vector_store { color: #7a3a8c; }
+.source-pill-vector_store .source-pill-name { background: rgba(122,58,140,0.08); }
+.source-pill-neo4j    { color: #00857a; }
+.source-pill-neo4j .source-pill-name    { background: rgba(0,133,122,0.08); }
+.source-pill-kf       { color: #555; }
+.source-pill-kf .source-pill-name       { background: rgba(85,85,85,0.08); }
+.source-pill-iam      { color: #8b3a3a; }
+.source-pill-iam .source-pill-name      { background: rgba(139,58,58,0.08); }
+.source-pill-tms,
+.source-pill-erp,
+.source-pill-finance,
+.source-pill-governance,
+.source-pill-source   { color: #6b6b6b; }
+.source-pill-tms .source-pill-name,
+.source-pill-erp .source-pill-name,
+.source-pill-finance .source-pill-name,
+.source-pill-governance .source-pill-name,
+.source-pill-source .source-pill-name { background: rgba(107,107,107,0.08); }
 .fact-id {
   font-family: 'Fraunces', serif;
   font-size: 13px;
@@ -1288,11 +1723,43 @@ details[open] > .suggested-summary .suggested-chevron {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--navy);
+  transition: max-width 200ms ease;
+}
+.lineage-panel.lineage-collapsed {
+  /* Collapsed shrinks the panel to a thin column showing only the header.
+     Matches the parent grid layout (defined in `.main`) — when collapsed,
+     reduces footprint so the envelope gets more screen. */
+  max-width: 220px;
 }
 .lineage-header {
   padding: 18px 22px 14px;
   border-bottom: 1px solid rgba(244,241,234,0.08);
   display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.lineage-header:hover { background: rgba(255, 255, 255, 0.03); }
+.lineage-chevron {
+  display: inline-block;
+  font-size: 10px;
+  margin-right: 6px;
+  color: rgba(244,241,234,0.6);
+  transition: transform 160ms ease;
+}
+.lineage-panel:not(.lineage-collapsed) .lineage-chevron { transform: rotate(90deg); }
+.lineage-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: rgba(244,241,234,0.55);
+  margin-left: 6px;
+  font-style: normal;
 }
 .lineage-eyebrow {
   font-family: 'DM Mono', monospace;
@@ -1829,6 +2296,79 @@ details[open] > .suggested-summary .suggested-chevron {
   transition: background 160ms ease, border-color 160ms ease;
 }
 .auto-dismiss:hover { background: var(--paper-warm); border-color: var(--cyan); color: var(--navy-deep); }
+
+/* Non-blocking auto-approve toast. Slides in from the bottom-right, holds for
+   6s while a progress strip drains, then auto-dismisses. The envelope and
+   chat remain interactive throughout — this is just a notice, not a modal. */
+.auto-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: white;
+  border: 1px solid var(--rule);
+  border-left: 3px solid #2f7d5f;
+  border-radius: 4px;
+  padding: 12px 16px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+  z-index: 100;
+  animation: auto-toast-in 280ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.auto-toast:hover .auto-toast-progress { animation-play-state: paused; }
+@keyframes auto-toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.auto-toast-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+.auto-toast-close:hover { background: var(--paper-warm); color: var(--ink); }
+.auto-toast-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #2f7d5f;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.auto-toast-guardrail {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink);
+  padding: 4px 8px;
+  background: rgba(47, 125, 95, 0.06);
+  border-left: 2px solid #2f7d5f;
+  margin-bottom: 6px;
+}
+.auto-toast-reason {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+.auto-toast-progress {
+  height: 2px;
+  margin: 0 -16px;
+  background: #2f7d5f;
+  transform-origin: left;
+  animation: auto-toast-drain 6000ms linear forwards;
+}
+@keyframes auto-toast-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
 
 /* Compare modal */
 .compare-modal {
@@ -2389,7 +2929,14 @@ details[open] > .suggested-summary .suggested-chevron {
   font-size: 10px;
   color: var(--ink-muted);
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
+/* Plain-English confidence tones — replace the raw percentage with a
+   readable label that's color-cued so the eye lands on the strong matches. */
+.did-you-mean-conf.conf-strong   { color: #1f7a4a; font-weight: 600; }
+.did-you-mean-conf.conf-likely   { color: #00857a; font-weight: 600; }
+.did-you-mean-conf.conf-possible { color: #b46d00; }
+.did-you-mean-conf.conf-weak     { color: var(--ink-muted); font-style: italic; }
 .did-you-mean-btn.current .did-you-mean-conf { color: var(--amber); }
 
 /* ---------- Data Sources modal ---------- */
