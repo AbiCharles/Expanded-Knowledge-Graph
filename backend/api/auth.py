@@ -40,7 +40,7 @@ limiter = Limiter(key_func=get_remote_address, enabled=not _DISABLED)
 
 
 class RegisterIn(BaseModel):
-    """Body for POST /api/auth/register — self-service signup."""
+    """Body for POST /api/auth/register — admin-only user creation."""
 
     username: str = Field(min_length=2, max_length=64)
     password: str = Field(min_length=4, max_length=128)
@@ -76,7 +76,13 @@ class ChangePasswordIn(BaseModel):
 
 @router.post("/register", response_model=TokenOut)
 @limiter.limit("10/minute")
-def register(payload: RegisterIn, request: Request) -> TokenOut:
+def register(
+    payload: RegisterIn,
+    request: Request,
+    actor: CurrentUser = Depends(current_user),
+) -> TokenOut:
+    if actor.role != "admin":
+        raise HTTPException(status_code=403, detail="admin role required")
     state = request.app.state.app_state
     with state.database.session() as session:
         existing = session.execute(

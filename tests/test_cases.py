@@ -105,10 +105,28 @@ def test_autonomous_flow_auto_executes(client: TestClient, admin_headers: dict) 
     assert case["decision_kind"] == "auto_execute"
 
 
-def test_user_cannot_see_anothers_cases(client: TestClient) -> None:
-    # Register two users
-    a = client.post("/api/auth/register", json={"username": "alice2", "password": "alice123"}).json()
-    b = client.post("/api/auth/register", json={"username": "bob2", "password": "bob1234"}).json()
+def test_user_cannot_see_anothers_cases(client: TestClient, admin_headers: dict) -> None:
+    # Admin creates two users (self-service signup is closed)
+    client.post(
+        "/api/auth/register",
+        json={"username": "alice2", "password": "alice123"},
+        headers=admin_headers,
+    )
+    client.post(
+        "/api/auth/register",
+        json={"username": "bob2", "password": "bob1234"},
+        headers=admin_headers,
+    )
+    a = client.post(
+        "/api/auth/login",
+        data={"username": "alice2", "password": "alice123"},
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    ).json()
+    b = client.post(
+        "/api/auth/login",
+        data={"username": "bob2", "password": "bob1234"},
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    ).json()
     a_h = {"Authorization": f"Bearer {a['access_token']}"}
     b_h = {"Authorization": f"Bearer {b['access_token']}"}
 

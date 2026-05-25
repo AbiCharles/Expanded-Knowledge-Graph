@@ -32,10 +32,11 @@ def test_login_with_wrong_password(client: TestClient) -> None:
     assert resp.status_code == 401
 
 
-def test_register_creates_user(client: TestClient) -> None:
+def test_register_creates_user(client: TestClient, admin_headers: dict) -> None:
     resp = client.post(
         "/api/auth/register",
         json={"username": "alice", "password": "alice123"},
+        headers=admin_headers,
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -43,10 +44,40 @@ def test_register_creates_user(client: TestClient) -> None:
     assert body["user"]["role"] == "user"
 
 
-def test_register_duplicate_username_409(client: TestClient) -> None:
-    client.post("/api/auth/register", json={"username": "bob", "password": "bob1234"})
-    second = client.post("/api/auth/register", json={"username": "bob", "password": "bob1234"})
+def test_register_duplicate_username_409(client: TestClient, admin_headers: dict) -> None:
+    client.post("/api/auth/register", json={"username": "bob", "password": "bob1234"}, headers=admin_headers)
+    second = client.post("/api/auth/register", json={"username": "bob", "password": "bob1234"}, headers=admin_headers)
     assert second.status_code == 409
+
+
+def test_register_unauthed_rejected(client: TestClient) -> None:
+    """Self-service signup is closed — register requires admin auth."""
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "intruder", "password": "letmein"},
+    )
+    assert resp.status_code == 401
+
+
+def test_register_non_admin_rejected(client: TestClient, admin_headers: dict) -> None:
+    """A non-admin user cannot create further users."""
+    client.post(
+        "/api/auth/register",
+        json={"username": "carol", "password": "carol123"},
+        headers=admin_headers,
+    )
+    carol_login = client.post(
+        "/api/auth/login",
+        data={"username": "carol", "password": "carol123"},
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    )
+    carol_headers = {"Authorization": f"Bearer {carol_login.json()['access_token']}"}
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "dave", "password": "dave1234"},
+        headers=carol_headers,
+    )
+    assert resp.status_code == 403
 
 
 def test_me_returns_current_user(client: TestClient, admin_headers: dict) -> None:

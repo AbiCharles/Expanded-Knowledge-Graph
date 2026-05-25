@@ -31,6 +31,14 @@ RUN pip install --no-cache-dir -e ./hitl-context && \
 # Bring in the built frontend as static assets
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# Snapshot the seeded data dir to /app/seed_data so the entrypoint can
+# re-seed an empty Fly-style volume on first boot. See docker-entrypoint.sh.
+RUN cp -R /app/backend/data /app/seed_data
+
+# Entrypoint handles first-run volume seeding, then execs the CMD.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Runtime config
 EXPOSE 8001
 ENV PYTHONUNBUFFERED=1 \
@@ -38,6 +46,7 @@ ENV PYTHONUNBUFFERED=1 \
 # JWT_SECRET MUST be set at run time. Fail fast if it isn't.
 ENV JWT_SECRET=""
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 # Run uvicorn with sane production defaults — no --reload, single worker
 # (the in-process state means horizontal scale needs Redis first).
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]

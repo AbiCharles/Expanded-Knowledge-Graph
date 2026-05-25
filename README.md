@@ -271,6 +271,23 @@ echo "OPENAI_API_KEY=sk-..." >> .env.docker
 docker compose --env-file .env.docker up -d
 ```
 
+### Deploy to Fly.io (single command after one-time setup)
+
+```bash
+fly launch --no-deploy --copy-config --name <your-app-name>
+fly volumes create hitl_data --size 1 --region <your-region>
+fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+# optional — real LLM instead of the bundled fake classifier
+fly secrets set LLM_PROVIDER=openai OPENAI_API_KEY=sk-...
+fly deploy
+```
+
+Subsequent deploys: just `fly deploy`. The mounted volume keeps `app.sqlite`,
+uploads, and operator-added sources across deploys; the seeded CSVs/ontologies
+are baked into the image and re-merged onto the volume by `docker-entrypoint.sh`
+on first boot. Do **not** scale beyond one machine — single-process state means
+horizontal scale needs Redis first (see [docs/production.md](docs/production.md)).
+
 Read [docs/production.md](docs/production.md) before going live. It covers
 the security checklist (real `JWT_SECRET`, rotate the seeded admin
 password, HTTPS, rate limiting, read-only DB user for the playground,

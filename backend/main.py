@@ -15,6 +15,8 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from tcs_hitl_context import FakeLLMClient, build_llm_client_from_env
 
@@ -187,6 +189,28 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    # Serve the built frontend at / when present (Docker / Fly). Skipped in
+    # local dev where the Vite dev server runs on its own port.
+    dist_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if dist_dir.is_dir():
+        index_file = dist_dir / "index.html"
+        assets_dir = dist_dir / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        # SPA fallback so React Router routes survive a hard refresh. Skips
+        # /api/* so unmatched API paths still 404 instead of silently
+        # returning the HTML shell.
+        @app.get("/{full_path:path}")
+        def _spa_fallback(full_path: str):
+            if full_path.startswith("api/"):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail="Not Found")
+            asset = dist_dir / full_path
+            if full_path and asset.is_file():
+                return FileResponse(asset)
+            return FileResponse(index_file)
 
     return app
 
