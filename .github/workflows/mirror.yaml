@@ -28,7 +28,12 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - name: Mirror push to Azure DevOps
+      - name: Install git-filter-repo
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git-filter-repo
+
+      - name: Mirror push to Azure DevOps (with .claude/ stripped)
         env:
           AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
         run: |
@@ -41,4 +46,11 @@ jobs:
           # into the target as branches the way actions/checkout would).
           git clone --mirror "https://github.com/${{ github.repository }}.git" repo.git
           cd repo.git
+          # Strip the project-local Claude Code agents/skills from all
+          # history before pushing. Azure DevOps doesn't need them and
+          # the audience there shouldn't see them. The filter is
+          # deterministic, so rewritten SHAs stay stable across syncs
+          # until tracked content actually changes. Note: Azure SHAs
+          # will not match GitHub SHAs as a result.
+          git filter-repo --invert-paths --path .claude --force
           git push --mirror "https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
