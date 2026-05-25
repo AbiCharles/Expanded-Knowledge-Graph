@@ -161,3 +161,20 @@ classes:
     - {name: container_type, type: string, description: "20'|40'|40HC|reefer|LCL|air-kg"}
     - {name: valid_from, type: date}
     - {name: valid_to, type: date}
+  DemurrageCharge:
+    description: Accessorial fee accrued when a shipment exceeds its free-time
+      allowance at a port (demurrage), at a yard (detention), or in storage.
+      The only entity in the logistics ontology that creates real dollar
+      exposure on the balance sheet — drives dispute/waive scenarios.
+    attributes:
+    - {name: charge_id, type: string, identifier: true}
+    - {name: shipment_id, type: string}
+    - {name: port_code, type: string}
+    - {name: charge_type, type: string, description: 'demurrage|detention|per_diem|storage'}
+    - {name: free_time_expired_at, type: string}
+    - {name: days_overage, type: decimal}
+    - {name: daily_rate_usd, type: decimal}
+    - {name: total_charge_usd, type: decimal}
+    - {name: status, type: string, description: 'accruing|billed|disputed|waived|paid'}
+    - {name: responsible_party, type: string, description: 'carrier|consignee|shipper'}
+    - {name: prior_dispute_outcome, type: string, description: 'won|lost|n/a'}

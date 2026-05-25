@@ -40,6 +40,26 @@ if [ -d "$SEED" ]; then
     cp -f "$SEED/actions"/*.yaml "$DATA/actions/" 2>/dev/null || true
   fi
 
+  # logistics.sqlite has a schema that evolves (Phase 2 = bookings; Phase 3
+  # added demurrage_charges). Run the seed script if EITHER (a) the file
+  # doesn't exist yet OR (b) a required table is missing. This protects
+  # operator mutations to bookings while still letting new tables land on
+  # the volume without a manual SSH step. The seed script is idempotent.
+  if [ -f "$DATA/seed_logistics.py" ]; then
+    need_seed=0
+    if [ ! -f "$DATA/logistics.sqlite" ]; then
+      need_seed=1
+    else
+      # Probe for the most-recently-added table. Add new probes here as
+      # the schema grows.
+      python3 -c "import sqlite3; sqlite3.connect('$DATA/logistics.sqlite').execute('SELECT 1 FROM demurrage_charges LIMIT 1')" 2>/dev/null || need_seed=1
+    fi
+    if [ "$need_seed" = "1" ]; then
+      echo "[entrypoint] seeding logistics.sqlite (new file or missing table)…"
+      (cd /app && python3 backend/data/seed_logistics.py) || true
+    fi
+  fi
+
   # ---- initialize-once (preserve operator/user mutations) ----
   # Everything else from the seed snapshot lands here only if not already
   # present on the volume — app.sqlite, uploads/, governance.sqlite,

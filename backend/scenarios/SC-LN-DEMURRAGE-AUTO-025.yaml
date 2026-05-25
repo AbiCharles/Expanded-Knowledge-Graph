@@ -1,0 +1,82 @@
+id: SC-LN-DEMURRAGE-AUTO-025
+title: "Auto-dispute small demurrage charges (envelope: <$500 + prior wins)"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+
+action_type: "dispute_demurrage_charge"
+action_payload:
+  charge_id: "DEM-S-700412-01"
+  shipment_id: "S-700412"
+  port_code: "DEHAM"
+  claim_amount_usd: 450
+  scope: "logistics.write_carrier_dispute_low"
+
+match_keywords: ["auto dispute", "auto-dispute", "small demurrage", "low value dispute", "auto challenge", "envelope dispute", "auto-file dispute"]
+interpreted_as: "auto-file a dispute on a small demurrage charge per the envelope policy"
+clarifying_question: >-
+  Confirm — auto-file a dispute on a low-value demurrage charge. Envelope
+  per <code>GR-LN-AUTO-DEM-003</code>: charge <$500 AND prior_dispute_outcome
+  on this carrier is "won". I'll bind the charge, the shipment, and the
+  carrier's prior dispute outcomes (from the demurrage_charges historical
+  rows where status=waived/paid) so you can see the autonomous decision was
+  data-grounded. No human review required if envelope holds. Proceed?
+
+auto_approval_guardrail: "GR-LN-AUTO-DEM-003"
+auto_approval_reason: "Charge under $500 AND prior carrier dispute outcomes are 'won' for this lane. Policy GR-LN-AUTO-DEM-003 permits autonomous dispute filing for low-risk recoveries."
+closing_message: >-
+  Done — auto-disputed via <code>dispute_demurrage_charge</code>. HTTP POST
+  fired to the carrier claims API. The envelope was grounded in the historical
+  win pattern on this lane; execution result + audit event on the lineage.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "GR-LN-AUTO-DEM-003"
+        uri: "kf.tcs/policy/GR-LN-AUTO-DEM-003"
+        title: "Autonomous low-value demurrage dispute policy"
+        payload: "Agent may auto-file disputes when total_charge_usd < 500 AND there is at least one prior carrier dispute on a similar charge with prior_dispute_outcome='won'. All other disputes (≥$500 or no win history) route to HITL via SC-LN-DEMURRAGE-DISPUTE-024."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.write_carrier_dispute_low · http_request to the carrier claims API permitted within envelope"
+  proposal:
+    binder: "AutoDemurrageProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: DemurrageCharge
+        where:
+          charge_id: ":charge_id"
+        purpose: "Bind the charge being auto-disputed"
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Source shipment + carrier context"
+      - ontology: logistics
+        class: DemurrageCharge
+        where:
+          status: waived
+        max_results: 5
+        purpose: "Prior 'won' dispute pattern — the data that grounded the envelope decision"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — dispute filed within envelope"
+    detail: "Charge under threshold and prior dispute pattern positive. dispute_demurrage_charge ran; HTTP response status captured."
+
+_executor:
+  action_id: dispute_demurrage_charge
+  arguments:
+    charge_id: DEM-S-700412-01
+    shipment_id: S-700412
+    dispute_reason: "Auto-filed per GR-LN-AUTO-DEM-003: charge under $500 + prior carrier dispute outcomes positive on this lane"
+    claim_amount_usd: "450"
+
+_filter_from_prompt: true

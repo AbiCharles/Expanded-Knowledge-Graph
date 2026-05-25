@@ -1,0 +1,125 @@
+id: SC-LN-DEMURRAGE-DISPUTE-024
+title: "Dispute a demurrage charge"
+domain: "Logistics & Network"
+teams_channel: "#logistics-planning"
+actor_id: "agent-logistics-31"
+operator_role: { label: "Operator", name: "planner.lvenkat" }
+reviewer_role: { label: "Reviewer", name: "logistics.planner.lead" }
+autonomous: false
+
+action_type: "dispute_demurrage_charge"
+action_payload:
+  charge_id: "DEM-S-700412-01"
+  shipment_id: "S-700412"
+  port_code: "DEHAM"
+  claim_amount_usd: 4800
+  originating_guardrail_id: "POL-LN-DEMURRAGE-2026"
+
+teams_headline: "Dispute demurrage · $4,800 on S-700412 at Hamburg"
+execute_message: >-
+  Approve to file a formal dispute with the carrier's claims API. Two actions
+  fire on approve: an HTTP POST to the carrier endpoint (simulated against
+  jsonplaceholder) and a local status update on <code>logistics.sqlite</code>
+  marking the charge as <em>disputed</em>.
+
+match_keywords: ["dispute demurrage", "dispute charge", "contest demurrage", "challenge demurrage", "dem-s-700412", "demurrage hamburg", "fight charge", "demurrage dispute"]
+interpreted_as: "dispute the demurrage charge DEM-S-700412-01 ($4,800) on shipment S-700412 at Hamburg"
+clarifying_question: >-
+  Confirm — dispute demurrage charge <code>DEM-S-700412-01</code> ($4,800,
+  shipment <code>S-700412</code> at port <code>DEHAM</code>). I'll bind the
+  charge record, prior dispute outcomes on this carrier/lane, and the
+  relevant policy SOP excerpts so the reviewer has the full evidence
+  package. Per <code>POL-LN-DEMURRAGE-2026</code>, all carrier disputes
+  require planner approval regardless of amount. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Planner approved the dispute.</strong> The
+    <code>dispute_demurrage_charge</code> action fired — POST to the
+    carrier's claims API + status update on the local charge row.
+    Reasoning captured in the audit trail.
+  reject: >-
+    <strong>Planner rejected the dispute.</strong> Reason given:
+    <em>"{rationale}"</em><br><br>Charge will be paid as billed; no dispute filed.
+  request_more_info: >-
+    <strong>Planner needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Free-time overrun was on our side (consignee delay) — dispute would not hold up."
+    - "Charge is below the dispute-management threshold; pay and move on."
+    - "Carrier relationship damage outweighs the recovery on this one charge."
+  request_more_info:
+    - "Need the port's free-time calculation worksheet to compare."
+    - "Need legal's view on whether the force-majeure clause applies here."
+    - "Need to see our 90-day dispute win-rate with this carrier first."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-LN-DEMURRAGE-2026"
+        uri: "kf.tcs/policy/POL-LN-DEMURRAGE-2026"
+        title: "Demurrage dispute policy"
+        payload: "All carrier disputes require named planner approval. Autonomous disputes are permitted only for charges <$500 where prior_dispute_outcome on the carrier is 'won'. Audit trail must record dispute reason verbatim."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-logistics-31"
+        uri: "iam.tcs/actors/agent-logistics-31"
+        title: "Actor scope"
+        payload: "Scopes: logistics.read, logistics.propose, logistics.tender_after_review · this case writes to logistics_sqlite + posts to carrier claims API after approval"
+  proposal:
+    binder: "DemurrageDisputeProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: DemurrageCharge
+        where:
+          charge_id: ":charge_id"
+        purpose: "Bind the specific charge under dispute"
+      - ontology: logistics
+        class: Shipment
+        where:
+          shipment_id: ":shipment_id"
+        purpose: "Source shipment context (carrier, lane, exception flag)"
+      - ontology: logistics
+        class: Port
+        where:
+          port_code: ":port_code"
+        purpose: "Port operational state at the time the free-time expired"
+  review:
+    binder: "DemurrageDisputeReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-LN-002
+        max_results: 3
+        purpose: "Prior planner decisions on lane / carrier issues (governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: demurrage free time port congestion force majeure dispute
+          top_k: 3
+        purpose: "Retrieve relevant SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — dispute filed"
+    detail: "Planner approved. dispute_demurrage_charge ran — POST to the carrier claims API + local status update. Reasoning + execution result on the lineage."
+  reject:
+    headline: "Rejected — charge paid as billed"
+    detail: "Planner declined the dispute. Reason captured in lineage; no carrier-side action."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer asked for additional port worksheets / legal input / historical win-rate before deciding."
+
+_executor:
+  action_id: dispute_demurrage_charge
+  arguments:
+    charge_id: DEM-S-700412-01
+    shipment_id: S-700412
+    dispute_reason: "Free-time clock should have paused during port congestion event at DEHAM; carrier responsible for accrual period"
+    claim_amount_usd: "4800"

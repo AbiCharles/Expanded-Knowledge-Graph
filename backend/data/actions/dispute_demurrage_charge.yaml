@@ -1,0 +1,40 @@
+id: dispute_demurrage_charge
+title: Dispute a demurrage charge with the carrier
+description: >-
+  Mark a demurrage charge as disputed and submit the formal dispute packet to
+  the carrier's claims API. Two-leg write — HTTP POST to the carrier's
+  endpoint (simulated against jsonplaceholder) plus a status update on the
+  local demurrage_charges row. Used by SC-LN-DEMURRAGE-DISPUTE-024 (HITL) and
+  SC-LN-DEMURRAGE-AUTO-025 (autonomous within envelope).
+hitl: true
+arguments:
+  - { name: charge_id, type: string, required: true,
+      description: The demurrage charge being disputed.,
+      example: DEM-S-700412-01 }
+  - { name: shipment_id, type: string, required: true,
+      description: Source shipment for the charge.,
+      example: S-700412 }
+  - { name: dispute_reason, type: string, required: true,
+      description: Short rationale captured on the audit trail.,
+      example: "Free-time clock should have paused during port congestion event PORT-NLRTM-2026-0501" }
+  - { name: claim_amount_usd, type: decimal, required: true,
+      description: The amount being contested.,
+      example: "4800" }
+executor:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: POST
+  path_template: /posts
+  content_type: application/json
+  body_template: |
+    {{
+      "title": "Demurrage dispute filed: {charge_id}",
+      "body": "Shipment {shipment_id} · contesting ${claim_amount_usd} · reason: {dispute_reason}",
+      "userId": 1
+    }}
+match_keywords:
+  - dispute demurrage
+  - dispute charge
+  - contest demurrage
+  - challenge demurrage
+default: true

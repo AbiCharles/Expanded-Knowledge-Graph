@@ -12,9 +12,13 @@ Writes:
                               customer order)
     - logistics.sqlite#bookings (~750 active bookings — proposed/tendered/
                               confirmed states; completed shipments archive)
-
-Phase 3 (demurrage) will extend logistics.sqlite with a demurrage_charges
-table; same referential-integrity story.
+  Phase 3:
+    - logistics.sqlite#demurrage_charges (~250 rows; sparse, ~8% of
+                              shipments trigger demurrage. Mix of accruing /
+                              billed / disputed / waived / paid states with
+                              prior_dispute_outcome populated for previously
+                              decided rows so the autonomous-dispute scenario
+                              has historical patterns to draw on.)
 
 The script is deterministic: a fixed RNG seed plus sorted iteration means the
 output is reproducible across runs. Re-run after editing distributions; commit
@@ -464,12 +468,109 @@ CREATE INDEX idx_bookings_shipment ON bookings(shipment_id);
 CREATE INDEX idx_bookings_status   ON bookings(status);
 """
 
+_DEMURRAGE_DDL = """
+DROP TABLE IF EXISTS demurrage_charges;
+CREATE TABLE demurrage_charges (
+    charge_id             TEXT PRIMARY KEY,
+    shipment_id           TEXT NOT NULL,
+    port_code             TEXT NOT NULL,
+    charge_type           TEXT NOT NULL,
+    free_time_expired_at  TEXT NOT NULL,
+    days_overage          REAL NOT NULL,
+    daily_rate_usd        REAL NOT NULL,
+    total_charge_usd      REAL NOT NULL,
+    status                TEXT NOT NULL,
+    responsible_party     TEXT NOT NULL,
+    prior_dispute_outcome TEXT NOT NULL
+);
+CREATE INDEX idx_demurrage_shipment ON demurrage_charges(shipment_id);
+CREATE INDEX idx_demurrage_status   ON demurrage_charges(status);
+"""
+
+# Hand-pinned demurrage charges so the dispute scenario has a stable case to
+# reference. Targets the high-variance S-700412 (long delay → port stuck at
+# Hamburg → demurrage accrues).
+SEED_DEMURRAGE: list[dict[str, str]] = [
+    {
+        "charge_id": "DEM-S-700412-01", "shipment_id": "S-700412",
+        "port_code": "DEHAM", "charge_type": "demurrage",
+        "free_time_expired_at": "2026-04-21T08:00Z",
+        "days_overage": "4.0", "daily_rate_usd": "1200",
+        "total_charge_usd": "4800", "status": "billed",
+        "responsible_party": "consignee", "prior_dispute_outcome": "n/a",
+    },
+]
+
+# Charge-type weights — demurrage is most common, per_diem rare.
+_DEMURRAGE_TYPE_POOL = (["demurrage"] * 55) + (["detention"] * 25) + (["storage"] * 15) + (["per_diem"] * 5)
+# Status weights for fresh charges. Most are still accruing or billed; some
+# already-decided ones (waived/paid) carry a prior_dispute_outcome so the
+# autonomous-dispute scenario can find a "we've won similar before" pattern.
+_DEMURRAGE_STATUS_POOL = (
+    (["accruing"] * 35) + (["billed"] * 35) + (["disputed"] * 10)
+    + (["waived"] * 10) + (["paid"] * 10)
+)
+_RESPONSIBLE_POOL = (["consignee"] * 50) + (["carrier"] * 30) + (["shipper"] * 20)
+
+
+def _generate_demurrage(
+    shipments: list[dict], rng: random.Random
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = list(SEED_DEMURRAGE)
+    seed_charges = {r["shipment_id"] for r in SEED_DEMURRAGE}
+
+    # Only ~8% of shipments accrue demurrage; bias toward shipments that
+    # routed through HIGH-congestion ports (DEHAM, USLAX, CNTAO, INNSA) since
+    # those are where free-time overruns are concentrated in real ops.
+    high_friction_ports = {"DEHAM", "USLAX", "CNTAO", "INNSA"}
+    high_friction = [s for s in shipments if s["port_code"] in high_friction_ports]
+    other = [s for s in shipments if s["port_code"] not in high_friction_ports]
+    # 70% of charges come from high-friction ports, 30% from elsewhere.
+    target_total = 250 - len(SEED_DEMURRAGE)
+    from_high = rng.sample(high_friction, k=min(int(target_total * 0.7), len(high_friction)))
+    from_low = rng.sample(other, k=min(target_total - len(from_high), len(other)))
+    selected = [s for s in (from_high + from_low) if s["shipment_id"] not in seed_charges]
+
+    next_seq = 200_000
+    for s in selected:
+        ctype = rng.choice(_DEMURRAGE_TYPE_POOL)
+        status = rng.choice(_DEMURRAGE_STATUS_POOL)
+        # Daily rate varies by type; demurrage > detention > storage > per_diem.
+        rate_map = {"demurrage": (800, 2200), "detention": (250, 600), "storage": (80, 250), "per_diem": (50, 150)}
+        daily = round(rng.uniform(*rate_map[ctype]), 0)
+        days = round(rng.uniform(1, 12), 1)
+        total = round(daily * days, 0)
+        # Free-time-expired timestamp = scheduled ETA + a few days of free
+        # time, then overrun. Reuse shipment scheduled_eta as the anchor.
+        sched = datetime.strptime(s["scheduled_eta"], "%Y-%m-%dT%H:%MZ")
+        free_time_expired = sched + timedelta(days=rng.randint(3, 7))
+        # waived / paid rows carry a historical outcome so the autonomous
+        # dispute pattern has training data. accruing / billed / disputed
+        # don't — those are the unresolved live charges.
+        prior_outcome = (
+            rng.choice(["won", "lost"]) if status in ("waived", "paid") else "n/a"
+        )
+        rows.append({
+            "charge_id": f"DEM-{next_seq}",
+            "shipment_id": s["shipment_id"],
+            "port_code": s["port_code"],
+            "charge_type": ctype,
+            "free_time_expired_at": free_time_expired.strftime("%Y-%m-%dT%H:%MZ"),
+            "days_overage": str(days),
+            "daily_rate_usd": str(daily),
+            "total_charge_usd": str(total),
+            "status": status,
+            "responsible_party": rng.choice(_RESPONSIBLE_POOL),
+            "prior_dispute_outcome": prior_outcome,
+        })
+        next_seq += 1
+    return rows
+
 
 def _write_bookings_sqlite(rows: list[dict[str, str]]) -> None:
     """Replace logistics.sqlite.bookings with the freshly generated set.
 
-    Idempotent: drops the table and re-creates. Demurrage (Phase 3) will add
-    a second table to the same file via its own DDL block.
+    Idempotent: drops the table and re-creates.
     """
     LOGISTICS_SQLITE.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(LOGISTICS_SQLITE)
@@ -487,6 +588,29 @@ def _write_bookings_sqlite(rows: list[dict[str, str]]) -> None:
         conn.close()
 
 
+def _write_demurrage_sqlite(rows: list[dict[str, str]]) -> None:
+    """Replace logistics.sqlite.demurrage_charges with the freshly generated set.
+
+    Idempotent: drops the table and re-creates. Shares the file with bookings.
+    """
+    LOGISTICS_SQLITE.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(LOGISTICS_SQLITE)
+    try:
+        conn.executescript(_DEMURRAGE_DDL)
+        conn.executemany(
+            "INSERT INTO demurrage_charges (charge_id, shipment_id, port_code, "
+            "charge_type, free_time_expired_at, days_overage, daily_rate_usd, "
+            "total_charge_usd, status, responsible_party, prior_dispute_outcome) "
+            "VALUES (:charge_id, :shipment_id, :port_code, :charge_type, "
+            ":free_time_expired_at, :days_overage, :daily_rate_usd, "
+            ":total_charge_usd, :status, :responsible_party, :prior_dispute_outcome)",
+            rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def main() -> None:
     rng = random.Random(SEED)
     shipments = _generate_shipments(rng)
@@ -497,6 +621,7 @@ def main() -> None:
 
     orders = _generate_customer_orders(shipments, rng)
     bookings = _generate_bookings(shipments, rng)
+    demurrage = _generate_demurrage(shipments, rng)
 
     shipment_headers = [
         "shipment_id", "customer_order", "sku", "origin", "destination", "pallets",
@@ -521,11 +646,13 @@ def main() -> None:
     _write_csv(EVENTS_CSV, events, event_headers)
     _write_csv(CUSTOMER_ORDERS_CSV, orders, order_headers)
     _write_bookings_sqlite(bookings)
+    _write_demurrage_sqlite(demurrage)
 
     print(f"Wrote {len(shipments):,} shipments       → {SHIPMENTS_CSV}")
     print(f"Wrote {len(events):,} events          → {EVENTS_CSV}")
     print(f"Wrote {len(orders):,} customer_orders → {CUSTOMER_ORDERS_CSV}")
     print(f"Wrote {len(bookings):,} bookings        → {LOGISTICS_SQLITE} (bookings table)")
+    print(f"Wrote {len(demurrage):,} demurrage       → {LOGISTICS_SQLITE} (demurrage_charges table)")
 
 
 if __name__ == "__main__":

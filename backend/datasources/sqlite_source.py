@@ -28,6 +28,11 @@ from tcs_hitl_context import KnowledgeFact, KnowledgeQuery, KnowledgeRef
 # Pull "<table>" out of "... FROM <table> ..." (case-insensitive). Greedy enough
 # to grab `schema.table` or quoted identifiers; intentionally *not* a SQL parser.
 _FROM_TABLE_RE = re.compile(r"\bFROM\s+([A-Za-z_][\w\.\"`]*)", re.IGNORECASE)
+# All `:name` named-parameter references in a SQL statement. Used to default
+# any params the caller didn't supply to None — lets mappings write
+# `WHERE (:foo IS NULL OR col = :foo)` patterns without every caller having
+# to send every key.
+_NAMED_PARAM_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
 
 
 class SqliteResolver:
@@ -82,6 +87,12 @@ class SqliteResolver:
             if k not in ("__binding__", "__ontology__")
         }
         params.setdefault("max_results", query.max_results)
+        # Default any `:name` referenced in the SQL but not supplied by the
+        # caller to None. Lets mappings write optional filter patterns like
+        # `WHERE (:foo IS NULL OR col = :foo)` without requiring every
+        # invocation to send every key.
+        for name in _NAMED_PARAM_RE.findall(sql):
+            params.setdefault(name, None)
         with self._connect() as conn:
             cursor = conn.execute(sql, params)
             rows = [dict(r) for r in cursor.fetchall()]

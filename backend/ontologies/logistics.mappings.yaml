@@ -255,3 +255,46 @@ mappings:
       confirmed_at: null
       notes: Filter by lane_id and/or carrier_id to compare current rate cards.
     relations: {}
+  DemurrageCharge:
+    sources:
+    - data_source: logistics_sqlite
+      identifier_column: charge_id
+      attribute_map:
+        charge_id: charge_id
+        shipment_id: shipment_id
+        port_code: port_code
+        charge_type: charge_type
+        free_time_expired_at: free_time_expired_at
+        days_overage: days_overage
+        daily_rate_usd: daily_rate_usd
+        total_charge_usd: total_charge_usd
+        status: status
+        responsible_party: responsible_party
+        prior_dispute_outcome: prior_dispute_outcome
+      table: demurrage_charges
+      # Filter by charge_id OR shipment_id. Two distinct lookup paths:
+      # the dispute scenario starts from a specific charge_id; the
+      # autonomous-dispute scenario walks shipments and pulls all charges
+      # for each. The SQL handles both via COALESCE.
+      query_template: |
+        SELECT charge_id AS id,
+               charge_type || ' on ' || shipment_id AS title,
+               port_code || ' · ' || days_overage || 'd × $' || daily_rate_usd
+                 || ' = $' || total_charge_usd
+                 || ' · status ' || status
+                 || ' · prior ' || prior_dispute_outcome
+                 || ' · resp ' || responsible_party AS summary
+        FROM demurrage_charges
+        WHERE (:charge_id   IS NULL OR charge_id   = :charge_id)
+          AND (:shipment_id IS NULL OR shipment_id = :shipment_id)
+          AND (:status      IS NULL OR status      = :status)
+        ORDER BY total_charge_usd DESC
+        LIMIT :max_results
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Filter by charge_id (dispute case), shipment_id (linked-charges
+        lookup), or status (e.g. status='billed' for live charges only).
+    relations: {}

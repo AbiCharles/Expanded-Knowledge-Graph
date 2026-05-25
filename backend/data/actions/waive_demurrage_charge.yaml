@@ -1,0 +1,27 @@
+id: waive_demurrage_charge
+title: Waive a demurrage charge internally
+description: Mark a demurrage charge as waived in the logistics.sqlite store
+  (no carrier notification — this is the internal-decision counterpart to
+  dispute_demurrage_charge). Records the waiving party for audit.
+hitl: true
+arguments:
+  - { name: charge_id, type: string, required: true,
+      description: The demurrage charge being waived.,
+      example: DEM-S-700412-01 }
+  - { name: waived_by, type: string, required: true,
+      description: Reviewer's identifier; recorded as the responsible party.,
+      example: logistics.planner.lead }
+executor:
+  kind: sql_update
+  data_source: logistics_sqlite
+  sql: |
+    UPDATE demurrage_charges
+       SET status            = 'waived',
+           responsible_party = :waived_by
+     WHERE charge_id = :charge_id
+match_keywords:
+  - waive demurrage
+  - waive charge
+  - absorb demurrage
+  - accept demurrage
+default: true
