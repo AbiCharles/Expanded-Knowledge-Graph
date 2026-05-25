@@ -582,24 +582,90 @@ body {
 }
 
 /* ---------- Composer ---------- */
+/* Animated three-dot "agent is thinking" indicator. Used inline inside the
+   binding system bubble while the orchestrator is fanning out queries. */
+.thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin: 0 4px;
+  vertical-align: middle;
+}
+.thinking-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: thinking-bounce 1100ms ease-in-out infinite;
+}
+.thinking-dots > span:nth-child(2) { animation-delay: 180ms; }
+.thinking-dots > span:nth-child(3) { animation-delay: 360ms; }
+@keyframes thinking-bounce {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1.0;  transform: translateY(-3px); }
+}
+
+/* The suggestions panel is a <details> accordion. Collapsed by default so the
+   composer + console are not pushed below the fold; user clicks the summary
+   bar to reveal the (now-grouped-by-domain) chip list. */
 .suggested-row {
-  padding: 12px 16px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   border-top: 1px solid var(--rule);
   background: var(--paper-warm);
 }
+.suggested-summary {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.suggested-summary::-webkit-details-marker { display: none; }
+.suggested-summary:hover { background: rgba(0,0,0,0.02); }
 .suggested-label {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  margin-bottom: 2px;
+}
+.suggested-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--cyan);
+  margin-left: 4px;
+}
+.suggested-chevron {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  transition: transform 160ms ease;
+}
+details[open] > .suggested-summary .suggested-chevron {
+  transform: rotate(90deg);
 }
 .suggested-chips {
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.suggested-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.suggested-group-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 4px 0 2px;
+  border-bottom: 1px dashed var(--rule);
 }
 .chip {
   font-family: 'Outfit', sans-serif;
@@ -1077,9 +1143,19 @@ body {
 }
 
 .stage-header {
+  /* Clickable: it's now a <button> with the same visual shape as before. */
   display: flex; align-items: baseline; justify-content: space-between;
   margin-bottom: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
+.stage-header:hover { background: rgba(0,0,0,0.02); }
 .stage-name {
   font-family: 'DM Mono', monospace;
   font-size: 10px;
@@ -1087,6 +1163,23 @@ body {
   text-transform: uppercase;
   color: var(--navy-deep);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stage-chevron {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--ink-muted);
+  transition: transform 160ms ease;
+}
+.stage-open > .stage-header .stage-chevron { transform: rotate(90deg); }
+.stage-fact-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+  margin-left: 4px;
 }
 .stage-binder {
   font-family: 'DM Mono', monospace;
@@ -1097,6 +1190,11 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
+  /* Cap a single stage's fact list to ~45vh so a 30-fact stage scrolls
+     internally instead of pushing the page below the fold. */
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .fact {
   background: var(--paper-warm);
@@ -1705,15 +1803,32 @@ body {
 }
 .auto-reason { font-size: 13px; line-height: 1.55; color: var(--ink); }
 .auto-footer {
-  padding: 12px 22px 14px;
+  padding: 10px 22px 12px;
   border-top: 1px solid var(--paper-deep);
   font-family: 'DM Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+.auto-dismiss {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 5px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.auto-dismiss:hover { background: var(--paper-warm); border-color: var(--cyan); color: var(--navy-deep); }
 
 /* Compare modal */
 .compare-modal {

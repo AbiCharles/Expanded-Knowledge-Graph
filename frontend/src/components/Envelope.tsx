@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CaseFull, StagePayload } from "../types";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -29,30 +30,43 @@ export function Envelope({ active }: { active: CaseFull | null }) {
 }
 
 function StageBlock({ stage, index }: { stage: StagePayload; index: number }) {
+  // Each stage starts expanded (the user wants to see the work). Click the
+  // header to collapse. Inside, the facts grid is capped with internal scroll
+  // so a 30-fact port-disruption stage doesn't push the page below the fold.
+  const [open, setOpen] = useState(true);
   return (
-    <div className="stage-block">
-      <div className="stage-header">
+    <div className={`stage-block${open ? " stage-open" : " stage-collapsed"}`}>
+      <button
+        type="button"
+        className="stage-header"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <div className="stage-name">
+          <span className="stage-chevron" aria-hidden="true">▸</span>
           Stage {index + 1} · {STAGE_LABEL[stage.stage] ?? stage.stage}
+          <span className="stage-fact-count">({stage.facts.length})</span>
         </div>
         <div className="stage-binder">{stage.binder}</div>
-      </div>
-      <div className="facts-grid">
-        {stage.facts.map((f, i) => (
-          <div className="fact" key={`${f.source}-${f.id}`} style={{ animationDelay: `${i * 80}ms` }}>
-            <div className="fact-source">
-              [{f.source}] · {f.ontology_type}
+      </button>
+      {open && (
+        <div className="facts-grid">
+          {stage.facts.map((f, i) => (
+            <div className="fact" key={`${f.source}-${f.id}`} style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="fact-source">
+                [{f.source}] · {f.ontology_type}
+              </div>
+              <div className="fact-id">{f.title}</div>
+              <div className="fact-payload">{f.summary}</div>
+              {f.uri && (
+                <a className="fact-uri" href="#" onClick={(e) => e.preventDefault()}>
+                  → {f.uri}
+                </a>
+              )}
             </div>
-            <div className="fact-id">{f.title}</div>
-            <div className="fact-payload">{f.summary}</div>
-            {f.uri && (
-              <a className="fact-uri" href="#" onClick={(e) => e.preventDefault()}>
-                → {f.uri}
-              </a>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

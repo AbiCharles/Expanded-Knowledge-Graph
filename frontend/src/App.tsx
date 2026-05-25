@@ -149,7 +149,14 @@ export default function App() {
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
+  // Spans the network round-trip on createCase (LLM classifier ~1-3s) and
+  // confirmCase (orchestrator start). Drives the "agent is thinking" indicator
+  // in the Console so the user gets feedback BEFORE the case's own `binding`
+  // phase event arrives via SSE.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const onSendPrompt = async (text: string) => {
+    setIsSubmitting(true);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
@@ -157,14 +164,21 @@ export default function App() {
     } catch (e) {
       console.error(e);
       alert((e as Error).message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const onConfirm = async () => {
     if (!active) return;
-    await api.confirmCase(active.case_id);
-    refreshActive();
-    refreshCases();
+    setIsSubmitting(true);
+    try {
+      await api.confirmCase(active.case_id);
+      refreshActive();
+      refreshCases();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const onPickCandidate = async (scenarioId: string) => {
@@ -280,7 +294,8 @@ export default function App() {
           cases={cases}
           active={active}
           role={role}
-          composerLocked={composerLocked}
+          composerLocked={composerLocked || isSubmitting}
+          isSubmitting={isSubmitting}
           onSendPrompt={onSendPrompt}
           onConfirm={onConfirm}
           onCancel={onCancel}

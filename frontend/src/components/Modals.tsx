@@ -292,9 +292,11 @@ export function AutoApproveModal({
   reason: string;
   onClose: () => void;
 }) {
-  // Auto-dismiss after ~1.8s
+  // Auto-dismiss after 6s. Long enough to read; the Dismiss button is there
+  // for anyone who wants to clear it sooner or keep it on screen longer (the
+  // timer cancels if the user clicks).
   useEffect(() => {
-    const t = setTimeout(onClose, 1800);
+    const t = setTimeout(onClose, 6000);
     return () => clearTimeout(t);
   }, [onClose]);
 
@@ -309,7 +311,12 @@ export function AutoApproveModal({
           <div className="auto-guardrail">{guardrailId}</div>
           <div className="auto-reason">{reason}</div>
         </div>
-        <div className="auto-footer">No human review required · executing autonomously</div>
+        <div className="auto-footer">
+          <span>No human review required · executing autonomously</span>
+          <button className="auto-dismiss" onClick={onClose} type="button">
+            Dismiss
+          </button>
+        </div>
       </div>
     </div>
   );

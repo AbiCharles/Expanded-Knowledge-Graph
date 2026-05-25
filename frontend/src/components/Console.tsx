@@ -7,6 +7,7 @@ interface Props {
   active: CaseFull | null;
   role: "operator" | "reviewer";
   composerLocked: boolean;
+  isSubmitting: boolean;
   onSendPrompt: (text: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -26,6 +27,7 @@ export function Console({
   active,
   role,
   composerLocked,
+  isSubmitting,
   onSendPrompt,
   onConfirm,
   onCancel,
@@ -50,7 +52,7 @@ export function Console({
 
   // When a case is being viewed, the chat thread fills the panel.
   // Otherwise: default to a clean welcome; toggle to show history.
-  const showWelcome = !active && !showHistory;
+  const showWelcome = !active && !showHistory && !isSubmitting;
   const showHistoryList = !active && showHistory;
   const historyCount = cases.length;
 
@@ -86,6 +88,7 @@ export function Console({
       {active && (
         <ChatThread
           active={active}
+          isSubmitting={isSubmitting}
           onConfirm={onConfirm}
           onCancel={onCancel}
           onBack={() => onSelectCase(null)}
@@ -94,6 +97,21 @@ export function Console({
           onCompare={() => onCompare(active.case_id)}
           onPickCandidate={onPickCandidate}
         />
+      )}
+      {/* Pending bubble: user just clicked Send/chip but the createCase
+          response (LLM classifier ~1-3s) hasn't returned yet, so `active` is
+          still null. This is the only time the thinking dots show without an
+          accompanying case row. */}
+      {isSubmitting && !active && (
+        <div className="chat-thread">
+          <div className="chat-msg system">
+            <div className="chat-bubble">
+              <span>
+                agent is thinking <span className="thinking-dots"><span></span><span></span><span></span></span> · classifying your request
+              </span>
+            </div>
+          </div>
+        </div>
       )}
       {showHistoryList && (
         <ThreadList
@@ -112,51 +130,59 @@ export function Console({
       )}
       {showWelcome && <WelcomeState historyCount={historyCount} />}
 
-      <div className="suggested-row">
-        <div className="suggested-label">Suggested · click to use</div>
+      <details className="suggested-row">
+        <summary className="suggested-summary">
+          <span className="suggested-label">
+            Suggestions <span className="suggested-count">({scenarios.length})</span>
+          </span>
+          <span className="suggested-chevron" aria-hidden="true">▸</span>
+        </summary>
         <div className="suggested-chips">
-          {[...scenarios]
-            .sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0))
-            .map((sc) => (
-            <div key={sc.id} className="chip-row">
-              <button
-                className="chip"
-                disabled={composerLocked}
-                onClick={() => onSendPrompt(sc.suggested_prompt)}
-                title={chipTooltip(sc)}
-              >
-                {sc.suggested_prompt}
-                {sc.source_kinds && sc.source_kinds.length > 0 ? (
-                  <span className="chip-sources">
-                    {sc.source_kinds.map((k) => (
-                      <span
-                        key={k}
-                        className={`chip-source-badge chip-source-${k}`}
-                      >
-                        {sourceKindLabel(k)}
+          {groupScenariosByDomain(scenarios).map(([domain, scs]) => (
+            <div key={domain} className="suggested-group">
+              <div className="suggested-group-label">{domain}</div>
+              {scs.map((sc) => (
+                <div key={sc.id} className="chip-row">
+                  <button
+                    className="chip"
+                    disabled={composerLocked}
+                    onClick={() => onSendPrompt(sc.suggested_prompt)}
+                    title={chipTooltip(sc)}
+                  >
+                    {sc.suggested_prompt}
+                    {sc.source_kinds && sc.source_kinds.length > 0 ? (
+                      <span className="chip-sources">
+                        {sc.source_kinds.map((k) => (
+                          <span
+                            key={k}
+                            className={`chip-source-badge chip-source-${k}`}
+                          >
+                            {sourceKindLabel(k)}
+                          </span>
+                        ))}
                       </span>
-                    ))}
-                  </span>
-                ) : null}
-                {sc.run_count && sc.run_count > 0 ? (
-                  <span className="chip-stat">· {sc.run_count}</span>
-                ) : null}
-              </button>
-              <button
-                className="chip-edit"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEditScenario(sc.id);
-                }}
-                title={`Edit ${sc.id}`}
-                aria-label={`Edit ${sc.id}`}
-              >
-                ✎
-              </button>
+                    ) : null}
+                    {sc.run_count && sc.run_count > 0 ? (
+                      <span className="chip-stat">· {sc.run_count}</span>
+                    ) : null}
+                  </button>
+                  <button
+                    className="chip-edit"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditScenario(sc.id);
+                    }}
+                    title={`Edit ${sc.id}`}
+                    aria-label={`Edit ${sc.id}`}
+                  >
+                    ✎
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       <div className="composer">
         <textarea
@@ -354,6 +380,7 @@ function ThreadList({
 
 function ChatThread({
   active,
+  isSubmitting,
   onConfirm,
   onCancel,
   onBack,
@@ -363,6 +390,7 @@ function ChatThread({
   onPickCandidate,
 }: {
   active: CaseFull;
+  isSubmitting: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   onBack: () => void;
@@ -443,11 +471,23 @@ function ChatThread({
         />
       )}
 
-      {/* Binding system note + spinner */}
-      {(active.phase === "binding" || active.phase === "review_ready") && (
+      {/* Binding system note + spinner. Three triggers:
+          - `isSubmitting`: covers the gap right after the user clicks Send or
+            Proceed (network round-trip to /api/cases or /confirm before any
+            phase event arrives).
+          - `phase=binding`: the live "agent is binding stages" SSE phase.
+          - `phase=review_ready`: keep the bubble visible (without dots) so
+            the user sees the case is awaiting a human. */}
+      {(isSubmitting ||
+        active.phase === "binding" ||
+        active.phase === "review_ready") && (
         <ChatBubble
           role="system"
-          html={`routing through TCS Knowledge Fabric · case ${active.case_id}`}
+          html={
+            isSubmitting || active.phase === "binding"
+              ? `agent is thinking <span class="thinking-dots"><span></span><span></span><span></span></span> · routing through TCS Knowledge Fabric · case ${active.case_id}`
+              : `routing through TCS Knowledge Fabric · case ${active.case_id}`
+          }
         />
       )}
 
@@ -660,6 +700,43 @@ function WelcomeState({ historyCount }: { historyCount: number }) {
       </div>
     </div>
   );
+}
+
+// Domain ordering for the suggestions accordion — operational logistics first,
+// then trade/procurement, then ontology-lookup chips (which are auto-generated
+// and tend to be noisier). Unknown domains land in the order they appear.
+const DOMAIN_ORDER = [
+  "Logistics & Network",
+  "Trade Compliance",
+  "Planning & Procurement",
+  "Ontology lookups",
+];
+
+function groupScenariosByDomain(
+  scenarios: ScenarioRow[],
+): Array<[string, ScenarioRow[]]> {
+  const groups = new Map<string, ScenarioRow[]>();
+  for (const sc of scenarios) {
+    const domain = sc.domain || "Other";
+    if (!groups.has(domain)) groups.set(domain, []);
+    groups.get(domain)!.push(sc);
+  }
+  // Sort within each domain by recency (newest scenarios first), same as before.
+  for (const list of groups.values()) {
+    list.sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
+  }
+  // Emit groups in our preferred order, then any remaining alphabetically.
+  const ordered: Array<[string, ScenarioRow[]]> = [];
+  for (const d of DOMAIN_ORDER) {
+    if (groups.has(d)) {
+      ordered.push([d, groups.get(d)!]);
+      groups.delete(d);
+    }
+  }
+  for (const d of Array.from(groups.keys()).sort()) {
+    ordered.push([d, groups.get(d)!]);
+  }
+  return ordered;
 }
 
 function chipTooltip(sc: ScenarioRow): string {
