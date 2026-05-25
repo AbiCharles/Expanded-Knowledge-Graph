@@ -218,20 +218,51 @@ async def current_token_payload(
 # Bootstrap
 # =============================================================================
 def ensure_default_admin(database) -> None:
-    """Seed an `admin/admin` user on first startup so the demo isn't locked
-    out. Operators should change the password (or delete the row) before any
-    real deployment."""
+    """Ensure the system has an admin user.
+
+    - On a fresh DB, seed ``admin / admin`` so the demo isn't locked out.
+    - When ``HITL_ADMIN_PASSWORD`` is set, override that password — either
+      by resetting the existing ``admin`` user or by creating one. Use this
+      to recover access to a deployed instance or to avoid the well-known
+      ``admin/admin`` default in production. Unset the env var after the
+      next deploy completes successfully.
+    """
+    override = os.environ.get("HITL_ADMIN_PASSWORD") or None
     with database.session() as session:
-        if session.execute(select(UserRow).limit(1)).scalar() is not None:
+        admin = session.execute(
+            select(UserRow).where(UserRow.username == "admin")
+        ).scalar()
+
+        if admin is not None:
+            if override:
+                admin.password_hash = hash_password(override)
+                session.commit()
+                log.warning(
+                    "Reset 'admin' password from HITL_ADMIN_PASSWORD env var."
+                )
             return
+
+        # No admin user. Don't auto-seed if some other user exists and the
+        # operator didn't ask for one — they may have deliberately removed
+        # the default admin.
+        any_user = session.execute(select(UserRow).limit(1)).scalar() is not None
+        if any_user and not override:
+            return
+
+        password = override or "admin"
         session.add(UserRow(
             username="admin",
-            password_hash=hash_password("admin"),
+            password_hash=hash_password(password),
             role="admin",
             display_name="Default Admin",
         ))
         session.commit()
-        log.warning(
-            "Seeded default admin user (admin / admin) — change this password "
-            "via /api/auth/change-password before any real use."
-        )
+        if override:
+            log.warning(
+                "Seeded 'admin' user with password from HITL_ADMIN_PASSWORD env var."
+            )
+        else:
+            log.warning(
+                "Seeded default admin user (admin / admin) — change this password "
+                "via /api/auth/change-password before any real use."
+            )
