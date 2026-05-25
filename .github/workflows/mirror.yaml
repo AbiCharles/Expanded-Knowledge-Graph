@@ -1,0 +1,44 @@
+name: Mirror to Azure DevOps
+
+# One-way mirror: GitHub (canonical) → Azure DevOps (read-only copy).
+# Azure repo: agentic-ai/ai-agent/tcs_knowledge_fabric
+#
+# Required GitHub Actions secret:
+#   AZURE_DEVOPS_PAT — Personal Access Token with Code (Read & Write) scope.
+#     Generated at https://dev.azure.com/agentic-ai/_usersSettings/tokens
+#
+# Triggers: every push to main, manual dispatch, and a 6-hourly safety net.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"
+
+permissions:
+  contents: read
+
+# Serialize mirror runs — two concurrent pushes to the same remote would race.
+concurrency:
+  group: mirror-azure
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror push to Azure DevOps
+        env:
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AZURE_DEVOPS_PAT}" ]; then
+            echo "::error::AZURE_DEVOPS_PAT secret is not set"
+            exit 1
+          fi
+          # Bare mirror clone keeps refs clean (no refs/remotes/* leaking
+          # into the target as branches the way actions/checkout would).
+          git clone --mirror "https://github.com/${{ github.repository }}.git" repo.git
+          cd repo.git
+          git push --mirror "https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
