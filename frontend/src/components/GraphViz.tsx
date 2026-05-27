@@ -17,6 +17,14 @@ import {
   subscribeHiddenGraphTypes,
   nodeHiddenBy,
 } from "../graphFilters";
+import {
+  DRILL_HANDLERS,
+  DrillTarget,
+  GraphAnchor,
+  drillGlyphSvgUri,
+  drillKindFor,
+  findGraphAnchor,
+} from "../graphDrill";
 
 // Register the dagre layout once at module load — Cytoscape complains if
 // the same layout is registered twice across hot-reloads, so guard.
@@ -38,21 +46,36 @@ interface CyElement {
 // Inline preview panels — collapsible, embedded at the top of the envelope
 // =============================================================================
 
-export function GraphPanel({ active }: { active: CaseFull }) {
-  const anchor = useMemo(() => findGraphAnchor(active), [active]);
-  const [modalOpen, setModalOpen] = useState(false);
+// Lazy-fetches a Neo4j subgraph for the given supplier. Both GraphPanel
+// (its standalone Knowledge-graph card) and the drill flow in
+// EvidenceMap / PlatformFlowModal call this so they share the same
+// loading + error state and avoid duplicating the round-trip when the
+// reviewer drills into the same anchor twice.
+function useSupplierSubgraph(supplier_id: string | null, active: boolean) {
   const [data, setData] = useState<SubgraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const hidden = useFilterSubscription();
 
   useEffect(() => {
-    if (!modalOpen || !anchor || data) return;
+    if (!active || !supplier_id) return;
     let cancelled = false;
-    getSupplierSubgraph(anchor.supplier_id)
+    setError(null);
+    getSupplierSubgraph(supplier_id)
       .then((d) => { if (!cancelled) setData(d); })
       .catch((e) => { if (!cancelled) setError((e as Error).message); });
     return () => { cancelled = true; };
-  }, [modalOpen, anchor, data]);
+  }, [active, supplier_id]);
+
+  return { data, error };
+}
+
+export function GraphPanel({ active }: { active: CaseFull }) {
+  const anchor = useMemo(() => findGraphAnchor(active), [active]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const hidden = useFilterSubscription();
+  const { data, error } = useSupplierSubgraph(
+    anchor?.supplier_id ?? null,
+    modalOpen,
+  );
 
   if (!anchor) return null;
 
@@ -88,7 +111,14 @@ export function GraphPanel({ active }: { active: CaseFull }) {
 
 export function EvidenceMap({ active }: { active: CaseFull }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [drill, setDrill] = useState<DrillTarget | null>(null);
   const elements = useMemo(() => buildEvidenceElements(active), [active]);
+  // Drill fetch — only fires when a knowledge-graph drill target lands.
+  const drillAnchor = drill?.kind === "knowledge-graph" ? drill.anchor : null;
+  const { data: drillData, error: drillError } = useSupplierSubgraph(
+    drillAnchor?.supplier_id ?? null,
+    !!drillAnchor,
+  );
   if (!active.stages || active.stages.length === 0) return null;
   const totalFacts = active.stages.reduce((acc, s) => acc + s.facts.length, 0);
   const sourceKindCount = countSourceKinds(active);
@@ -115,6 +145,20 @@ export function EvidenceMap({ active }: { active: CaseFull }) {
           defaultLayout="dagre"
           onClose={() => setModalOpen(false)}
           hideFilters
+          onDrill={setDrill}
+          active={active}
+        />
+      )}
+      {drillAnchor && (
+        <GraphModal
+          title="Knowledge graph"
+          subtitle={`${drillAnchor.supplier_id} · ${drillAnchor.supplierName}`}
+          rawNodes={drillData?.nodes}
+          rawEdges={drillData?.edges}
+          defaultLayout="dagre"
+          onClose={() => setDrill(null)}
+          loading={!drillData && !drillError}
+          error={drillError}
         />
       )}
     </>
@@ -156,6 +200,12 @@ type GraphModalProps = {
   // user isn't left staring at an empty screen.
   loading?: boolean;
   error?: string | null;
+  // Evidence variant only — passed by EvidenceMap / PlatformFlowModal so
+  // a double-click on a Neo4j-backed node can pop the Knowledge-graph
+  // modal stacked on top of this one. `active` is the case the drill
+  // handler reads to compute the anchor.
+  onDrill?: (target: DrillTarget) => void;
+  active?: CaseFull | null;
 };
 
 function GraphModal({
@@ -170,6 +220,8 @@ function GraphModal({
   hidden: hiddenProp,
   loading,
   error,
+  onDrill,
+  active,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -347,7 +399,7 @@ function GraphModal({
                   cy.maxZoom(1.4);
                   cy.minZoom(0.2);
                   attachInteractivity(cy);
-                  attachEvidenceMapBehaviour(cy, setSelectedClassFacts);
+                  attachEvidenceMapBehaviour(cy, setSelectedClassFacts, onDrill ?? null, active ?? null);
                 }}
               />
             )}
@@ -360,6 +412,11 @@ function GraphModal({
             subtitle={subtitle}
             selectedClassFacts={selectedClassFacts}
             onDismissFacts={() => setSelectedClassFacts(null)}
+            drillHint={
+              variant === "evidence" && active && DRILL_HANDLERS.neo4j.available(active)
+                ? DRILL_HANDLERS.neo4j.hint
+                : null
+            }
           />
         </div>
       </div>
@@ -381,6 +438,7 @@ function GraphModalSideLegend({
   subtitle,
   selectedClassFacts,
   onDismissFacts,
+  drillHint,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -389,6 +447,7 @@ function GraphModalSideLegend({
   subtitle?: string;
   selectedClassFacts?: SelectedClassFacts | null;
   onDismissFacts?: () => void;
+  drillHint?: string | null;
 }) {
   return (
     <aside className={`graph-modal-side-legend${open ? "" : " collapsed"}`}>
@@ -463,7 +522,9 @@ function GraphModalSideLegend({
             </div>
           )}
           <div className="graph-modal-side-legend-caption">
-            Click any node to inspect. Scroll to zoom, drag to pan.
+            Click any node to inspect.{" "}
+            {drillHint && (<><br/>{drillHint}<br/></>)}
+            Scroll to zoom, drag to pan.
           </div>
         </div>
       )}
@@ -538,38 +599,86 @@ function pluralType(t: string, n: number): string {
 // Interactivity — click a node to highlight it + adjacent edges + neighbours
 // =============================================================================
 
-// Evidence-map-specific behaviour: clicking a class node surfaces its
-// fact list to the side-legend dropdown. Facts are embedded directly on
-// the class node's `data.facts`, so no compound parent / child nodes are
-// rendered on canvas. Knowledge-graph modals skip this entirely.
+// Evidence-map-specific behaviour:
+//   - Single-click on a class node surfaces its fact list to the side
+//     legend dropdown (facts are embedded on data.facts).
+//   - Double-click on any `evidence-drillable` node (class OR source
+//     tile from Neo4j) fires onDrill with the computed DrillTarget,
+//     stacking the Knowledge-graph modal on top of the evidence modal.
+//
+// Idempotent + scratch-backed: react-cytoscapejs re-invokes the `cy={fn}`
+// callback every time the parent renders, and a sibling helper
+// (attachInteractivity) calls `cy.off("tap")` which would wipe a
+// closure-based lastTap on every re-attach. We store the live callbacks
+// AND lastTap on cy.scratch so React state updates (e.g. surfacing
+// facts) don't break the second click of a double-click.
 function attachEvidenceMapBehaviour(
   cy: cytoscape.Core,
   setSelectedClassFacts: (facts: SelectedClassFacts | null) => void,
+  onDrill: ((target: DrillTarget) => void) | null,
+  active: CaseFull | null,
 ) {
+  // Always update the latest callbacks — the persisted handler reads
+  // them via scratch on every tap.
+  cy.scratch("_kfEvi", {
+    ...(cy.scratch("_kfEvi") || {}),
+    setSelectedClassFacts,
+    onDrill,
+    active,
+  });
+
+  if (cy.scratch("_kfEviAttached")) return;
+  cy.scratch("_kfEviAttached", true);
+
   cy.on("tap", "node", (evt: any) => {
     const node = evt.target;
-    if (!node.classes().includes("evidence-class")) {
-      setSelectedClassFacts(null);
+    const id = node.id();
+    const now = Date.now();
+    const state: any = cy.scratch("_kfEvi") || {};
+    const lastTap = state.lastTap as { id: string; time: number } | null;
+    const isDouble = !!lastTap && lastTap.id === id && now - lastTap.time < 350;
+    cy.scratch("_kfEvi", { ...state, lastTap: isDouble ? null : { id, time: now } });
+
+    const cb = cy.scratch("_kfEvi") as any;
+    if (isDouble && cb?.onDrill && cb?.active && node.hasClass("evidence-drillable")) {
+      const kind = String(node.data("drill_kind") || "");
+      const handler = DRILL_HANDLERS[kind];
+      const target = handler?.target(cb.active);
+      if (target) cb.onDrill(target);
       return;
     }
-    const className = String(node.data("label") || node.id()).split("\n")[0];
+
+    const setFacts = cb?.setSelectedClassFacts as ((f: SelectedClassFacts | null) => void) | undefined;
+    if (!setFacts) return;
+    if (!node.classes().includes("evidence-class")) {
+      setFacts(null);
+      return;
+    }
+    const className = String(node.data("label") || id).split("\n")[0];
     const facts = (node.data("facts") || []) as Array<{
       id: string;
       title: string;
       source: string;
       source_kind: string;
     }>;
-    setSelectedClassFacts({ className, facts });
+    setFacts({ className, facts });
   });
 
   cy.on("tap", (evt: any) => {
-    if (evt.target === cy) setSelectedClassFacts(null);
+    if (evt.target === cy) {
+      const cb = cy.scratch("_kfEvi") as any;
+      cb?.setSelectedClassFacts?.(null);
+    }
   });
 }
 
 function attachInteractivity(cy: cytoscape.Core) {
-  // Avoid double-binding when Cytoscape re-mounts components.
-  cy.off("tap");
+  // Idempotent — react-cytoscapejs re-invokes the cy callback on every
+  // parent re-render. Without this guard we'd cy.off("tap") on every
+  // re-render, wiping the evidence-map double-click closure state
+  // along with the focus handler.
+  if (cy.scratch("_kfInterAttached")) return;
+  cy.scratch("_kfInterAttached", true);
 
   cy.on("tap", "node", (evt: any) => {
     const node = evt.target;
@@ -628,20 +737,6 @@ function layoutOptions(name: LayoutName): any {
 // =============================================================================
 // Helpers — anchor detection, element transformers
 // =============================================================================
-
-function findGraphAnchor(active: CaseFull): { supplier_id: string; supplierName: string } | null {
-  for (const stage of active.stages || []) {
-    for (const f of stage.facts) {
-      if (f.ontology_type === "Supplier" && (f.source || "").startsWith("neo4j:")) {
-        return {
-          supplier_id: f.id,
-          supplierName: f.title || f.id,
-        };
-      }
-    }
-  }
-  return null;
-}
 
 function toCyElements(
   nodes: ApiNode[],
@@ -751,17 +846,27 @@ function buildEvidenceElements(active: CaseFull): CyElement[] {
 
   // 3. One class node per distinct ontology_type — simple node, not a
   // compound parent. The full fact list is embedded in `data.facts` so
-  // the side legend can render it when the class is clicked.
+  // the side legend can render it when the class is clicked. Classes
+  // whose facts came from a drill-capable source (today: Neo4j) get an
+  // `evidence-drillable` class + a corner glyph + drill metadata.
   for (const [cls, stageSet] of stagesByClass.entries()) {
     const classId = `class:${cls}`;
     const facts = factsByClass.get(cls) || [];
+    const srcs = sourcesByClass.get(cls) || new Set();
+    const drillKind = drillKindFor(srcs, active);
     elements.push({
       data: {
         id: classId,
         label: `${cls}\n(${facts.length} fact${facts.length === 1 ? "" : "s"})`,
         facts,
+        ...(drillKind ? {
+          drill_kind: drillKind,
+          drill_glyph_uri: drillGlyphSvgUri(),
+        } : {}),
       },
-      classes: "evidence-node evidence-class",
+      classes: drillKind
+        ? "evidence-node evidence-class evidence-drillable"
+        : "evidence-node evidence-class",
     });
     for (const stageId of stageSet) {
       elements.push({
@@ -777,12 +882,24 @@ function buildEvidenceElements(active: CaseFull): CyElement[] {
   }
 
   // 4. Source nodes (one per distinct kind) + class → source edges.
+  // A source whose kind has a registered drill handler (today: neo4j)
+  // gets the same drillable tagging as its consuming classes.
   const allSourceKinds = new Set<string>();
   for (const set of sourcesByClass.values()) for (const k of set) allSourceKinds.add(k);
   for (const kind of allSourceKinds) {
+    const drillKind = drillKindFor([kind], active);
     elements.push({
-      data: { id: `source:${kind}`, label: humanSourceKind(kind) },
-      classes: "evidence-node evidence-source",
+      data: {
+        id: `source:${kind}`,
+        label: humanSourceKind(kind),
+        ...(drillKind ? {
+          drill_kind: drillKind,
+          drill_glyph_uri: drillGlyphSvgUri(),
+        } : {}),
+      },
+      classes: drillKind
+        ? "evidence-node evidence-source evidence-drillable"
+        : "evidence-node evidence-source",
     });
   }
   for (const [cls, srcSet] of sourcesByClass.entries()) {
@@ -879,9 +996,15 @@ export function PlatformFlowModal({
   active: CaseFull | null;
   onClose: () => void;
 }) {
+  const [drill, setDrill] = useState<DrillTarget | null>(null);
   const elements = useMemo(
     () => (active ? buildPlatformFlowElements(active) : []),
     [active],
+  );
+  const drillAnchor = drill?.kind === "knowledge-graph" ? drill.anchor : null;
+  const { data: drillData, error: drillError } = useSupplierSubgraph(
+    drillAnchor?.supplier_id ?? null,
+    !!drillAnchor,
   );
   if (!active) {
     return (
@@ -897,14 +1020,30 @@ export function PlatformFlowModal({
   }
   const promptOneLine = (active.prompt || "(no prompt)").replace(/\s+/g, " ");
   return (
-    <GraphModal
-      title="Platform flow"
-      subtitle={`How the platform answered: "${truncate(promptOneLine, 90)}"`}
-      elements={elements}
-      defaultLayout="dagre"
-      onClose={onClose}
-      hideFilters
-    />
+    <>
+      <GraphModal
+        title="Platform flow"
+        subtitle={`How the platform answered: "${truncate(promptOneLine, 90)}"`}
+        elements={elements}
+        defaultLayout="dagre"
+        onClose={onClose}
+        hideFilters
+        onDrill={setDrill}
+        active={active}
+      />
+      {drillAnchor && (
+        <GraphModal
+          title="Knowledge graph"
+          subtitle={`${drillAnchor.supplier_id} · ${drillAnchor.supplierName}`}
+          rawNodes={drillData?.nodes}
+          rawEdges={drillData?.edges}
+          defaultLayout="dagre"
+          onClose={() => setDrill(null)}
+          loading={!drillData && !drillError}
+          error={drillError}
+        />
+      )}
+    </>
   );
 }
 
@@ -941,12 +1080,27 @@ function buildPlatformFlowElements(active: CaseFull): CyElement[] {
   }
 
   // 3. Ontology classes — distinct ontology_type values across all stages.
+  // A class becomes drillable when any of its facts came from a source
+  // kind that has a registered drill handler (today: Neo4j).
   const ontologyTypes = distinct(allFacts.map((f) => f.ontology_type));
   for (const ot of ontologyTypes) {
     const id = `pf:class:${ot}`;
+    const classSrcKinds = new Set(
+      allFacts.filter((f) => f.ontology_type === ot).map((f) => firstSegment(f.source)),
+    );
+    const drillKind = drillKindFor(classSrcKinds, active);
     out.push({
-      data: { id, label: ot },
-      classes: "evidence-node evidence-class",
+      data: {
+        id,
+        label: ot,
+        ...(drillKind ? {
+          drill_kind: drillKind,
+          drill_glyph_uri: drillGlyphSvgUri(),
+        } : {}),
+      },
+      classes: drillKind
+        ? "evidence-node evidence-class evidence-drillable"
+        : "evidence-node evidence-class",
     });
     if (active.scenario_id) {
       out.push({
@@ -966,9 +1120,19 @@ function buildPlatformFlowElements(active: CaseFull): CyElement[] {
   const sourceKinds = distinct(allFacts.map((f) => firstSegment(f.source)));
   for (const src of sourceKinds) {
     const id = `pf:source:${src}`;
+    const drillKind = drillKindFor([src], active);
     out.push({
-      data: { id, label: humanSourceKind(src) },
-      classes: "evidence-node evidence-source",
+      data: {
+        id,
+        label: humanSourceKind(src),
+        ...(drillKind ? {
+          drill_kind: drillKind,
+          drill_glyph_uri: drillGlyphSvgUri(),
+        } : {}),
+      },
+      classes: drillKind
+        ? "evidence-node evidence-source evidence-drillable"
+        : "evidence-node evidence-source",
     });
     const classesForSource = distinct(
       allFacts.filter((f) => firstSegment(f.source) === src).map((f) => f.ontology_type),
@@ -1226,6 +1390,27 @@ const evidenceStylesheet: any[] = [
   // Soft accent on the left border encodes type. We use border-color
   // (Cytoscape doesn't have per-side border colour) so the entire border
   // takes the accent — same visual outcome on a white background.
+  // Drillable nodes — overlay the indigo "⤢" corner glyph (SVG data URI
+  // stamped onto data.drill_glyph_uri in buildEvidenceElements). Anchored
+  // to the top-right corner via background-offset-x/y. Single-click still
+  // surfaces facts in the side legend; double-click triggers the drill
+  // (see attachEvidenceMapBehaviour).
+  {
+    selector: "node.evidence-drillable",
+    style: {
+      "background-image": "data(drill_glyph_uri)",
+      "background-fit": "none",
+      "background-clip": "none",
+      "background-image-containment": "over",
+      "background-image-opacity": 1,
+      "background-width": 16,
+      "background-height": 16,
+      "background-position-x": "100%",
+      "background-position-y": "0%",
+      "background-offset-x": -2,
+      "background-offset-y": 2,
+    },
+  },
   { selector: "node.evidence-prompt",   style: { "border-color": "#1e293b", color: "#0f172a" } },
   { selector: "node.evidence-scenario", style: { "border-color": "#c14a4a", color: "#7a2424" } },
   { selector: "node.evidence-stage",    style: { "border-color": "#0d6e7f", color: "#0d6e7f" } },
