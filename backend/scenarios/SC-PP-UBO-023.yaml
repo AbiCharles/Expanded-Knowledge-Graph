@@ -1,0 +1,128 @@
+id: SC-PP-UBO-023
+title: "Ultimate Beneficial Owner disclosure — supplier ownership walk"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-compliance"
+actor_id: "agent-compliance-11"
+operator_role: { label: "Operator", name: "compliance.analyst.kjacobs" }
+reviewer_role: { label: "Reviewer", name: "audit.lead.tnaidu" }
+autonomous: false
+
+action_type: "ubo_disclosure_review"
+action_payload:
+  supplier_id: "SUP-008"
+  supplier_name: "Onyx Heavy Industries"
+  originating_guardrail_id: "POL-PP-UBO-DISCLOSURE-2026"
+
+teams_headline: "UBO disclosure · Onyx Heavy Industries"
+execute_money: ""
+execute_message: >-
+  Audit asked: "who ultimately owns Onyx Heavy Industries?". The agent
+  walks the supply-chain <strong>graph</strong> upward through
+  PARENT_OF edges and CONTROLLED_BY edges to surface every node on the
+  ownership trail — supplier ancestors and holding companies —
+  alongside cross-references against the OFAC SDN list (any of those
+  owners listed?) and prior UBO disclosures in the governance store.
+
+match_keywords: ["ubo disclosure", "ultimate beneficial owner", "who owns this supplier", "ownership chain", "supplier ownership walk", "beneficial ownership", "parent chain", "controlling entity", "onyx heavy ownership", "audit ownership disclosure"]
+interpreted_as: "disclose the ultimate beneficial ownership chain for SUP-008 (Onyx Heavy Industries)"
+clarifying_question: >-
+  Confirm — run UBO disclosure on supplier <code>SUP-008</code> (Onyx
+  Heavy Industries). I'll bind data from four sources: the supply-chain
+  <strong>graph</strong> (every PARENT_OF and CONTROLLED_BY hop UP from
+  the supplier, terminating at the topmost ancestor + controlling
+  holding), the OFAC SDN feed (does any owner appear on a sanctions
+  list?), prior UBO disclosures from the governance store, and the
+  relevant audit-and-disclosure SOP excerpts via the policy vector
+  store. Audit lead approves / rejects with full evidence on the audit
+  trail. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Audit lead approved the UBO disclosure.</strong> The full
+    ownership trail — parent suppliers, controlling holdings, SDN
+    cross-references, prior disclosures, and SOP excerpts — is captured
+    on the audit trail. Disclosure can be released to the requesting
+    auditor.
+  reject: >-
+    <strong>Audit lead declined the disclosure.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The disclosure will not be released
+    as-is. The agent's findings remain on the audit trail.
+  request_more_info: >-
+    <strong>Audit lead needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Ownership chain stops before reaching a verifiable ultimate owner — additional KYC required."
+    - "One owner appears on the SDN list — escalate to compliance before disclosure."
+    - "Disclosure scope exceeds the audit's request — narrow to 1-hop direct owners."
+  request_more_info:
+    - "Need beneficial-ownership filings from the registered jurisdiction of the topmost holding."
+    - "Need confirmation that all PARENT_OF edges are current (not historical / divested)."
+    - "Need legal sign-off on releasing the holding-company stakes (commercially sensitive)."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-UBO-DISCLOSURE-2026"
+        uri: "kf.tcs/policy/POL-PP-UBO-DISCLOSURE-2026"
+        title: "Beneficial-ownership disclosure policy"
+        payload: "UBO disclosures must (a) walk the supply-chain graph upward through every PARENT_OF and CONTROLLED_BY edge until termination, (b) cross-reference each owner against the OFAC SDN list, (c) cite prior disclosures for consistency, (d) named audit-lead approval required before any release to external auditors."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-compliance-11"
+        uri: "iam.tcs/actors/agent-compliance-11"
+        title: "Actor scope"
+        payload: "Scopes: compliance.read, compliance.propose, audit.disclose_after_review · this case is propose-only (no autonomous release)."
+  proposal:
+    binder: "UBOProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain
+        class: Supplier
+        where:
+          supplier_id: ":supplier_id"
+        purpose: "Bind the queried supplier master record (Neo4j — supply_chain.Supplier)"
+      - ontology: supply_chain
+        class: UltimateBeneficialOwner
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 6
+        purpose: "Walk UP the ownership graph — every supplier ancestor + controlling HoldingCompany, with the full chain and hop distance"
+      - ontology: supply_chain
+        class: SanctionsProximity
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 4
+        purpose: "Cross-reference: does any owner on the chain appear within sanctions-proximity of the queried supplier?"
+  review:
+    binder: "UBOReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-PP-007
+        max_results: 3
+        purpose: "Prior beneficial-ownership disclosures for consistency (SQLite governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: beneficial ownership disclosure audit transparency KYC supplier ownership
+          top_k: 3
+        purpose: "Relevant audit-and-disclosure SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — UBO disclosure released"
+    detail: "Audit lead accepted the ownership-trail picture. Disclosure released to the requesting auditor; evidence package on the audit trail."
+  reject:
+    headline: "Rejected — disclosure withheld"
+    detail: "Audit lead declined the release. Reasoning recorded; disclosure not sent."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requires additional KYC / structural / legal data before releasing."
+
+_filter_from_prompt: true
+_custom_suggested_prompt: "Who ultimately owns Onyx Heavy Industries — release the UBO disclosure for SUP-008"

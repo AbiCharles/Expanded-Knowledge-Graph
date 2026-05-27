@@ -32,6 +32,11 @@ if [ -d "$SEED" ]; then
   # Seed scripts that some demos run from inside the container.
   cp -f "$SEED"/*.py "$DATA"/ 2>/dev/null || true
   cp -f "$SEED"/*.sql "$DATA"/ 2>/dev/null || true
+  # Cypher seed for the Neo4j graph. Operator must still run
+  # seed_neo4j.py manually (the script targets the separate Fly Neo4j
+  # app), but the source file should track image edits so the next
+  # manual run picks them up without a force-cp SSH workaround.
+  cp -f "$SEED"/*.cypher "$DATA"/ 2>/dev/null || true
   # actions/ subdir: write-action definitions. Edits to these YAMLs (new
   # actions, fixed validation) need to land on every deploy. The Action
   # registry parses *.yaml at boot; stale files there cause silent skips.

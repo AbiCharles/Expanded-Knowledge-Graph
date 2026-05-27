@@ -500,13 +500,24 @@ function ChatThread({
         />
       )}
 
+      {/* Action preview — "if you approve, this is what runs". Shown for
+          HITL scenarios that wire an _executor block, sitting between the
+          review-ready CTA and any final closing message. The preview is
+          read-only; the actual Approve / Reject buttons live in the
+          reviewer modal opened by the CTA above. */}
+      {active.phase === "review_ready" && active.scenario?.executor && (
+        <ActionPreviewCard executor={active.scenario.executor} />
+      )}
+
       {/* Final closing message */}
       {active.phase === "complete" && active.closing_message && (
         <>
           <ChatBubble
             role="system"
             html={
-              active.decision_kind === "auto_execute"
+              active.decision_kind === "no_op"
+                ? "no change needed · skipped the write action · audit trail records the no-op"
+                : active.decision_kind === "auto_execute"
                 ? `auto-approved by ${
                     active.scenario?.auto_approval_guardrail || "policy"
                   } · executed without human review`
@@ -514,18 +525,24 @@ function ChatThread({
             }
           />
           <ChatBubble role="agent" html={active.closing_message} />
-          {active.execution_result && (
+          {/* The ExecutionResultCard shows a before/after diff for write
+              actions. Skip it for no_op cases — the diff would mislead
+              (before and after are identical). The closing_message above
+              already explains the no-op. */}
+          {active.execution_result && active.decision_kind !== "no_op" && (
             <ExecutionResultCard active={active} />
           )}
-          {active.decision_kind && active.decision_kind !== "auto_execute" && (
-            <DemoHelper
-              isReplay={!!active.replay_decision}
-              hasSibling={(active.sibling_case_ids || []).length > 0}
-              decision={active.decision_kind as DecisionKind}
-              onReplay={onReplay}
-              onCompare={onCompare}
-            />
-          )}
+          {active.decision_kind &&
+            active.decision_kind !== "auto_execute" &&
+            active.decision_kind !== "no_op" && (
+              <DemoHelper
+                isReplay={!!active.replay_decision}
+                hasSibling={(active.sibling_case_ids || []).length > 0}
+                decision={active.decision_kind as DecisionKind}
+                onReplay={onReplay}
+                onCompare={onCompare}
+              />
+            )}
         </>
       )}
 
@@ -534,6 +551,54 @@ function ChatThread({
       )}
     </div>
   );
+}
+
+// Pre-flight preview: "if you approve, this is what the agent will commit."
+// Renders the action_id + each argument as a table. Arguments are scenario-
+// authored (not LLM-generated), so this is a complete and trustworthy preview
+// of the SQL/HTTP payload — no surprises at execution time.
+function ActionPreviewCard({
+  executor,
+}: {
+  executor: NonNullable<NonNullable<CaseFull["scenario"]>["executor"]>;
+}) {
+  const args = executor.arguments || {};
+  const rows = Object.entries(args);
+  return (
+    <div className="action-preview-card">
+      <div className="action-preview-header">
+        <span className="action-preview-tag">If you approve, this is what runs</span>
+        <span className="action-preview-id">{executor.action_id}</span>
+      </div>
+      <table className="action-preview-table">
+        <tbody>
+          {rows.map(([k, v]) => (
+            <tr key={k}>
+              <th>{k}</th>
+              <td>{formatArgValue(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="action-preview-footer">
+        These arguments are scenario-authored — the LLM never picks them.
+        The agent only dispatches the registered executor against the
+        target source.
+      </div>
+    </div>
+  );
+}
+
+function formatArgValue(v: unknown): string {
+  if (v === null || v === undefined) return "(unset)";
+  if (typeof v === "number") return v.toLocaleString();
+  if (typeof v === "string") {
+    // Surface dollar amounts as $-prefixed when the key suggests cost
+    // (handled by caller styling instead — keep this formatter simple).
+    return v;
+  }
+  if (typeof v === "boolean") return String(v);
+  try { return JSON.stringify(v); } catch { return String(v); }
 }
 
 // Renders a small before/after diff for write actions. Targets the
@@ -548,13 +613,27 @@ function ExecutionResultCard({ active }: { active: CaseFull }) {
     .flatMap((s) => s.facts)
     .find((f) => f.ontology_type === "Booking");
 
-  if (er.action_id === "retender_booking" && bookingFact) {
-    // Booking summary format: "CARRIER · LANE · $TOTAL (status) · tendered TIMESTAMP"
-    const parts = (bookingFact.summary || "").split(" · ");
-    const beforeCarrier = parts[0] || "—";
-    const beforeCostMatch = (parts[2] || "").match(/\$([\d.]+)\s*\((\w+)\)/);
-    const beforeCost = beforeCostMatch ? `$${Number(beforeCostMatch[1]).toLocaleString()}` : "—";
-    const beforeStatus = beforeCostMatch ? beforeCostMatch[2] : "—";
+  if (er.action_id === "retender_booking") {
+    // Prefer the executor's captured `before` snapshot (reliable across
+    // server restarts) over parsing the bound Booking fact summary.
+    // Falls back to the fact-summary parser when `before` isn't present
+    // (older cases that ran before the executor change shipped).
+    const before = (er.before || {}) as Record<string, string | number | null>;
+    let beforeCarrier = "—";
+    let beforeCost = "—";
+    let beforeStatus = "—";
+    if (before.carrier_id != null) {
+      beforeCarrier = String(before.carrier_id);
+      const c = Number(before.total_cost_usd);
+      beforeCost = Number.isFinite(c) ? `$${c.toLocaleString()}` : "—";
+      beforeStatus = String(before.status ?? "—");
+    } else if (bookingFact) {
+      const parts = (bookingFact.summary || "").split(" · ");
+      beforeCarrier = parts[0] || "—";
+      const m = (parts[2] || "").match(/\$([\d.]+)\s*\((\w+)\)/);
+      beforeCost = m ? `$${Number(m[1]).toLocaleString()}` : "—";
+      beforeStatus = m ? m[2] : "—";
+    }
     const args = (er.args || {}) as Record<string, string | number>;
     const afterCarrier = String(args.new_carrier_id ?? "—");
     const afterCostNum = Number(args.new_total_cost_usd);
@@ -570,7 +649,7 @@ function ExecutionResultCard({ active }: { active: CaseFull }) {
           </span>
         </div>
         <div className="exec-result-title">
-          Booking <code>{String(args.booking_id ?? bookingFact.id)}</code>
+          Booking <code>{String(args.booking_id ?? bookingFact?.id ?? "—")}</code>
         </div>
         <table className="exec-result-diff">
           <thead>

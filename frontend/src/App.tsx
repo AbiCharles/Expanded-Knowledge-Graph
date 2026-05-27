@@ -4,6 +4,7 @@ import { AuthUser, clearAuth, fetchMe, getUser, logout as serverLogout } from ".
 import { Console } from "./components/Console";
 import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
+import { PlatformFlowModal } from "./components/GraphViz";
 import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { MetricsDashboard } from "./components/MetricsDashboard";
@@ -30,7 +31,8 @@ type ModalState =
   | { kind: "knowledge"; tab: KnowledgeTab }
   | { kind: "scenarios-help" }
   | { kind: "edit-scenario"; scenarioId: string }
-  | { kind: "metrics" };
+  | { kind: "metrics" }
+  | { kind: "platform-flow" };
 
 export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioRow[]>([]);
@@ -287,6 +289,7 @@ export default function App() {
         onOpenKnowledge={() => setModal({ kind: "knowledge", tab: "sources" })}
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
+        onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
       />
       <div className="main">
         <Console
@@ -309,7 +312,7 @@ export default function App() {
           onEditScenario={(sid) => setModal({ kind: "edit-scenario", scenarioId: sid })}
         />
         <FlowStage active={active} role={role} onOpenReview={onOpenReview} />
-        <LineagePanel lineage={active?.lineage ?? []} />
+        <LineagePanel active={active} />
       </div>
 
       {modal.kind === "teams" && active?.scenario && (
@@ -346,6 +349,9 @@ export default function App() {
       )}
       {modal.kind === "metrics" && (
         <MetricsDashboard onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "platform-flow" && (
+        <PlatformFlowModal active={active} onClose={() => setModal({ kind: "none" })} />
       )}
     </>
   );

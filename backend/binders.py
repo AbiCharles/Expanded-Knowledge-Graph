@@ -82,7 +82,10 @@ def _facts_from_stage(
     facts: list[KnowledgeFact] = list(_facts_from_inline(stage_def.get("facts", [])))
     queries_issued: list[KnowledgeQuery] = []
 
-    for oq_def in stage_def.get("ontology_queries", []) or []:
+    # Track which query produced each fact so the UI's "query plan" panel
+    # can highlight cards on click. Inline facts (from `facts:`) have no
+    # originating query and stay un-tagged.
+    for query_index, oq_def in enumerate(stage_def.get("ontology_queries", []) or []):
         if ontology is None:
             log.warning(
                 "ontology_queries: declared but no OntologyResolver available"
@@ -133,6 +136,11 @@ def _facts_from_stage(
         # facts from this entry, so the orchestrator's case task never crashes.
         try:
             new_facts = ontology.resolve_query(oq)
+            # Tag each fact with the originating query index so the API
+            # serializer + frontend can correlate them. Mutates the payload
+            # in-place — safe because the resolver returns fresh dicts.
+            for f in new_facts:
+                f.payload["query_index"] = query_index
             facts.extend(new_facts)
             log.info(
                 "binder ontology query → %s.%s returned %d fact(s)",

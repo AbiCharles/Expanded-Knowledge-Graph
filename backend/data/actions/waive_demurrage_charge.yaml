@@ -19,6 +19,16 @@ executor:
        SET status            = 'waived',
            responsible_party = :waived_by
      WHERE charge_id = :charge_id
+idempotency:
+  description: Skip when the charge is already waived.
+  data_source: logistics_sqlite
+  predicate_sql: |
+    SELECT 1 FROM demurrage_charges
+     WHERE charge_id = :charge_id
+       AND status    = 'waived'
+  no_op_message: >-
+    No change needed — charge {charge_id} is already waived. The agent
+    skipped the update; the audit trail records the no-op.
 match_keywords:
   - waive demurrage
   - waive charge

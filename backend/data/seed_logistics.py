@@ -466,6 +466,29 @@ CREATE TABLE bookings (
 );
 CREATE INDEX idx_bookings_shipment ON bookings(shipment_id);
 CREATE INDEX idx_bookings_status   ON bookings(status);
+
+-- Append-only change log for bookings. Every retender_booking action
+-- writes a row here BEFORE the UPDATE, capturing the prior values.
+-- Replayed scenarios surface the most-recent entry so the reviewer
+-- can see 'previously: MSC ocean → now: Lufthansa air'.
+DROP TABLE IF EXISTS booking_history;
+CREATE TABLE booking_history (
+    history_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id         TEXT NOT NULL,
+    shipment_id        TEXT NOT NULL,
+    prev_carrier_id    TEXT NOT NULL,
+    new_carrier_id     TEXT NOT NULL,
+    prev_cost          REAL NOT NULL,
+    new_cost           REAL NOT NULL,
+    prev_status        TEXT NOT NULL,
+    new_status         TEXT NOT NULL,
+    changed_at         TEXT NOT NULL,
+    case_id            TEXT,
+    action_id          TEXT NOT NULL
+);
+CREATE INDEX idx_booking_history_booking  ON booking_history(booking_id);
+CREATE INDEX idx_booking_history_shipment ON booking_history(shipment_id);
+CREATE INDEX idx_booking_history_changed  ON booking_history(changed_at DESC);
 """
 
 _DEMURRAGE_DDL = """

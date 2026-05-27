@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option E — Command bar</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:80px 1fr;height:100vh}
+  .header{background:#102542;color:#fff;padding:10px 20px;display:flex;flex-direction:column;gap:8px}
+  .header .brand{font-size:13px;font-weight:600}
+  .cmdbar{background:#1a3a6b;border:1px solid #00a8c8;border-radius:4px;padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:13px}
+  .cmdbar input{flex:1;background:transparent;border:none;color:#fff;outline:none;font-size:13px}
+  .cmdbar input::placeholder{color:rgba(255,255,255,0.5)}
+  .cmdbar .menu{font-family:monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;background:rgba(255,255,255,0.08);padding:4px 10px;border-radius:3px;cursor:pointer}
+  .main{display:grid;grid-template-columns:1fr 32px;border-top:1px solid #d9dee6}
+  .envelope{padding:16px;overflow:auto;font-size:12px}
+  .envelope .panel{background:#fff;border:1px solid #d9dee6;border-radius:4px;padding:10px;margin-bottom:8px}
+  .audit-strip{background:#102542;color:#fff;display:flex;flex-direction:column;align-items:center;padding:14px 0;writing-mode:vertical-rl}
+  .audit-strip span{font-family:monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase}
+  .label{font-family:monospace;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#888;margin-bottom:6px}
+</style></head>
+<body><div class="app">
+  <div class="header">
+    <div class="brand">&#x2325; TCS Knowledge Fabric</div>
+    <div class="cmdbar">
+      <input placeholder="Ask the agent&hellip;">
+      <div class="menu">History &#x25BE;</div><div class="menu">Knowledge &#x25BE;</div><div class="menu">Suggestions &#x25BE;</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="envelope">
+      <div class="label">Envelope · "What the agent gathered"</div>
+      <div class="panel">Case conversation (collapsed) — click to expand the chat thread</div>
+      <div class="panel">Multi-source evidence map <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Knowledge graph <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Stage 1 · Policy &amp; scope</div>
+      <div class="panel">Stage 2 · Agent gathered</div>
+      <div class="panel">Stage 3 · For your decision</div>
+    </div>
+    <div class="audit-strip"><span>Audit (47)</span></div>
+  </div>
+</div></body></html>

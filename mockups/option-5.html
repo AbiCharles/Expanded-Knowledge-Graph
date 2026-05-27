@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option 5 — Status-bar trigger + overlay drawer</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:48px 1fr 64px;height:100vh}
+  .status{background:#102542;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:13px;font-family:"DM Mono",monospace;letter-spacing:0.04em}
+  .status .right{display:flex;align-items:center;gap:14px}
+  .audit-btn{font-family:"DM Mono",monospace;font-size:11px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.25);padding:5px 10px;border-radius:3px;cursor:pointer;letter-spacing:0.1em;display:flex;align-items:center;gap:6px}
+  .audit-btn:hover{background:rgba(255,255,255,0.06);border-color:#00a8c8}
+  .audit-btn .badge{background:#00a8c8;color:#fff;border-radius:10px;padding:1px 6px;font-size:9px}
+  .main{display:grid;grid-template-columns:340px 1fr 36px;border-top:1px solid #d9dee6;position:relative}
+  .console{background:#fff;border-right:1px solid #d9dee6;padding:16px;font-size:12px;overflow:auto}
+  .envelope{padding:16px;overflow:auto;font-size:12px;background:#f7f6f1}
+  .envelope .panel{background:#fff;border:1px solid #d9dee6;border-radius:4px;padding:12px;margin-bottom:10px}
+  .audit-strip{background:#fff;border-left:1px solid #d9dee6;display:flex;flex-direction:column;align-items:center;padding:14px 0;writing-mode:vertical-rl;cursor:pointer;position:relative}
+  .audit-strip span{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#5a6678}
+  .audit-strip .badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#00a8c8;color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;writing-mode:horizontal-tb;font-family:"DM Mono",monospace}
+  .audit-overlay{position:absolute;right:36px;top:0;bottom:0;width:400px;background:#fff;border-left:1px solid #d9dee6;box-shadow:-16px 0 32px rgba(16,37,66,0.08);padding:14px 16px;font-size:11px;color:#1f2a3a}
+  .audit-overlay .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .audit-overlay .close{font-size:18px;cursor:pointer;color:#888}
+  .event{padding:6px 0;border-bottom:1px dotted #e6e8ec;color:#5a6678;font-size:11px}
+  .composer{background:#fff;border-top:1px solid #d9dee6;display:flex;align-items:center;padding:0 20px;font-size:12px;color:#888}
+  .label{font-family:"DM Mono",monospace;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:#888;margin-bottom:8px}
+  h4{margin:0 0 4px;font-size:13px;font-weight:600}
+  .caption{color:#5a6678;font-size:11px}
+  .notes{background:#fff;border:1px dashed #d9dee6;padding:14px;border-radius:4px;margin-top:16px;font-size:11px;color:#5a6678}
+</style></head>
+<body><div class="app">
+  <div class="status">
+    <span>TCS KNOWLEDGE FABRIC &middot; case-abc123 &middot; admin</span>
+    <div class="right">
+      <button class="audit-btn">AUDIT <span class="badge">47</span></button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="console"><div class="label">Console</div><h4>Chat thread</h4><div class="caption">unchanged</div></div>
+    <div class="envelope">
+      <div class="label">Envelope &middot; What the agent gathered</div>
+      <div class="panel"><h4>Multi-source evidence map</h4><div class="caption">Cytoscape preview.</div></div>
+      <div class="panel"><h4>Knowledge graph</h4><div class="caption">SDN proximity, alliance peers.</div></div>
+      <div class="panel"><h4>Stage 1 &middot; Policy &amp; scope</h4><div class="caption">2 facts</div></div>
+      <div class="panel"><h4>Stage 2 &middot; Agent gathered</h4><div class="caption">11 facts</div></div>
+      <div class="panel"><h4>Stage 3 &middot; For your decision</h4><div class="caption">4 facts</div></div>
+      <div class="notes"><strong>Option 5.</strong> Two entry points to audit, no layout shift either way. (1) A persistent 36px right strip stays visible so the 3-pane silhouette is preserved &mdash; click it to reveal the overlay drawer. (2) An <em>AUDIT</em> button with count badge in the status bar opens the same drawer. The drawer overlays the envelope (does not push) and closes with Esc or &times;. Best of overlay + strip.</div>
+    </div>
+    <div class="audit-overlay">
+      <div class="head"><span class="label" style="margin:0">Audit trail (47)</span><span class="close">&times;</span></div>
+      <div class="event">14:02:11 &middot; case opened by admin</div>
+      <div class="event">14:02:14 &middot; intake query bound &rarr; sources [sqlite, neo4j_default]</div>
+      <div class="event">14:02:16 &middot; 11 facts gathered (3 stages)</div>
+      <div class="event">14:02:18 &middot; reviewer card surfaced</div>
+      <div class="event" style="opacity:0.5">&hellip;</div>
+    </div>
+    <div class="audit-strip">
+      <span class="badge">47</span>
+      <span>Audit trail</span>
+    </div>
+  </div>
+  <div class="composer">Ask the agent to do something&hellip;</div>
+</div></body></html>

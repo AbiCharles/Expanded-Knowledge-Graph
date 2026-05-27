@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option 3 — Tabbed right strip</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:48px 1fr 64px;height:100vh}
+  .status{background:#102542;color:#fff;display:flex;align-items:center;padding:0 20px;font-size:13px;font-family:"DM Mono",monospace;letter-spacing:0.04em}
+  .main{display:grid;grid-template-columns:340px 1fr 44px;border-top:1px solid #d9dee6;transition:grid-template-columns 0.18s ease}
+  .main.open{grid-template-columns:340px 1fr 360px}
+  .console{background:#fff;border-right:1px solid #d9dee6;padding:16px;font-size:12px;overflow:auto}
+  .envelope{padding:16px;overflow:auto;font-size:12px;background:#f7f6f1}
+  .envelope .panel{background:#fff;border:1px solid #d9dee6;border-radius:4px;padding:12px;margin-bottom:10px}
+  .strip{background:#fff;border-left:1px solid #d9dee6;display:flex;flex-direction:column;align-items:stretch;padding:0;font-family:"DM Mono",monospace}
+  .strip-tab{flex:0 0 auto;padding:14px 0;cursor:pointer;writing-mode:vertical-rl;text-align:center;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:#5a6678;border-bottom:1px solid #e6e8ec;position:relative;display:flex;align-items:center;justify-content:center;gap:6px;min-height:90px}
+  .strip-tab.active{background:#102542;color:#fff}
+  .strip-tab .pill{background:#00a8c8;color:#fff;border-radius:8px;padding:1px 5px;font-size:9px;writing-mode:horizontal-tb}
+  .strip-tab.active .pill{background:#fff;color:#102542}
+  .composer{background:#fff;border-top:1px solid #d9dee6;display:flex;align-items:center;padding:0 20px;font-size:12px;color:#888}
+  .label{font-family:"DM Mono",monospace;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:#888;margin-bottom:8px}
+  h4{margin:0 0 4px;font-size:13px;font-weight:600}
+  .caption{color:#5a6678;font-size:11px}
+  .notes{background:#fff;border:1px dashed #d9dee6;padding:14px;border-radius:4px;margin-top:16px;font-size:11px;color:#5a6678}
+</style></head>
+<body><div class="app">
+  <div class="status">TCS KNOWLEDGE FABRIC &middot; case-abc123 &middot; admin</div>
+  <div class="main">
+    <div class="console"><div class="label">Console</div><h4>Chat thread</h4><div class="caption">unchanged</div></div>
+    <div class="envelope">
+      <div class="label">Envelope &middot; What the agent gathered</div>
+      <div class="panel"><h4>Multi-source evidence map</h4><div class="caption">Cytoscape preview.</div></div>
+      <div class="panel"><h4>Knowledge graph</h4><div class="caption">SDN proximity, alliance peers.</div></div>
+      <div class="panel"><h4>Stage 1 &middot; Policy &amp; scope</h4><div class="caption">2 facts</div></div>
+      <div class="panel"><h4>Stage 2 &middot; Agent gathered</h4><div class="caption">11 facts</div></div>
+      <div class="panel"><h4>Stage 3 &middot; For your decision</h4><div class="caption">4 facts</div></div>
+      <div class="notes"><strong>Option 3.</strong> The right column becomes a 44px tabbed strip with three vertical labels. Click any tab to expand the column to 360px showing that view; click the active tab again to collapse. Lineage and Audit each get their own home, and Filters becomes a dedicated affordance for graph-search/type-filtering &mdash; useful once the graph modal grows.</div>
+    </div>
+    <div class="strip">
+      <div class="strip-tab active"><span class="pill">47</span><span>Audit trail</span></div>
+      <div class="strip-tab"><span>Lineage</span></div>
+      <div class="strip-tab"><span>Filters</span></div>
+    </div>
+  </div>
+  <div class="composer">Ask the agent to do something&hellip;</div>
+</div></body></html>

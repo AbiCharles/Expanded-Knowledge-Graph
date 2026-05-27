@@ -93,6 +93,16 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     state.service.attach_proposal(ctx, action)
     await state.bus.emit(case.case_id, _stage_event(ctx, Stage.PROPOSAL))
 
+    # Idempotency check — runs the action's predicate_sql against the target
+    # source. If current state already matches what the action would write,
+    # short-circuit the entire decision/execute path so the reviewer never
+    # sees a misleading 'before→after' diff with the same values on both
+    # sides. Quiet no-op for HITL + autonomous alike.
+    no_op = _check_idempotency(state, case, scenario)
+    if no_op is not None:
+        await _finalise_no_op(state, case, scenario, no_op)
+        return
+
     # Branch — autonomous vs HITL
     decision = policy.evaluate(scenario)
     if decision.mode == "auto_approve":
@@ -315,7 +325,13 @@ def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> No
         return
     from .actions import execute_action
 
-    result = execute_action(action, arguments, sources=state.data_sources)
+    # Inject runtime context the action can reference from its SQL (e.g.
+    # `:__case_id` in a history-table INSERT) without the scenario author
+    # having to hardcode it. Underscore-prefixed keys signal "framework
+    # injected, not scenario authored."
+    runtime_args = dict(arguments)
+    runtime_args.setdefault("__case_id", case.case_id)
+    result = execute_action(action, runtime_args, sources=state.data_sources)
     case.execution_result = result.model_dump(mode="json")
 
     # Append a lineage event so the audit trail captures the executor run.
@@ -338,3 +354,115 @@ def _closing_message_for(scenario: dict, case: CaseRecord) -> Optional[str]:
     if not template:
         return None
     return template.replace("{rationale}", case.rationale or "")
+
+
+def _check_idempotency(
+    state: AppState, case: CaseRecord, scenario: dict
+) -> Optional[dict]:
+    """If the scenario wires a write action that declares an idempotency
+    block, probe the target source to see if the action would be a no-op.
+
+    Returns a dict describing the no-op outcome (action_id, args, message,
+    description) when the predicate matches; ``None`` otherwise (action
+    should proceed normally).
+    """
+    executor_cfg = scenario.get("_executor")
+    if not executor_cfg:
+        return None
+    action_id = executor_cfg.get("action_id")
+    if not action_id:
+        return None
+    action = state.actions.get(action_id)
+    if action is None or action.idempotency is None:
+        return None
+
+    arguments = executor_cfg.get("arguments") or {}
+    idem = action.idempotency
+    source = state.data_sources.get(idem.data_source)
+    if source is None:
+        log.warning(
+            "idempotency check for %s skipped: data_source %r not registered",
+            action_id, idem.data_source,
+        )
+        return None
+    # Only SQLite/Postgres-like sources expose `run_query`. HTTP / CSV /
+    # vector idempotency would need a different probe path — out of scope
+    # for now.
+    runner = getattr(source, "run_query", None)
+    if runner is None:
+        log.warning(
+            "idempotency check for %s skipped: source %r does not support run_query",
+            action_id, idem.data_source,
+        )
+        return None
+    result = runner(idem.predicate_sql, arguments, limit=1)
+    if "error" in result:
+        log.warning(
+            "idempotency check for %s errored — proceeding with executor: %s",
+            action_id, result["error"],
+        )
+        return None
+    if not result.get("rows"):
+        return None  # predicate matched zero rows → not a no-op
+
+    try:
+        message = idem.no_op_message.format(**arguments)
+    except (KeyError, IndexError):
+        message = idem.no_op_message
+    return {
+        "action_id": action_id,
+        "args": arguments,
+        "message": message,
+        "description": idem.description or "",
+    }
+
+
+async def _finalise_no_op(
+    state: AppState, case: CaseRecord, scenario: dict, no_op: dict
+) -> None:
+    """Complete a case as a no-op without invoking the executor or routing
+    to a reviewer. Mirrors the autonomous-complete shape so the frontend
+    can reuse the same chat-thread terminal rendering."""
+    assert case.ctx is not None
+    # Lineage event so the audit trail records the short-circuit.
+    ev = make_event(
+        stage=Stage.EXECUTE,
+        actor=scenario.get("actor_id") or "agent-write-actions",
+        action="skipped_no_op",
+        detail=no_op["message"],
+    )
+    case.ctx.append_lineage(ev)
+    state.lineage.record(case.ctx.case_id, ev)
+
+    case.phase = "complete"
+    case.decision_kind = "no_op"
+    case.closing_message = no_op["message"]
+    case.execution_result = {
+        "action_id": no_op["action_id"],
+        "ok": True,
+        "was_noop": True,
+        "detail": no_op["message"],
+        "args": no_op["args"],
+    }
+    state.cases.save(case)
+
+    await state.bus.emit(
+        case.case_id,
+        CaseEvent(
+            kind="decided",
+            data={
+                "case_id": case.case_id,
+                "decision": "no_op",
+                "rationale": no_op.get("description") or "",
+                "reviewer_id": None,
+                "follow_up": None,
+                "outcome": {
+                    "headline": "No change needed",
+                    "detail": no_op["message"],
+                },
+                "closing_message": case.closing_message,
+                "lineage": [ev.model_dump(mode="json") for ev in case.ctx.lineage],
+            },
+        ),
+    )
+    await state.bus.close(case.case_id)

@@ -64,3 +64,183 @@ mappings:
       confirmed_at: null
       notes: null
     relations: {}
+  SanctionedNetworkEntity:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: entity_id
+      attribute_map:
+        entity_id: entity_id
+        name: name
+        program: program
+        country: country
+        listed_at: listed_at
+        risk_tier: risk_tier
+      table: null
+      query_template: "MATCH (n:SanctionedNetworkEntity)\nWHERE ($entity_id IS NULL OR n.entity_id = $entity_id)\n  AND ($program IS NULL OR n.program = $program)\nRETURN n.entity_id AS id,\n       n.name + \" (\" + n.program + \")\" AS title,\n       n.country + \" · \" + n.risk_tier + \" risk · listed \" + toString(n.listed_at) AS summary\nORDER BY n.entity_id\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Direct read of an SDN node by entity_id. Used to bind the
+        newly-listed entity at the start of a containment workflow."
+    relations: {}
+  SanctionsProximity:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: entity_id
+      attribute_map:
+        entity_id: entity_id
+        name: name
+        program: program
+        risk_tier: risk_tier
+        hop_distance: hop_distance
+        path_via: path_via
+      table: null
+      # Find shortest path from the queried Supplier to any
+      # SanctionedNetworkEntity within 4 hops. Returns one row per
+      # destination SDN with the trail collapsed into a single string
+      # for the fact card summary.
+      query_template: "MATCH path = shortestPath(\n  (s:Supplier {supplier_id: $supplier_id})-[*1..4]-(sdn:SanctionedNetworkEntity)\n)\nWITH sdn,\n     length(path) AS hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nRETURN sdn.entity_id AS id,\n       sdn.name + \" (\" + sdn.program + \")\" AS title,\n       toString(hops) + \"-hop trail · \" + sdn.risk_tier + \" risk · path: \" + reduce(s = '', n IN chain | (CASE WHEN s = '' THEN n ELSE s + ' → ' + n END)) AS summary\nORDER BY hops, sdn.entity_id\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Shortest-path traversal from the queried Supplier to any\
+        \ sanctioned-network entity within 4 hops. THIS is what flat tables\
+        \ cannot do efficiently — the killer Neo4j query."
+    relations: {}
+  AlliancePeer:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: peer_carrier_id
+      attribute_map:
+        peer_carrier_id: peer_carrier_id
+        peer_name: peer_name
+        alliance_name: alliance_name
+        via_carrier: via_carrier
+      table: null
+      # For the queried supplier, walk: SHIPS_VIA → MEMBER_OF → MEMBER_OF
+      # to find the OTHER carriers in the same alliance as any carrier the
+      # supplier uses. Reveals concentration risk: "multiple carriers, one
+      # alliance." Collect-then-reduce dedupes the (carrier, peer) pairs
+      # when a supplier ships via multiple carriers in the same alliance.
+      query_template: "MATCH (s:Supplier {supplier_id: $supplier_id})-[:SHIPS_VIA]->(c:Carrier)-[:MEMBER_OF]->(a:Alliance)<-[:MEMBER_OF]-(peer:Carrier)\nWHERE peer <> c\nWITH peer, a, collect(DISTINCT c.name) AS via_carriers\nRETURN peer.carrier_id AS id,\n       peer.name + \" (\" + a.name + \" peer)\" AS title,\n       \"Alliance peer · reached via \" + reduce(s = '', n IN via_carriers | (CASE WHEN s = '' THEN n ELSE s + ' + ' + n END)) + \" · \" + a.known_for AS summary\nORDER BY peer.carrier_id\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Traverses supplier → preferred carrier → alliance → peer\
+        \ carriers. Shows network concentration risk."
+    relations: {}
+  TierSupplier:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: tier_supplier_id
+      attribute_map:
+        tier_supplier_id: tier_supplier_id
+        tier_supplier_name: tier_supplier_name
+        country: country
+        tier: tier
+        reliability_score: reliability_score
+        chain: chain
+      table: null
+      # Tier 1 = the supplier(s) that PLACED a PO containing the
+      # product. Tier N = upstream suppliers reached by walking
+      # SOURCES_FROM edges from tier 1. One row per (tier_supplier, tier)
+      # pair so the same upstream supplier can appear at different
+      # depths if reached through different tier-1 paths.
+      query_template: "MATCH (p:Product {product_id: $product_id})<-[:CONTAINS]-(po:PurchaseOrder)<-[:PLACED]-(t1:Supplier)\nOPTIONAL MATCH path = (t1)-[:SOURCES_FROM*0..3]->(tier_n:Supplier)\nWITH DISTINCT p, t1, tier_n, length(path) AS hop,\n     [n IN nodes(path) | n.name] AS chain\nRETURN tier_n.supplier_id AS id,\n       tier_n.name + ' (' + tier_n.country + ')' AS title,\n       'Tier ' + toString(hop + 1) + ' · ' +\n         CASE\n           WHEN hop = 0 THEN 'direct supplier of ' + p.name\n           ELSE 'upstream chain · ' + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         END + ' · reliability ' + toString(tier_n.reliability_score) AS summary\nORDER BY hop ASC, tier_n.supplier_id ASC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Walks the Product → PO → tier-1-Supplier → upstream supplier
+        chain via SOURCES_FROM edges. Up to 3 tiers deep for the demo."
+    relations: {}
+  AlternativeSupplier:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: alt_supplier_id
+      attribute_map:
+        alt_supplier_id: alt_supplier_id
+        alt_name: alt_name
+        country: country
+        reliability_score: reliability_score
+        hop_distance: hop_distance
+        via_relationship: via_relationship
+      table: null
+      # Three candidate paths combined per supplier via pattern
+      # comprehensions: (1) sibling sharing a HoldingCompany,
+      # (2) sibling sharing a parent Supplier, (3) direct JV partner.
+      # An alt that's reachable through multiple paths gets all reasons
+      # concatenated and the shortest hop count.
+      query_template: "MATCH (blocked:Supplier {supplier_id: $supplier_id})\nMATCH (alt:Supplier) WHERE alt <> blocked\nWITH blocked, alt,\n  [(blocked)-[:CONTROLLED_BY]->(h:HoldingCompany)<-[:CONTROLLED_BY]-(alt) | 'sibling via ' + h.name + ' (HoldingCompany)'] AS via_h,\n  [(blocked)<-[:PARENT_OF]-(p:Supplier)-[:PARENT_OF]->(alt) | 'sibling via parent ' + p.name] AS via_p,\n  [(blocked)-[:JOINT_VENTURE_WITH]-(alt) | 'joint-venture partner'] AS via_jv\nWITH alt, via_h + via_p + via_jv AS reasons\nWHERE size(reasons) > 0\nWITH alt, reasons,\n  CASE WHEN size([r IN reasons WHERE r = 'joint-venture partner']) > 0 THEN 1 ELSE 2 END AS hops\nRETURN alt.supplier_id AS id,\n       alt.name + ' (' + alt.country + ')' AS title,\n       toString(hops) + '-hop alternative · ' + reduce(acc = '', r IN reasons | (CASE WHEN acc = '' THEN r ELSE acc + ' + ' + r END)) + ' · reliability ' + toString(alt.reliability_score) AS summary\nORDER BY hops ASC, alt.reliability_score DESC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Surfaces drop-in alternatives when a supplier is blocked or
+        fails QA. Combines three graph paths into one ranked list with
+        the relationship type that makes each candidate viable."
+    relations: {}
+  UltimateBeneficialOwner:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: owner_id
+      attribute_map:
+        owner_id: owner_id
+        owner_name: owner_name
+        owner_type: owner_type
+        hop_distance: hop_distance
+        control_pct: control_pct
+        chain: chain
+      table: null
+      # Walk UP the parent chain from the queried supplier
+      # (incoming PARENT_OF), then surface the controlling HoldingCompany
+      # for each ancestor (via outgoing CONTROLLED_BY). Returns one row
+      # per ownership node — supplier ancestors AND holding controllers —
+      # with the cumulative hop distance and the full chain.
+      query_template: "MATCH (s:Supplier {supplier_id: $supplier_id})\nMATCH p = (s)<-[:PARENT_OF*0..4]-(ancestor:Supplier)\nWITH s, ancestor, length(p) AS hop, [n IN nodes(p) | n.name] AS chain\nOPTIONAL MATCH (ancestor)-[c:CONTROLLED_BY]->(h:HoldingCompany)\nRETURN coalesce(h.holding_id, ancestor.supplier_id) AS id,\n       CASE WHEN h IS NOT NULL THEN h.name + \" (HoldingCompany)\"\n            ELSE ancestor.name + \" (Supplier ancestor)\"\n       END AS title,\n       toString(hop + CASE WHEN h IS NOT NULL THEN 1 ELSE 0 END) + \"-hop chain · \"\n         + \"via \" + ancestor.name\n         + CASE WHEN c IS NOT NULL THEN \" (\" + toString(c.pct) + \"% holding)\" ELSE \"\" END\n         + \" · path: \" + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         + CASE WHEN h IS NOT NULL THEN \" → \" + h.name ELSE \"\" END AS summary\nORDER BY hop ASC, h IS NULL\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Surfaces the full ownership trail upward from a Supplier.
+        Used by the UBO-disclosure scenario when auditors ask 'who really
+        owns this supplier?'. PARENT_OF jumps between suppliers,
+        CONTROLLED_BY jumps from supplier to holding."
+    relations: {}
+  CarrierExposure:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: carrier_id
+      attribute_map:
+        carrier_id: carrier_id
+        name: name
+        alliance_name: alliance_name
+        hop_distance: hop_distance
+        via_supplier: via_supplier
+        path_via: path_via
+      table: null
+      # Given a newly-listed SanctionedNetworkEntity (sdn_id), walk the
+      # ownership graph N hops out to every Supplier reachable, then surface
+      # every Carrier those Suppliers ship via. Aggregates by carrier so we
+      # return one row per affected carrier with the SHORTEST trail and the
+      # closest supplier through which the exposure flows.
+      query_template: "MATCH path = shortestPath(\n  (sdn:SanctionedNetworkEntity {entity_id: $sdn_id})-[*1..4]-(s:Supplier)\n)\nMATCH (s)-[:SHIPS_VIA]->(c:Carrier)-[:MEMBER_OF]->(a:Alliance)\nWITH c, a, s, path,\n     length(path) + 1 AS total_hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nWITH c, a, total_hops, chain, s.name AS via_supplier\nORDER BY total_hops ASC\nWITH c, a,\n     collect({hops: total_hops, chain: chain, sup: via_supplier})[0] AS best\nRETURN c.carrier_id AS id,\n       c.name + \" (\" + a.name + \")\" AS title,\n       toString(best.hops) + \"-hop SDN exposure · via supplier \" + best.sup + \" · path: \" + reduce(acc = '', n IN best.chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END)) + \" → \" + c.name AS summary\nORDER BY best.hops ASC, c.carrier_id ASC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Reverse direction of SanctionsProximity — starts at the
+        SDN, walks ownership chains to suppliers, then jumps SHIPS_VIA to
+        carriers. Used when a new entity is listed and we need to identify
+        every carrier whose biggest customer just became radioactive."
+    relations: {}

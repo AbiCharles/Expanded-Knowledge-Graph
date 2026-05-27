@@ -1,0 +1,130 @@
+id: SC-PP-ALT-SUP-024
+title: "Alternative-supplier discovery — primary supplier blocked"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-sourcing"
+actor_id: "agent-sourcing-04"
+operator_role: { label: "Operator", name: "sourcing.analyst.bcheng" }
+reviewer_role: { label: "Reviewer", name: "sourcing.lead.bcheng" }
+autonomous: false
+
+action_type: "alt_supplier_discovery_review"
+action_payload:
+  supplier_id: "SUP-013"
+  supplier_name: "Borealis Mining"
+  block_reason: "Direct 12% OWNS_SHARE in Karaganda Mining Holdings (OFAC SDN-NET-002) — must be replaced"
+  originating_guardrail_id: "POL-PP-SUPPLIER-CONTINUITY-2026"
+
+teams_headline: "Alternative supplier · Borealis Mining is blocked"
+execute_message: >-
+  Borealis Mining (SUP-013) was just blocked for direct SDN ownership.
+  The agent walks the supply-chain <strong>graph</strong> three ways
+  out from the blocked node — siblings via a shared HoldingCompany,
+  siblings via a shared parent Supplier, and direct joint-venture
+  partners — and returns a ranked list of swap candidates with their
+  reliability scores. Cross-references existing sanctions-proximity
+  signals on each candidate so we don't swap into a new exposure.
+
+match_keywords: ["alternative supplier", "swap supplier", "supplier blocked find alternative", "supplier continuity", "borealis blocked", "sourcing alternative", "primary supplier failed", "supplier replacement", "alt supplier discovery", "find drop-in supplier"]
+interpreted_as: "find drop-in alternatives for blocked supplier SUP-013 (Borealis Mining)"
+clarifying_question: >-
+  Confirm — discover alternative suppliers for blocked
+  <code>SUP-013</code> (Borealis Mining). I'll bind data from four
+  sources: the supply-chain <strong>graph</strong> (siblings via the
+  shared holding HOLD-004, siblings via parent suppliers, and direct
+  JV partners — all ranked by reliability score), the OFAC SDN feed
+  (cross-check each candidate isn't itself tainted), prior swap
+  decisions from the governance store, and the supplier-continuity
+  SOP excerpts via the policy vector store. Sourcing lead approves /
+  rejects the swap candidate with full evidence on the audit trail.
+  Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Sourcing lead approved the alternative-supplier
+    recommendation.</strong> The graph walk, reliability ranking,
+    SDN cross-reference, prior swap decisions, and SOP excerpts are
+    captured on the audit trail. Swap proceeds to the chosen alternative.
+  reject: >-
+    <strong>Sourcing lead declined the swap.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The blocked supplier remains
+    quarantined; no swap executed. The agent's findings remain on the
+    audit trail.
+  request_more_info: >-
+    <strong>Sourcing lead needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "All proposed alternatives share the same controlling holding — concentration risk unchanged."
+    - "Top candidate's reliability score is below threshold for this category."
+    - "Alternative would create a new sanctions-proximity exposure (still 2 hops from an SDN)."
+  request_more_info:
+    - "Need 12-month capacity and lead-time data for the top 2 candidates."
+    - "Need confirmation that the JV partner's contract permits taking on this volume."
+    - "Need a cost differential estimate before approving the swap."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-SUPPLIER-CONTINUITY-2026"
+        uri: "kf.tcs/policy/POL-PP-SUPPLIER-CONTINUITY-2026"
+        title: "Supplier continuity & alternatives policy"
+        payload: "When a supplier is blocked, the agent must (a) walk the supply-chain graph 1-2 hops out for in-group alternatives, (b) include JV partners as Hot-swap candidates, (c) cross-reference each alternative against the OFAC SDN list, (d) named sourcing-lead approval required before any swap is executed."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-sourcing-04"
+        uri: "iam.tcs/actors/agent-sourcing-04"
+        title: "Actor scope"
+        payload: "Scopes: sourcing.read, sourcing.propose, sourcing.swap_after_review · this case is propose-only (no autonomous swap)."
+  proposal:
+    binder: "AltSupplierProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain
+        class: Supplier
+        where:
+          supplier_id: ":supplier_id"
+        purpose: "Bind the blocked supplier's master record (Neo4j — supply_chain.Supplier)"
+      - ontology: supply_chain
+        class: AlternativeSupplier
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 8
+        purpose: "Walk the graph three ways — sibling-via-holding, sibling-via-parent, JV partner — and rank by reliability score"
+      - ontology: supply_chain
+        class: SanctionsProximity
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 4
+        purpose: "Sanctions-proximity readout for the blocked supplier (and by extension, anything in its ownership cluster)"
+  review:
+    binder: "AltSupplierReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-PP-007
+        max_results: 3
+        purpose: "Prior swap decisions for similar blocked-supplier cases (SQLite governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: supplier continuity alternative supplier sourcing swap JV partner concentration risk
+          top_k: 3
+        purpose: "Relevant supplier-continuity SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — swap to alternative supplier"
+    detail: "Sourcing lead accepted the alternative recommendation. Swap proceeds; evidence package on the audit trail."
+  reject:
+    headline: "Rejected — no swap"
+    detail: "Sourcing lead declined the swap. Reasoning recorded; blocked supplier remains quarantined."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requires additional capacity / cost / contractual data before approving the swap."
+
+_filter_from_prompt: true
+_custom_suggested_prompt: "Borealis Mining is blocked — find drop-in alternative suppliers"

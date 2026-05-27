@@ -37,3 +37,6 @@ backend/data/app.sqlite-journal
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 .claude/.cache/
+
+# Local secrets — never commit
+secrets/

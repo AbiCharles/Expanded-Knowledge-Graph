@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Style 4 — Dark Glow</title>
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;background:#fafafa;color:#0f172a;padding:32px}
+  h1{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
+  .eyebrow{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
+  .canvas{background:radial-gradient(circle at 50% 50%, #0f172a 0%, #050810 100%);border:1px solid #1e293b;border-radius:6px;padding:56px 24px;margin-top:18px;position:relative;overflow:hidden}
+  .canvas::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(34,211,238,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,0.05) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
+  .notes{margin-top:18px;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px;font-size:12px;color:#475569;line-height:1.55}
+  .notes strong{color:#0f172a}
+  svg{display:block;width:100%;height:220px;position:relative;z-index:1}
+  .node-rect{fill:#0f1e36;stroke:#22d3ee;stroke-width:1;rx:6;ry:6;filter:drop-shadow(0 0 6px rgba(34,211,238,0.35)) drop-shadow(0 0 14px rgba(34,211,238,0.18))}
+  .node-rect.selected{stroke:#67e8f9;stroke-width:1.5;fill:#0c2540;filter:drop-shadow(0 0 10px rgba(103,232,249,0.7)) drop-shadow(0 0 22px rgba(103,232,249,0.35))}
+  .node-rect.outcome{stroke:#fbbf24;filter:drop-shadow(0 0 6px rgba(251,191,36,0.4)) drop-shadow(0 0 14px rgba(251,191,36,0.2))}
+  .node-eyebrow{font-family:"DM Mono",ui-monospace,monospace;font-size:8.5px;letter-spacing:0.22em;text-transform:uppercase;fill:rgba(165,243,252,0.55)}
+  .node-title{font-family:"DM Mono",ui-monospace,monospace;font-size:12px;font-weight:600;fill:#e0f7fa;letter-spacing:0.04em;text-transform:uppercase}
+  .node-meta{font-family:"DM Mono",ui-monospace,monospace;font-size:9px;fill:rgba(165,243,252,0.45)}
+  .edge{stroke:#22d3ee;stroke-width:1.1;fill:none;stroke-opacity:0.55;filter:drop-shadow(0 0 3px rgba(34,211,238,0.5))}
+  .edge-arrow{fill:#67e8f9}
+</style></head>
+<body>
+  <div class="eyebrow">Graph style · 4 of 5</div>
+  <h1>Dark Glow</h1>
+
+  <div class="canvas">
+    <svg viewBox="0 0 1100 220">
+      <defs>
+        <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" class="edge-arrow"/>
+        </marker>
+      </defs>
+
+      <line x1="170" y1="110" x2="240" y2="110" class="edge" marker-end="url(#ar4)"/>
+      <line x1="380" y1="110" x2="450" y2="110" class="edge" marker-end="url(#ar4)"/>
+      <line x1="590" y1="110" x2="660" y2="110" class="edge" marker-end="url(#ar4)"/>
+      <line x1="800" y1="110" x2="870" y2="110" class="edge" marker-end="url(#ar4)"/>
+
+      <g transform="translate(20,80)">
+        <rect class="node-rect" width="150" height="64"/>
+        <text class="node-eyebrow" x="14" y="22">Query</text>
+        <text class="node-title" x="14" y="42">Onboard</text>
+        <text class="node-meta" x="14" y="56">operator prompt</text>
+      </g>
+
+      <g transform="translate(240,80)">
+        <rect class="node-rect" width="140" height="64"/>
+        <text class="node-eyebrow" x="14" y="22">Stage</text>
+        <text class="node-title" x="14" y="42">Gathered</text>
+        <text class="node-meta" x="14" y="56">11 facts</text>
+      </g>
+
+      <g transform="translate(450,80)">
+        <rect class="node-rect selected" width="140" height="64"/>
+        <text class="node-eyebrow" x="14" y="22">Class</text>
+        <text class="node-title" x="14" y="42">Supplier</text>
+        <text class="node-meta" x="14" y="56">7 facts · selected</text>
+      </g>
+
+      <g transform="translate(660,80)">
+        <rect class="node-rect" width="140" height="64"/>
+        <text class="node-eyebrow" x="14" y="22">Source</text>
+        <text class="node-title" x="14" y="42">Neo4j</text>
+        <text class="node-meta" x="14" y="56">graph traversal</text>
+      </g>
+
+      <g transform="translate(870,80)">
+        <rect class="node-rect outcome" width="160" height="64"/>
+        <text class="node-eyebrow" x="14" y="22">Outcome</text>
+        <text class="node-title" x="14" y="42">Approved</text>
+        <text class="node-meta" x="14" y="56">reviewer · 14:02</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="notes">
+    <strong>Dark Glow.</strong> Near-black canvas with a faint cyan grid; each node a thin-bordered dark rectangle with a 6+14 px cyan glow.
+    Selected nodes step up to a brighter cyan + stronger glow; the Outcome uses an amber border so the resolution stands out.
+    Edges are 1.1 px cyan-tinted lines with their own subtle glow. Pure DM Mono typography.
+    Reads as a SOC dashboard / threat-intel console (Palantir Gotham, Recorded Future). Best for graph views the reviewer leans into during a live demo — bold, cinematic.
+  </div>
+</body></html>

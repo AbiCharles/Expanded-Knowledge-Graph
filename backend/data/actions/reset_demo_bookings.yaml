@@ -1,0 +1,41 @@
+id: reset_demo_bookings
+title: Reset demo booking state to seed values
+description: >-
+  Roll the demo-targeted bookings (BK-700412-01 and BK-700499-01) back to
+  the original seed values so the mode-switch / re-tender demo flows can
+  be re-run from a clean slate. Also clears the booking_history rows
+  written by prior demo runs. Pure demo affordance — runs from a magic
+  prompt like "reset demo bookings", autonomous (no human approval
+  needed), and the audit trail records that a reset occurred.
+hitl: false
+arguments: []
+executor:
+  kind: sql_update
+  data_source: logistics_sqlite
+  # Reset BK-700412-01 to its seed (MSC ocean, $4,830, confirmed). The
+  # additional_sql block resets BK-700499-01 and wipes the history rows.
+  sql: |
+    UPDATE bookings
+       SET carrier_id     = 'CR-MSCU',
+           total_cost_usd = 4830.0,
+           status         = 'confirmed',
+           tendered_at    = '2026-03-18T14:00Z'
+     WHERE booking_id = 'BK-700412-01'
+  additional_sql:
+    - |
+      UPDATE bookings
+         SET carrier_id     = 'CR-MAEU',
+             total_cost_usd = 4715.0,
+             status         = 'confirmed',
+             tendered_at    = '2026-04-08T10:00Z'
+       WHERE booking_id = 'BK-700499-01'
+    - |
+      DELETE FROM booking_history
+       WHERE booking_id IN ('BK-700412-01', 'BK-700499-01')
+match_keywords:
+  - reset demo
+  - reset demo bookings
+  - reset booking demo
+  - rewind demo
+  - reset bk-700412
+default: true

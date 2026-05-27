@@ -10,10 +10,14 @@
     "gen-types": "openapi-typescript http://localhost:8001/openapi.json -o src/api-types.ts"
   },
   "dependencies": {
+    "cytoscape": "^3.33.4",
+    "cytoscape-dagre": "^3.0.0",
     "react": "^18.3.1",
+    "react-cytoscapejs": "^2.0.0",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/cytoscape": "^3.21.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

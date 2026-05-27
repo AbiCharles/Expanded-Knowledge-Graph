@@ -255,6 +255,47 @@ mappings:
       confirmed_at: null
       notes: Filter by lane_id and/or carrier_id to compare current rate cards.
     relations: {}
+  BookingHistory:
+    sources:
+    - data_source: logistics_sqlite
+      identifier_column: history_id
+      attribute_map:
+        history_id: history_id
+        booking_id: booking_id
+        shipment_id: shipment_id
+        prev_carrier_id: prev_carrier_id
+        new_carrier_id: new_carrier_id
+        prev_cost: prev_cost
+        new_cost: new_cost
+        prev_status: prev_status
+        new_status: new_status
+        changed_at: changed_at
+        case_id: case_id
+        action_id: action_id
+      table: booking_history
+      # Filter by booking_id OR shipment_id; the most useful slice for a
+      # demo is "the last 3 changes to this shipment's booking". Both
+      # filters are optional via the COALESCE-IS-NULL pattern.
+      query_template: |
+        SELECT history_id AS id,
+               prev_carrier_id || ' → ' || new_carrier_id AS title,
+               'Changed from ' || prev_carrier_id || ' ($' || prev_cost
+                 || ' ' || prev_status || ') to ' || new_carrier_id
+                 || ' ($' || new_cost || ' ' || new_status || ') at '
+                 || changed_at || ' · case ' || COALESCE(case_id, '?')
+                 AS summary
+        FROM booking_history
+        WHERE (:booking_id  IS NULL OR booking_id  = :booking_id)
+          AND (:shipment_id IS NULL OR shipment_id = :shipment_id)
+        ORDER BY changed_at DESC
+        LIMIT :max_results
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Append-only change log; most recent first.
+    relations: {}
   DemurrageCharge:
     sources:
     - data_source: logistics_sqlite

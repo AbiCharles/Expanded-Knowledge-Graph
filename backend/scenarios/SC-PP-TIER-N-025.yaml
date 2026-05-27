@@ -1,0 +1,128 @@
+id: SC-PP-TIER-N-025
+title: "Multi-tier supply-chain visibility — resilience review"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-resilience"
+actor_id: "agent-resilience-02"
+operator_role: { label: "Operator", name: "resilience.analyst.dpark" }
+reviewer_role: { label: "Reviewer", name: "resilience.lead.dpark" }
+autonomous: false
+
+action_type: "tier_n_visibility_review"
+action_payload:
+  product_id: "P-EL-9001"
+  product_name: "Encryption Module Mk II"
+  originating_guardrail_id: "POL-PP-RESILIENCE-2026"
+
+teams_headline: "Tier-N visibility · Encryption Module Mk II"
+execute_message: >-
+  Resilience asked: "show me the multi-tier supply chain behind
+  P-EL-9001 so we can identify single-points-of-failure". The agent
+  walks the supply-chain <strong>graph</strong> backwards from the
+  product: tier 1 = the supplier that placed the PO containing it;
+  tier 2+ = upstream suppliers reached via SOURCES_FROM edges, up to 4
+  tiers deep. Each row is a (supplier, tier) pair with the chain back
+  to the product and the reliability score for risk weighting.
+
+match_keywords: ["tier n visibility", "multi-tier supply chain", "supply chain mapping", "sub-tier visibility", "resilience review", "single point of failure supply chain", "deep supply chain", "tier 2 tier 3 suppliers", "product supply chain map", "upstream supplier visibility"]
+interpreted_as: "map the multi-tier supply chain behind product P-EL-9001 (Encryption Module Mk II)"
+clarifying_question: >-
+  Confirm — run multi-tier supply-chain visibility on
+  <code>P-EL-9001</code> (Encryption Module Mk II). I'll bind data from
+  four sources: the supply-chain <strong>graph</strong> (every Supplier
+  reachable from the product via PO → SOURCES_FROM walks, tagged by
+  tier with the full chain), the OFAC SDN feed (does any upstream
+  supplier appear on a sanctions list?), prior resilience reviews
+  from the governance store, and supply-chain-resilience SOP excerpts
+  via the policy vector store. Resilience lead approves the resilience
+  picture with full evidence on the audit trail. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Resilience lead approved the tier-N map.</strong> The
+    multi-tier chain, SDN cross-references, prior reviews, and SOP
+    excerpts are captured on the audit trail. Resilience score for
+    this product is finalised.
+  reject: >-
+    <strong>Resilience lead declined the assessment.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The map is treated as incomplete;
+    additional investigation requested.
+  request_more_info: >-
+    <strong>Resilience lead needs more information.</strong>
+    Specifically: <em>"{rationale}"</em><br><br>Case is back in
+    review.
+
+rationale_reasons:
+  reject:
+    - "Chain stops at tier 2 — too shallow to confirm single-points-of-failure."
+    - "An upstream tier-3 supplier is concentrated (sole source of a critical raw material) — needs diversification before sign-off."
+    - "Tier-3 supplier exposed via sanctions-proximity — must be replaced before approval."
+  request_more_info:
+    - "Need tier-4 visibility on the raw-material suppliers below SUP-013."
+    - "Need contract terms confirming SOURCES_FROM edges are current (not historical)."
+    - "Need a substitutability assessment for each tier-2 dependency."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-RESILIENCE-2026"
+        uri: "kf.tcs/policy/POL-PP-RESILIENCE-2026"
+        title: "Supply-chain resilience policy"
+        payload: "Resilience reviews must (a) walk the supply-chain graph at least 3 tiers backwards from the product, (b) cross-reference each upstream supplier against the OFAC SDN list, (c) flag any sole-source tier-N dependency, (d) named resilience-lead approval required before the resilience score is recorded."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-resilience-02"
+        uri: "iam.tcs/actors/agent-resilience-02"
+        title: "Actor scope"
+        payload: "Scopes: resilience.read, resilience.propose, resilience.score_after_review · this case is propose-only (no autonomous score)."
+  proposal:
+    binder: "TierNProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain
+        class: Product
+        where:
+          product_id: ":product_id"
+        purpose: "Bind the product master record (Neo4j — supply_chain.Product)"
+      - ontology: supply_chain
+        class: TierSupplier
+        where:
+          product_id: ":product_id"
+        max_results: 12
+        purpose: "Walk PO → SOURCES_FROM backwards from the product — every tier-1/2/3/4 supplier reached, with the chain and tier depth"
+      - ontology: supply_chain
+        class: SanctionsProximity
+        where:
+          supplier_id: "SUP-001"
+        max_results: 4
+        purpose: "Sanctions cross-reference: does any upstream supplier appear in proximity of an SDN entity?"
+  review:
+    binder: "TierNReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-PP-007
+        max_results: 3
+        purpose: "Prior resilience-review decisions (SQLite governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: supply chain resilience multi-tier visibility single point of failure raw material sole source
+          top_k: 3
+        purpose: "Relevant supply-chain-resilience SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — tier-N map accepted"
+    detail: "Resilience lead accepted the multi-tier visibility picture. Resilience score recorded; evidence package on the audit trail."
+  reject:
+    headline: "Rejected — investigation requested"
+    detail: "Resilience lead declined the map. Additional tier-N investigation initiated."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requires additional tier-N depth, contract-currency, or substitutability data before deciding."
+
+_filter_from_prompt: true
+_custom_suggested_prompt: "Map the multi-tier supply chain for Encryption Module Mk II"

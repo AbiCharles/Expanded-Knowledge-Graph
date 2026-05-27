@@ -70,6 +70,11 @@ def _execute_sql_update(
             args=args,
         )
 
+    before_state: Optional[dict[str, Any]] = None
+    # Work on a copy so we don't mutate the caller's dict (which is the
+    # scenario's literal _executor.arguments).
+    bound_args: dict[str, Any] = dict(args)
+
     try:
         if spec.kind == "sqlite":
             from pathlib import Path
@@ -79,19 +84,49 @@ def _execute_sql_update(
             if not db_path.is_absolute():
                 db_path = sources._project_root / raw_path  # type: ignore[attr-defined]
             with sqlite3.connect(db_path) as conn:
-                cur = conn.execute(executor.sql, args)
+                conn.row_factory = sqlite3.Row
+                # Optional pre-flight: snapshot the row(s) the UPDATE will
+                # touch, so the audit trail + UI diff have a reliable
+                # 'before' even after server restart.
+                if executor.before_select_sql:
+                    before_cur = conn.execute(executor.before_select_sql, bound_args)
+                    before_row = before_cur.fetchone()
+                    if before_row is not None:
+                        before_state = {k: before_row[k] for k in before_row.keys()}
+                        # Make captured values available to additional_sql
+                        # statements (history INSERTs, etc.) as `before_*`.
+                        for k, v in before_state.items():
+                            bound_args.setdefault(f"before_{k}", v)
+                cur = conn.execute(executor.sql, bound_args)
                 rows = cur.rowcount
+                # Append-only history inserts / etc. — bind the augmented
+                # args (which now include before_* and __case_id).
+                for extra_sql in executor.additional_sql:
+                    conn.execute(extra_sql, bound_args)
                 conn.commit()
         elif spec.kind == "postgres":
             import psycopg
 
             dsn = spec.config["dsn"]
             with psycopg.connect(dsn) as conn:
-                with conn.cursor() as cur:
+                with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+                    if executor.before_select_sql:
+                        sel_sql, sel_params = _rewrite_named_to_pyformat(
+                            executor.before_select_sql, bound_args
+                        )
+                        cur.execute(sel_sql, sel_params)
+                        row = cur.fetchone()
+                        if row is not None:
+                            before_state = dict(row)
+                            for k, v in before_state.items():
+                                bound_args.setdefault(f"before_{k}", v)
                     # psycopg uses %(name)s style; rewrite :name placeholders.
-                    sql, params_pg = _rewrite_named_to_pyformat(executor.sql, args)
+                    sql, params_pg = _rewrite_named_to_pyformat(executor.sql, bound_args)
                     cur.execute(sql, params_pg)
                     rows = cur.rowcount
+                    for extra_sql in executor.additional_sql:
+                        e_sql, e_params = _rewrite_named_to_pyformat(extra_sql, bound_args)
+                        cur.execute(e_sql, e_params)
                 conn.commit()
         else:
             return ActionExecutionResult(
@@ -110,6 +145,7 @@ def _execute_sql_update(
             ok=False,
             detail=f"sql_update failed: {exc}",
             args=args,
+            before=before_state,
         )
 
     return ActionExecutionResult(
@@ -118,6 +154,7 @@ def _execute_sql_update(
         detail=f"sql_update committed against {executor.data_source}",
         rows_affected=int(rows or 0),
         args=args,
+        before=before_state,
     )
 
 

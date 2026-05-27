@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CaseFull, StagePayload } from "../types";
+import { EvidenceMap, GraphPanel } from "./GraphViz";
 
 // Plain-English labels for the operator. Raw stage names (agent_intake /
 // proposal / review) survive in the tooltip via title= for engineers.
@@ -13,6 +14,19 @@ export function Envelope({ active }: { active: CaseFull | null }) {
   const stages = active?.stages ?? [];
   const factCount = stages.reduce((acc, s) => acc + s.facts.length, 0);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
+
+  // Extract the executor's target cost (if any) so FreightRate cards can
+  // self-highlight as CHOSEN when their total matches. Today only the
+  // `new_total_cost_usd` arg is matched; widen this rule when new
+  // numerically-keyed write actions land. Null means "no matching to do."
+  const targetCostUsd: number | null = (() => {
+    const args = active?.scenario?.executor?.arguments;
+    if (!args) return null;
+    const raw = args["new_total_cost_usd"];
+    if (raw === null || raw === undefined) return null;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  })();
 
   return (
     <div className="envelope-wrapper">
@@ -35,8 +49,14 @@ export function Envelope({ active }: { active: CaseFull | null }) {
       </div>
       <div className="envelope">
         {stages.length === 0 && <div className="envelope-empty">Awaiting first binding…</div>}
+        {active && stages.length > 0 && (
+          <>
+            <EvidenceMap active={active} />
+            <GraphPanel active={active} />
+          </>
+        )}
         {stages.map((s, idx) => (
-          <StageBlock key={s.stage} stage={s} index={idx} />
+          <StageBlock key={s.stage} stage={s} index={idx} targetCostUsd={targetCostUsd} />
         ))}
       </div>
       {glossaryOpen && <GlossaryModal onClose={() => setGlossaryOpen(false)} />}
@@ -44,11 +64,24 @@ export function Envelope({ active }: { active: CaseFull | null }) {
   );
 }
 
-function StageBlock({ stage, index }: { stage: StagePayload; index: number }) {
+function StageBlock({
+  stage,
+  index,
+  targetCostUsd,
+}: {
+  stage: StagePayload;
+  index: number;
+  targetCostUsd: number | null;
+}) {
   // Each stage starts expanded (the user wants to see the work). Click the
   // header to collapse. Inside, the facts grid is capped with internal scroll
   // so a 30-fact port-disruption stage doesn't push the page below the fold.
   const [open, setOpen] = useState(true);
+  // QueryPlanPanel can ask to highlight cards from one query. null = no
+  // filter applied; matching facts get .fact-highlighted, the rest get
+  // .fact-dimmed.
+  const [highlightedQuery, setHighlightedQuery] = useState<number | null>(null);
+  const hasQueries = !!stage.queries && stage.queries.length > 0;
   return (
     <div className={`stage-block${open ? " stage-open" : " stage-collapsed"}`}>
       <button
@@ -65,25 +98,139 @@ function StageBlock({ stage, index }: { stage: StagePayload; index: number }) {
         </div>
         <div className="stage-binder">{stage.binder}</div>
       </button>
-      {open && <FactsGrid facts={stage.facts} />}
+      {open && hasQueries && (
+        <QueryPlanPanel
+          queries={stage.queries!}
+          highlighted={highlightedQuery}
+          onHighlight={setHighlightedQuery}
+        />
+      )}
+      {open && (
+        <FactsGrid
+          facts={stage.facts}
+          highlightedQuery={highlightedQuery}
+          targetCostUsd={targetCostUsd}
+        />
+      )}
     </div>
   );
+}
+
+// "Why these cards?" — surfaces the ontology_queries the binder ran, in order,
+// with their declared purpose + how many cards each returned. Click a row
+// to highlight the matching cards below (and dim the rest). Click again to
+// clear. Collapsed by default to stay out of the way.
+function QueryPlanPanel({
+  queries,
+  highlighted,
+  onHighlight,
+}: {
+  queries: StagePayload["queries"];
+  highlighted: number | null;
+  onHighlight: (idx: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const qs = queries || [];
+  return (
+    <details
+      className={`query-plan${open ? " query-plan-open" : ""}`}
+      open={open}
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className="query-plan-summary">
+        <span className="query-plan-eyebrow">
+          Why these cards?
+          <span className="query-plan-count">
+            {" "}({qs.length} {qs.length === 1 ? "query" : "queries"} ran)
+          </span>
+        </span>
+        <span className="query-plan-chevron" aria-hidden="true">▸</span>
+      </summary>
+      <ol className="query-plan-list">
+        {qs.map((q) => {
+          const isActive = highlighted === q.index;
+          const whereStr = Object.entries(q.where)
+            .filter(([k]) => !k.startsWith("__"))
+            .map(([k, v]) => `${k}=${formatWhereVal(v)}`)
+            .join(", ");
+          return (
+            <li
+              key={q.index}
+              className={`query-plan-item${isActive ? " active" : ""}`}
+            >
+              <button
+                type="button"
+                className="query-plan-item-btn"
+                onClick={() => onHighlight(isActive ? null : q.index)}
+              >
+                <span className="query-plan-item-purpose">
+                  {q.purpose || `${q.ontology}.${q.ontology_type}`}
+                </span>
+                <span className="query-plan-item-meta">
+                  {q.fact_count} {q.fact_count === 1 ? "card" : "cards"}
+                  {whereStr ? ` · where ${whereStr}` : " · no filter"}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      {highlighted !== null && (
+        <button
+          type="button"
+          className="query-plan-clear"
+          onClick={() => onHighlight(null)}
+        >
+          Clear highlight
+        </button>
+      )}
+    </details>
+  );
+}
+
+function formatWhereVal(v: unknown): string {
+  if (v === null || v === undefined) return "(any)";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try { return JSON.stringify(v); } catch { return String(v); }
 }
 
 // Cap large stages (e.g. port-disruption returns 30 shipments) at 12 visible
 // facts with a "+ N more" expander. Keeps scroll cost predictable.
 const FACT_PREVIEW_LIMIT = 12;
 
-function FactsGrid({ facts }: { facts: StagePayload["facts"] }) {
+function FactsGrid({
+  facts,
+  highlightedQuery,
+  targetCostUsd,
+}: {
+  facts: StagePayload["facts"];
+  highlightedQuery: number | null;
+  targetCostUsd: number | null;
+}) {
   const [showAll, setShowAll] = useState(false);
   const overflow = facts.length > FACT_PREVIEW_LIMIT;
   const visible = showAll || !overflow ? facts : facts.slice(0, FACT_PREVIEW_LIMIT);
   return (
     <>
       <div className="facts-grid">
-        {visible.map((f, i) => (
-          <FactCard key={`${f.source}-${f.id}-${i}`} fact={f} index={i} />
-        ))}
+        {visible.map((f, i) => {
+          const highlightState: "highlighted" | "dimmed" | "" =
+            highlightedQuery === null
+              ? ""
+              : f.query_index === highlightedQuery
+              ? "highlighted"
+              : "dimmed";
+          return (
+            <FactCard
+              key={`${f.source}-${f.id}-${i}`}
+              fact={f}
+              index={i}
+              highlightState={highlightState}
+              targetCostUsd={targetCostUsd}
+            />
+          );
+        })}
       </div>
       {overflow && (
         <button
@@ -115,8 +262,137 @@ function factAccent(text: string): "" | "risk" | "warning" | "premium" {
   return "";
 }
 
-function FactCard({ fact, index }: { fact: StagePayload["facts"][number]; index: number }) {
+// Decide whether a fact card should be styled as the CHOSEN rate (the one
+// the action will commit) vs an ALTERNATIVE (shown for comparison). Only
+// applies to FreightRate cards when a target cost is supplied. Falls back
+// to "" (no styling) for any other class or when no executor target exists.
+function computeChosenState(
+  fact: { ontology_type: string; summary: string | null },
+  targetCostUsd: number | null,
+): "chosen" | "alternative" | "" {
+  if (fact.ontology_type !== "FreightRate") return "";
+  if (targetCostUsd === null) return "";
+  // FreightRate summary format includes "$<total>" as the first dollar
+  // amount. Grab it, strip commas/cents, and numerically compare.
+  const m = (fact.summary || "").match(/\$([\d,]+(?:\.\d+)?)/);
+  if (!m) return "alternative";
+  const cost = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(cost)) return "alternative";
+  return Math.abs(cost - targetCostUsd) < 1 ? "chosen" : "alternative";
+}
+
+// Plain-English presentation for each ontology class that can land on a fact
+// card. Keeps the technical class name available in the API/audit trail but
+// shows a non-engineer-friendly label + one-line "what is this?" subtitle
+// inside the card. Add new entries here when new ontology classes appear.
+const CLASS_DISPLAY: Record<string, { label: string; description: string }> = {
+  // Logistics ontology
+  Shipment: {
+    label: "Shipment",
+    description: "An in-flight or recently completed shipment — origin, destination, vessel, current position, ETA, port state.",
+  },
+  ShipmentEvent: {
+    label: "Milestone event",
+    description: "One step on the shipment's journey (booked → picked up → port arrival → customs → delivered, plus any exceptions).",
+  },
+  ShipmentPerformance: {
+    label: "Performance summary",
+    description: "Aggregated on-time rate and late count for a SKU over a reporting period.",
+  },
+  Carrier: {
+    label: "Carrier scorecard",
+    description: "Carrier master record — SCAC, mode, on-time and damage rates, contract renewal date.",
+  },
+  Lane: {
+    label: "Lane",
+    description: "An origin-destination corridor with target vs. actual transit performance and current congestion.",
+  },
+  Port: {
+    label: "Port",
+    description: "Port operational state — congestion level, berth wait time, customs clearance speed, disruption flags.",
+  },
+  CustomerOrder: {
+    label: "Customer order",
+    description: "Customer order tied to a shipment — SLA tier, promised delivery date, $/day late penalty.",
+  },
+  Booking: {
+    label: "Carrier booking",
+    description: "The active carrier booking that physically moves the shipment. Write target for re-tender actions.",
+  },
+  BookingHistory: {
+    label: "Recent booking change",
+    description: "An entry in the booking change log — captures the prior carrier/cost/status and the case that triggered the change. Surfaced on replay so the reviewer sees how the current state got there.",
+  },
+  FreightRate: {
+    label: "Rate option",
+    description: "A current contract or spot rate card per lane × carrier × container type — compared against the current booking when re-tendering.",
+  },
+  DemurrageCharge: {
+    label: "Demurrage charge",
+    description: "Accessorial fee for exceeding free time at a port or yard. Carries status (accruing → billed → disputed → waived/paid) and prior dispute history.",
+  },
+  // supply_chain — graph-resident classes (Neo4j)
+  SanctionsProximity: {
+    label: "Sanctions-proximity trail",
+    description: "A shortest-path traversal from the supplier through its corporate network to a sanctioned entity within 4 hops. The trail shows every node on the path — this is what flat tables can't answer.",
+  },
+  AlliancePeer: {
+    label: "Alliance-peer carrier",
+    description: "Another carrier in the same shipping alliance as one the supplier prefers. Surfaces concentration risk: 'multiple carriers, one alliance, single point of failure.'",
+  },
+  // tcs_core (used by logistics scenarios for cross-domain context)
+  Product: {
+    label: "Product",
+    description: "Sales item / SKU master record — ECCN, HTS, category.",
+  },
+  SanctionedEntity: {
+    label: "Sanctioned entity",
+    description: "Counterparty on a sanctions list (OFAC SDN-style).",
+  },
+  PriorOverride: {
+    label: "Prior similar case",
+    description: "How a previous reviewer decided a similar case — outcome + rationale. Shown so reviewers can calibrate against precedent.",
+  },
+  PolicyExcerpt: {
+    label: "Policy excerpt",
+    description: "Relevant SOP / policy paragraph pulled from the policy corpus via semantic search.",
+  },
+  // Inline facts (not ontology-resolved) authored directly in scenarios
+  Policy: {
+    label: "Active rule",
+    description: "The policy that governs whether this action is permitted.",
+  },
+  ActorScope: {
+    label: "Agent permissions",
+    description: "The named capabilities the agent has — what it can read, propose, or write under this scenario.",
+  },
+};
+
+function classDisplay(ontologyType: string): { label: string; description: string } {
+  return CLASS_DISPLAY[ontologyType] || {
+    label: ontologyType,
+    description: "",
+  };
+}
+
+function FactCard({
+  fact,
+  index,
+  highlightState = "",
+  targetCostUsd = null,
+}: {
+  fact: StagePayload["facts"][number];
+  index: number;
+  highlightState?: "highlighted" | "dimmed" | "";
+  targetCostUsd?: number | null;
+}) {
   const accent = factAccent(`${fact.title} ${fact.summary}`);
+  const cls = classDisplay(fact.ontology_type);
+  // Detect whether this card is the FreightRate row whose total matches
+  // the executor's target cost — the "chosen" rate the action will commit.
+  // Falls back gracefully when the card isn't a FreightRate, no target was
+  // set, or the summary string doesn't parse cleanly.
+  const chosenState = computeChosenState(fact, targetCostUsd);
   // Split the pipe-delimited summary into individual chips. Each segment
   // gets a small badge so the eye lands on the data, not a long sentence.
   const chips = (fact.summary || "")
@@ -125,12 +401,21 @@ function FactCard({ fact, index }: { fact: StagePayload["facts"][number]; index:
     .filter(Boolean);
   return (
     <div
-      className={`fact${accent ? ` fact-accent-${accent}` : ""}`}
+      className={
+        `fact${accent ? ` fact-accent-${accent}` : ""}` +
+        (highlightState ? ` fact-${highlightState}` : "") +
+        (chosenState ? ` fact-${chosenState}` : "")
+      }
       style={{ animationDelay: `${index * 80}ms` }}
     >
       <div className="fact-source">
         <SourcePill source={fact.source} />
-        <span className="fact-ontology-type">{fact.ontology_type}</span>
+        <span
+          className="fact-ontology-type"
+          title={`Ontology class: ${fact.ontology_type}`}
+        >
+          {cls.label}
+        </span>
         {accent === "risk" && (
           <span
             className="fact-accent-badge risk"
@@ -155,8 +440,27 @@ function FactCard({ fact, index }: { fact: StagePayload["facts"][number]; index:
             PREMIUM SLA
           </span>
         )}
+        {chosenState === "chosen" && (
+          <span
+            className="fact-accent-badge chosen"
+            title="CHOSEN — this is the rate the action will commit. The total here matches the executor's new_total_cost_usd argument."
+          >
+            CHOSEN
+          </span>
+        )}
+        {chosenState === "alternative" && (
+          <span
+            className="fact-accent-badge alternative"
+            title="ALTERNATIVE — surfaced for comparison; the scenario's chosen rate is a different card in this group."
+          >
+            ALT
+          </span>
+        )}
       </div>
       <div className="fact-id">{fact.title}</div>
+      {cls.description && (
+        <div className="fact-meaning">{cls.description}</div>
+      )}
       <div className="fact-chips">
         {chips.map((c, i) => (
           <span className="fact-chip" key={i}>{c}</span>

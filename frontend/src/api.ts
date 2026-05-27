@@ -592,3 +592,37 @@ export async function deleteAction(id: string): Promise<void> {
     await authedFetch(`/api/actions/${id}`, { method: "DELETE" })
   );
 }
+
+// =============================================================================
+// Graph subgraph (Neo4j) — backs the GraphPanel viz in the envelope.
+// =============================================================================
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: string;
+  accent?: "" | "anchor" | "risk" | "risk_path" | "alt";
+}
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  accent?: "" | "risk_path";
+}
+export interface SubgraphResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: Record<string, number>;
+}
+
+export async function getSupplierSubgraph(
+  supplier_id: string,
+  depth = 4,
+): Promise<SubgraphResponse> {
+  return jsonOrThrow(
+    await authedFetch("/api/graph/subgraph", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ supplier_id, depth }),
+    })
+  );
+}

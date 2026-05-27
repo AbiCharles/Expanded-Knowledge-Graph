@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Style 3 — Editorial</title>
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;background:#fafafa;color:#0f172a;padding:32px}
+  h1{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
+  .eyebrow{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
+  .canvas{background:#faf7f0;border:1px solid #e7e0cd;border-radius:6px;padding:56px 28px;margin-top:18px}
+  .notes{margin-top:18px;background:#ffffff;border:1px solid #e5e7eb;border-radius:6px;padding:14px 16px;font-size:12px;color:#475569;line-height:1.55}
+  .notes strong{color:#0f172a}
+  svg{display:block;width:100%;height:240px}
+  .node-dot{r:8;stroke-width:0}
+  .node-dot.selected{stroke:#0f172a;stroke-width:1.5;r:11}
+  .accent-prompt  {fill:#1e293b}
+  .accent-stage   {fill:#0d6e7f}
+  .accent-class   {fill:#7c3aed}
+  .accent-source  {fill:#15803d}
+  .accent-outcome {fill:#a16207}
+  .node-eyebrow{font-family:"DM Mono",ui-monospace,monospace;font-size:8.5px;letter-spacing:0.22em;text-transform:uppercase;fill:#9c8c6b}
+  .node-name{font-family:"Fraunces","Georgia",serif;font-style:italic;font-size:16px;fill:#0f172a;letter-spacing:-0.005em;font-weight:400}
+  .node-meta{font-family:"DM Mono",ui-monospace,monospace;font-size:9px;fill:#7c6c4d;letter-spacing:0.04em}
+  .edge{stroke:#0f172a;stroke-width:0.6;fill:none;stroke-dasharray:none}
+  .edge-dot{fill:#0f172a}
+</style></head>
+<body>
+  <div class="eyebrow">Graph style · 3 of 5</div>
+  <h1>Editorial</h1>
+
+  <div class="canvas">
+    <svg viewBox="0 0 1100 240">
+      <!-- hairlines, no arrowheads, terminal dots only -->
+      <line x1="60" y1="100" x2="240" y2="100" class="edge"/>
+      <circle cx="240" cy="100" r="2" class="edge-dot"/>
+
+      <line x1="290" y1="100" x2="470" y2="100" class="edge"/>
+      <circle cx="470" cy="100" r="2" class="edge-dot"/>
+
+      <line x1="525" y1="100" x2="705" y2="100" class="edge"/>
+      <circle cx="705" cy="100" r="2" class="edge-dot"/>
+
+      <line x1="760" y1="100" x2="940" y2="100" class="edge"/>
+      <circle cx="940" cy="100" r="2" class="edge-dot"/>
+
+      <!-- node 1 -->
+      <g transform="translate(50,90)">
+        <circle class="node-dot accent-prompt" cx="0" cy="0"/>
+        <text class="node-eyebrow" x="0" y="34" text-anchor="middle">Query</text>
+        <text class="node-name" x="0" y="58" text-anchor="middle">Onboard</text>
+        <text class="node-meta" x="0" y="76" text-anchor="middle">operator prompt</text>
+      </g>
+
+      <!-- node 2 -->
+      <g transform="translate(265,90)">
+        <circle class="node-dot accent-stage" cx="0" cy="0"/>
+        <text class="node-eyebrow" x="0" y="34" text-anchor="middle">Stage</text>
+        <text class="node-name" x="0" y="58" text-anchor="middle">Agent gathered</text>
+        <text class="node-meta" x="0" y="76" text-anchor="middle">11 facts</text>
+      </g>
+
+      <!-- node 3 selected -->
+      <g transform="translate(498,90)">
+        <circle class="node-dot accent-class selected" cx="0" cy="0"/>
+        <text class="node-eyebrow" x="0" y="34" text-anchor="middle">Class</text>
+        <text class="node-name" x="0" y="58" text-anchor="middle">Supplier</text>
+        <text class="node-meta" x="0" y="76" text-anchor="middle">7 facts · selected</text>
+      </g>
+
+      <!-- node 4 -->
+      <g transform="translate(733,90)">
+        <circle class="node-dot accent-source" cx="0" cy="0"/>
+        <text class="node-eyebrow" x="0" y="34" text-anchor="middle">Source</text>
+        <text class="node-name" x="0" y="58" text-anchor="middle">Neo4j</text>
+        <text class="node-meta" x="0" y="76" text-anchor="middle">graph traversal</text>
+      </g>
+
+      <!-- node 5 -->
+      <g transform="translate(968,90)">
+        <circle class="node-dot accent-outcome" cx="0" cy="0"/>
+        <text class="node-eyebrow" x="0" y="34" text-anchor="middle">Outcome</text>
+        <text class="node-name" x="0" y="58" text-anchor="middle">Approved</text>
+        <text class="node-meta" x="0" y="76" text-anchor="middle">reviewer · 14:02</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="notes">
+    <strong>Editorial.</strong> Cream canvas, every node a single coloured dot with the type label above and an italic serif name below.
+    Edges are 0.6-px hairlines terminating in a small dot (no arrowheads — the layout direction is enough).
+    Reads like a Financial Times or New York Times network diagram. Best when you want the chart to feel like a published infographic, not a tool.
+    Tradeoff: less obvious where to click; the dropdown / inspect interactions have to be more discoverable.
+  </div>
+</body></html>

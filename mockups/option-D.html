@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option D — Tabbed centre</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:48px 1fr 64px;height:100vh}
+  .status{background:#102542;color:#fff;display:flex;align-items:center;padding:0 20px;font-size:13px}
+  .main{display:grid;grid-template-columns:340px 1fr 32px;border-top:1px solid #d9dee6}
+  .console{background:#fff;border-right:1px solid #d9dee6;padding:16px;font-size:12px}
+  .pane{display:flex;flex-direction:column;background:#fff}
+  .tabs{display:flex;border-bottom:1px solid #d9dee6;background:#f7f6f1}
+  .tab{padding:10px 16px;font-family:monospace;font-size:11px;letter-spacing:0.08em;cursor:pointer;border-right:1px solid #d9dee6;text-transform:uppercase;color:#888}
+  .tab.active{background:#fff;color:#1f2a3a;border-bottom:2px solid #00a8c8;font-weight:600}
+  .tab-body{flex:1;padding:16px;overflow:auto;font-size:12px}
+  .tab-body .panel{background:#f7f6f1;border:1px solid #d9dee6;border-radius:4px;padding:10px;margin-bottom:8px}
+  .audit-strip{background:#102542;color:#fff;display:flex;flex-direction:column;align-items:center;padding:14px 0;writing-mode:vertical-rl}
+  .audit-strip span{font-family:monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase}
+  .composer{background:#fff;border-top:1px solid #d9dee6;display:flex;align-items:center;padding:0 20px;font-size:12px;color:#888}
+  .label{font-family:monospace;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#888;margin-bottom:6px}
+</style></head>
+<body><div class="app">
+  <div class="status">TCS Knowledge Fabric · case-abc123 · admin</div>
+  <div class="main">
+    <div class="console"><div class="label">Console</div>operator chat thread &hellip;</div>
+    <div class="pane">
+      <div class="tabs">
+        <div class="tab active">Envelope</div>
+        <div class="tab">Graph</div>
+        <div class="tab">Audit trail</div>
+        <div class="tab">Action preview</div>
+      </div>
+      <div class="tab-body">
+        <div class="label">Envelope (active tab)</div>
+        <div class="panel">Multi-source evidence map (inline preview)</div>
+        <div class="panel">Stage 1 · Policy &amp; scope</div>
+        <div class="panel">Stage 2 · Agent gathered</div>
+        <div class="panel">Stage 3 · For your decision</div>
+      </div>
+    </div>
+    <div class="audit-strip"><span>Audit (47)</span></div>
+  </div>
+  <div class="composer">Ask the agent &hellip;</div>
+</div></body></html>

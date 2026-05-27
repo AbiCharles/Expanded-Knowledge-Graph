@@ -1,0 +1,134 @@
+id: SC-PP-008
+title: "Supplier onboarding — multi-source risk review"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-onboarding"
+actor_id: "agent-procurement-12"
+operator_role: { label: "Operator", name: "category.manager.amorales" }
+reviewer_role: { label: "Reviewer", name: "procurement.lead.amorales" }
+autonomous: false
+
+action_type: "supplier_onboarding_review"
+action_payload:
+  supplier_id: "SUP-001"
+  supplier_name: "Hemlock Precision Castings"
+  originating_guardrail_id: "POL-PP-ONBOARD-2026"
+
+teams_headline: "Supplier onboarding · Hemlock Precision Castings"
+execute_message: >-
+  The agent assembles the full risk picture before the lead decides. Five
+  data sources contribute: the supply-chain <strong>graph</strong> (supplier
+  network, sanctions proximity, carrier-alliance reach), the product master
+  CSV, the OFAC SDN feed, prior governance decisions, and the policy /
+  ESG corpus via semantic search.
+
+match_keywords: ["onboard with graph", "graph-aware onboarding", "multi-source onboarding", "sanctions proximity", "alliance reach", "supplier network risk", "due diligence graph", "hemlock graph", "knowledge graph onboarding", "neo4j onboarding"]
+interpreted_as: "review Hemlock Precision Castings (SUP-001) for tier-1 supplier onboarding"
+clarifying_question: >-
+  Confirm — review supplier <code>SUP-001</code>
+  (Hemlock Precision Castings) for tier-1 onboarding. I'll bind data from
+  five sources: the supply-chain <strong>graph</strong> (the supplier's
+  corporate network + a sanctions-proximity traversal + carrier-alliance
+  reach via the graph), the products master, the OFAC SDN feed, prior
+  onboarding decisions from the governance store, and the relevant ESG /
+  onboarding SOP excerpts via the policy vector store. Procurement lead
+  approves / rejects with full evidence on the audit trail. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Procurement lead approved the onboarding.</strong> The agent's
+    full evidence package — supplier network, sanctions-proximity trail,
+    carrier alliance reach, prior cases, and SOP excerpts — is captured on
+    the audit trail. Supplier enters the active tier-1 pool.
+  reject: >-
+    <strong>Procurement lead rejected the onboarding.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The supplier will not be added to the
+    tier-1 pool. The agent's risk findings remain on the audit trail.
+  request_more_info: >-
+    <strong>Procurement lead needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Sanctions-proximity trail is too close — 3-hop indirect ownership of an OFAC SDN entity."
+    - "Carrier-alliance concentration: all preferred carriers cluster in one alliance."
+    - "Reliability score below tier-1 threshold for this category."
+  request_more_info:
+    - "Need a beneficial-ownership disclosure for Apex Holdings International."
+    - "Need verification that the indirect SDN exposure is structurally severed (not just paused)."
+    - "Need a financial-health snapshot from D&B before deciding."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-ONBOARD-2026"
+        uri: "kf.tcs/policy/POL-PP-ONBOARD-2026"
+        title: "Tier-1 supplier onboarding policy"
+        payload: "All tier-1 supplier onboardings require named procurement-lead approval. Mandatory checks: sanctions proximity (up to 4 hops via the supply-chain graph), carrier-alliance concentration, prior-case alignment, ESG sign-off per SOP-PP-ESG-014."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-procurement-12"
+        uri: "iam.tcs/actors/agent-procurement-12"
+        title: "Actor scope"
+        payload: "Scopes: procurement.read, procurement.propose, procurement.onboard_after_review · this case is propose-only (no autonomous write)."
+  proposal:
+    binder: "SupplierOnboardingProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain
+        class: Supplier
+        where:
+          supplier_id: ":supplier_id"
+        purpose: "Bind the supplier master record (Neo4j — supply_chain.Supplier)"
+      - ontology: supply_chain
+        class: SanctionsProximity
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 5
+        purpose: "Traverse the supply-chain graph — sanctioned entities within 4 hops, with the full ownership trail"
+      - ontology: supply_chain
+        class: AlliancePeer
+        where:
+          supplier_id: ":supplier_id"
+        max_results: 6
+        purpose: "Carrier-alliance reach — concentration risk on the supplier's preferred carriers"
+      - ontology: tcs_core
+        class: Product
+        where: {}
+        max_results: 3
+        purpose: "Sample of products the supplier could supply (master CSV)"
+      - ontology: tcs_core
+        class: SanctionedEntity
+        where: {}
+        max_results: 3
+        purpose: "Recent additions to the OFAC SDN list (CSV) for context"
+  review:
+    binder: "SupplierOnboardingReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-PP-007
+        max_results: 4
+        purpose: "Prior procurement decisions on similar onboardings (SQLite governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: supplier onboarding sanctions proximity beneficial ownership ESG due diligence
+          top_k: 3
+        purpose: "Relevant ESG / onboarding SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — supplier onboarded"
+    detail: "Procurement lead accepted the multi-source risk picture. Supplier added to the tier-1 pool; evidence package on the audit trail."
+  reject:
+    headline: "Rejected — onboarding declined"
+    detail: "Procurement lead declined. Reasoning recorded; supplier not added to the pool."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requires additional beneficial-ownership / financial-health / structural-severance data before deciding."
+
+_filter_from_prompt: true
+_custom_suggested_prompt: "Onboard Hemlock Precision Castings — run the graph-aware sanctions and alliance risk check"

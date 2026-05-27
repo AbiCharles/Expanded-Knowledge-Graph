@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option A — Refined 3-pane</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:48px 1fr 64px;height:100vh}
+  .status{background:#102542;color:#fff;display:flex;align-items:center;padding:0 20px;font-size:13px}
+  .main{display:grid;grid-template-columns:340px 1fr 32px;border-top:1px solid #d9dee6}
+  .main.expanded{grid-template-columns:340px 1fr 320px}
+  .console{background:#fff;border-right:1px solid #d9dee6;padding:16px;font-size:12px}
+  .envelope{padding:16px;overflow:auto;font-size:12px}
+  .envelope .panel{background:#fff;border:1px solid #d9dee6;border-radius:4px;padding:10px;margin-bottom:8px}
+  .audit-strip{background:#102542;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:14px 0;cursor:pointer;writing-mode:vertical-rl}
+  .audit-strip span{font-family:monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase}
+  .composer{background:#fff;border-top:1px solid #d9dee6;display:flex;align-items:center;padding:0 20px;font-size:12px;color:#888}
+  .label{font-family:monospace;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#888;margin-bottom:6px}
+</style></head>
+<body><div class="app">
+  <div class="status">TCS Knowledge Fabric · case-abc123 · admin</div>
+  <div class="main">
+    <div class="console">
+      <div class="label">Console</div>
+      operator chat thread, prompt clarifier, "Why these cards?" group,
+      action-preview card, suggestions accordion.
+    </div>
+    <div class="envelope">
+      <div class="label">Envelope · "What the agent gathered"</div>
+      <div class="panel">Multi-source evidence map <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Knowledge graph <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Stage 1 · Policy &amp; scope (2 facts)</div>
+      <div class="panel">Stage 2 · Agent gathered (11 facts)</div>
+      <div class="panel">Stage 3 · For your decision (4 facts)</div>
+    </div>
+    <div class="audit-strip"><span>Audit trail (47)</span></div>
+  </div>
+  <div class="composer">Ask the agent to do something&hellip;</div>
+</div></body></html>

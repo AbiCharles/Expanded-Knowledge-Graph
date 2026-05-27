@@ -1,8 +1,11 @@
 id: supply_chain
 title: Supply Chain (Neo4j demo)
 namespace: sc
-description: Starter ontology covering Supplier, PurchaseOrder, and Product. Pairs
-  with the seeded data in the local Neo4j (graph_local).
+description: Graph-resident supply chain. Suppliers, their corporate parents
+  and JV partners, the holding companies that link them to sanctioned-network
+  shell entities, and the carriers + alliances they ship via. Purpose-built
+  for decisions that need traversal (e.g. "is this supplier within 2 hops
+  of an OFAC-listed entity?") which flat tables can't answer efficiently.
 default: false
 classes:
   Supplier:
@@ -77,3 +80,92 @@ classes:
       required: false
       description: null
     relations: []
+  SanctionedNetworkEntity:
+    description: A node listed on an OFAC SDN (or equivalent) program. Lives
+      in Neo4j as a target the agent fans out FROM when a fresh listing
+      drops, and as a target the agent walks TO when vetting a supplier.
+    attributes:
+    - {name: entity_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: program, type: string}
+    - {name: country, type: string}
+    - {name: listed_at, type: date}
+    - {name: risk_tier, type: string}
+  SanctionsProximity:
+    description: Result of a sanctions-proximity traversal. One row per
+      shortest path from the queried Supplier to a SanctionedNetworkEntity
+      within N hops. Surfaces the indirect-ownership trail flat tables miss
+      (e.g. "Hemlock → Apex Metalworks → Apex Holdings → Shengli Shell").
+    attributes:
+    - {name: entity_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: program, type: string}
+    - {name: risk_tier, type: string}
+    - {name: hop_distance, type: integer}
+    - {name: path_via, type: string}
+  AlliancePeer:
+    description: Carrier-network reach. For each carrier the supplier ships
+      via, the other carriers that share its alliance — used to surface
+      concentration risk during onboarding (the supplier may "use multiple
+      carriers" but they're all in the same alliance).
+    attributes:
+    - {name: peer_carrier_id, type: string, identifier: true}
+    - {name: peer_name, type: string}
+    - {name: alliance_name, type: string}
+    - {name: via_carrier, type: string}
+  TierSupplier:
+    description: >-
+      A supplier reached at tier N when walking the multi-tier supply
+      chain backwards from a Product. Tier 1 is the direct supplier that
+      placed the PO; tier 2+ are reached by following SOURCES_FROM edges
+      upstream. Surfaces deep-supply-chain dependencies (raw materials,
+      sub-assemblies) that PO/CSV tables miss.
+    attributes:
+    - {name: tier_supplier_id, type: string, identifier: true}
+    - {name: tier_supplier_name, type: string}
+    - {name: country, type: string}
+    - {name: tier, type: integer}
+    - {name: reliability_score, type: decimal}
+    - {name: chain, type: string}
+  AlternativeSupplier:
+    description: >-
+      A swap candidate for a blocked / unavailable Supplier. Reached by
+      walking three graph paths from the blocked node — (a) siblings via
+      a shared controlling HoldingCompany, (b) siblings via a shared
+      parent Supplier, (c) direct joint-venture partners. One row per
+      candidate, with the relationship reasons combined and the shortest
+      path distance.
+    attributes:
+    - {name: alt_supplier_id, type: string, identifier: true}
+    - {name: alt_name, type: string}
+    - {name: country, type: string}
+    - {name: reliability_score, type: decimal}
+    - {name: hop_distance, type: integer}
+    - {name: via_relationship, type: string}
+  UltimateBeneficialOwner:
+    description: One row per node found along the ownership chain ABOVE the
+      queried Supplier — every supplier ancestor reached via PARENT_OF and
+      every HoldingCompany reached via CONTROLLED_BY. Used to answer
+      "who ultimately owns SUP-XXX?" by surfacing the full UBO trail with
+      hop distance and the control-percentage chain.
+    attributes:
+    - {name: owner_id, type: string, identifier: true}
+    - {name: owner_name, type: string}
+    - {name: owner_type, type: string}
+    - {name: hop_distance, type: integer}
+    - {name: control_pct, type: integer}
+    - {name: chain, type: string}
+  CarrierExposure:
+    description: Carrier-fleet exposure to a newly-listed
+      SanctionedNetworkEntity. Walks the corporate ownership graph from the
+      SDN out to every Supplier within N hops, then surfaces every Carrier
+      those Suppliers ship via. Surfaces second-order risk that flat tables
+      can't see — "this carrier itself isn't sanctioned, but its biggest
+      customer is a supplier whose parent owns 22% of the new SDN."
+    attributes:
+    - {name: carrier_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: alliance_name, type: string}
+    - {name: hop_distance, type: integer}
+    - {name: via_supplier, type: string}
+    - {name: path_via, type: string}

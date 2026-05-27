@@ -23,11 +23,12 @@ sources:
   title_field: shipment_id
   summary_template: "{origin} → {destination} \xB7 {pallets} pallets \xB7 cust\
     \ order #{customer_order} \xB7 {mode} \xB7 vessel {vessel} (IMO {imo}) \xB7 pos\
-    \ {current_position} \xB7 ETA {eta} \xB7 port {port_code} congestion {port_congestion}\
-    \ (berth wait {berth_wait_days}d)"
+    \ {current_position} \xB7 scheduled {scheduled_eta} \xB7 ETA {eta} (variance\
+    \ {variance_days}d) \xB7 port {port_code} congestion {port_congestion} (berth\
+    \ wait {berth_wait_days}d)"
   default: true
-  description: Synthetic shipment master + live-tracking snapshot (30 rows). Backs
-    logistics.Shipment.
+  description: Synthetic shipment master + live-tracking snapshot (~3,000 rows).
+    Backs logistics.Shipment.
 - id: shipment_performance_csv
   kind: csv
   path: backend/data/shipment_performance.csv
@@ -142,9 +143,7 @@ sources:
   description: 'Postgres governance store (local docker-compose.postgres.yaml): same
     prior_cases schema as the SQLite store, swappable connector. SQL lives in the
     mapping doc when bound.'
-- id: neo4j_default
-  kind: neo4j
-  uri: bolt://localhost:7687
-  password: YcV7wquQWdFLKZDRwck3CqlbD0W_c1fAV0U2cpMl578
-  user: neo4j
-  description: Auto-registered from NEO4J_* env vars (bolt://localhost:7687)
+# neo4j_default is auto-registered from NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD
+# env vars (see backend/main.py). Leaving it out of sources.yaml lets the same
+# scenarios target local Docker Neo4j (dev) or the Fly-internal Neo4j (prod)
+# without committing the URI / password to source.

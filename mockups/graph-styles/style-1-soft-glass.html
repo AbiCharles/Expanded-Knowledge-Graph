@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Style 1 — Soft Glass</title>
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;background:#fafafa;color:#0f172a;padding:32px}
+  h1{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
+  .eyebrow{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
+  .canvas{background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:48px 24px;margin-top:18px;box-shadow:0 1px 2px rgba(15,23,42,0.04)}
+  .notes{margin-top:18px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;font-size:12px;color:#475569;line-height:1.55}
+  .notes strong{color:#0f172a}
+  svg{display:block;width:100%;height:240px}
+  .node-card{filter:drop-shadow(0 1px 2px rgba(15,23,42,0.06)) drop-shadow(0 6px 16px rgba(15,23,42,0.05))}
+  .node-rect{fill:#ffffff;stroke:#e5e7eb;stroke-width:1;rx:10;ry:10}
+  .node-rect.selected{stroke:#4f46e5;stroke-width:1.5}
+  .accent-dot{r:3}
+  .accent-prompt{fill:#1e293b}
+  .accent-stage{fill:#0d6e7f}
+  .accent-class{fill:#7c3aed}
+  .accent-source{fill:#10b981}
+  .accent-outcome{fill:#d97706}
+  .node-eyebrow{font-family:"DM Mono",ui-monospace,monospace;font-size:8px;letter-spacing:0.18em;text-transform:uppercase;fill:#94a3b8}
+  .node-title{font-size:12px;font-weight:600;fill:#0f172a;letter-spacing:-0.01em}
+  .node-meta{font-size:10px;fill:#64748b}
+  .edge{stroke:#cbd5e1;stroke-width:1.5;fill:none}
+  .edge-arrow{fill:#cbd5e1}
+</style></head>
+<body>
+  <div class="eyebrow">Graph style · 1 of 5</div>
+  <h1>Soft Glass</h1>
+
+  <div class="canvas">
+    <svg viewBox="0 0 1100 240">
+      <defs>
+        <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" class="edge-arrow"/>
+        </marker>
+      </defs>
+
+      <!-- edges -->
+      <line x1="170" y1="120" x2="225" y2="120" class="edge" marker-end="url(#ar1)"/>
+      <line x1="390" y1="120" x2="445" y2="120" class="edge" marker-end="url(#ar1)"/>
+      <line x1="610" y1="120" x2="665" y2="120" class="edge" marker-end="url(#ar1)"/>
+      <line x1="830" y1="120" x2="885" y2="120" class="edge" marker-end="url(#ar1)"/>
+
+      <!-- node 1: prompt -->
+      <g class="node-card" transform="translate(20,80)">
+        <rect class="node-rect" width="150" height="80"/>
+        <circle class="accent-dot accent-prompt" cx="16" cy="20"/>
+        <text class="node-eyebrow" x="28" y="23">Query</text>
+        <text class="node-title" x="16" y="46">“Onboard Hemlock…”</text>
+        <text class="node-meta" x="16" y="64">operator prompt</text>
+      </g>
+
+      <!-- node 2: stage -->
+      <g class="node-card" transform="translate(240,80)">
+        <rect class="node-rect" width="150" height="80"/>
+        <circle class="accent-dot accent-stage" cx="16" cy="20"/>
+        <text class="node-eyebrow" x="28" y="23">Stage</text>
+        <text class="node-title" x="16" y="46">Agent gathered</text>
+        <text class="node-meta" x="16" y="64">11 facts · binder v1.0</text>
+      </g>
+
+      <!-- node 3: class (selected) -->
+      <g class="node-card" transform="translate(460,80)">
+        <rect class="node-rect selected" width="150" height="80"/>
+        <circle class="accent-dot accent-class" cx="16" cy="20"/>
+        <text class="node-eyebrow" x="28" y="23">Class</text>
+        <text class="node-title" x="16" y="46">Supplier</text>
+        <text class="node-meta" x="16" y="64">7 facts · click to expand</text>
+      </g>
+
+      <!-- node 4: source -->
+      <g class="node-card" transform="translate(680,80)">
+        <rect class="node-rect" width="150" height="80"/>
+        <circle class="accent-dot accent-source" cx="16" cy="20"/>
+        <text class="node-eyebrow" x="28" y="23">Source</text>
+        <text class="node-title" x="16" y="46">Neo4j</text>
+        <text class="node-meta" x="16" y="64">graph traversal</text>
+      </g>
+
+      <!-- node 5: outcome -->
+      <g class="node-card" transform="translate(900,80)">
+        <rect class="node-rect" width="180" height="80"/>
+        <circle class="accent-dot accent-outcome" cx="16" cy="20"/>
+        <text class="node-eyebrow" x="28" y="23">Outcome</text>
+        <text class="node-title" x="16" y="46">Approved</text>
+        <text class="node-meta" x="16" y="64">reviewer · 14:02</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="notes">
+    <strong>Soft Glass.</strong> Off-white canvas, each node a small white card with a thin grey border and two layers of subtle shadow (1px tight + 16px soft).
+    A tiny accent dot in the corner colour-codes the type; the label and meta line carry the information. Selected nodes get a 1.5px indigo border.
+    Reads as restrained, modern enterprise (Linear / Notion). Best when you want the typography to do the work and the chrome to recede.
+  </div>
+</body></html>

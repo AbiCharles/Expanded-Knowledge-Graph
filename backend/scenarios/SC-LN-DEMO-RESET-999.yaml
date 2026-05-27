@@ -1,0 +1,67 @@
+id: SC-LN-DEMO-RESET-999
+title: "Reset demo booking state"
+domain: "Logistics & Network"
+autonomous: true
+actor_id: "agent-demo-admin"
+operator_role: { label: "Operator", name: "demo.admin" }
+
+action_type: "reset_demo_bookings"
+action_payload:
+  scope: "demo.admin"
+
+match_keywords: ["reset demo", "reset demo bookings", "reset booking demo", "rewind demo", "reset bk-700412", "reset bookings to seed", "demo reset", "fresh slate"]
+interpreted_as: "reset the demo bookings (BK-700412-01 + BK-700499-01) to their original seed values and clear the booking history"
+clarifying_question: >-
+  Confirm — reset the demo booking state. This rolls
+  <code>BK-700412-01</code> back to MSC ocean ($4,830 confirmed) and
+  <code>BK-700499-01</code> back to Maersk ocean ($4,715 confirmed), and
+  wipes <code>booking_history</code> rows for both. After this, the
+  mode-switch / re-tender demos run cleanly again from scratch. The audit
+  trail still records the reset. Proceed?
+
+auto_approval_guardrail: "GR-DEMO-ADMIN-001"
+auto_approval_reason: "Demo-only affordance. Runs a hand-authored SQL reset against logistics.sqlite under the demo.admin scope. Not a production action."
+closing_message: >-
+  Done — demo bookings reset to seed values and booking_history cleared.
+  Re-run the mode-switch or re-tender prompts to demo the write flow
+  fresh. The reset itself is on the audit trail.
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "GR-DEMO-ADMIN-001"
+        uri: "kf.tcs/policy/GR-DEMO-ADMIN-001"
+        title: "Demo-admin reset policy"
+        payload: "Demo-only autonomous reset. Restores the two demo bookings (BK-700412-01, BK-700499-01) to their seed-time values and clears their booking_history rows. NOT a production capability — registered against the demo.admin scope only."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-demo-admin"
+        uri: "iam.tcs/actors/agent-demo-admin"
+        title: "Actor scope"
+        payload: "Scopes: demo.admin · permitted to call reset_demo_bookings against logistics_sqlite. Not granted in any non-demo environment."
+  proposal:
+    binder: "DemoResetProposalBinder/1.0"
+    ontology_queries:
+      - ontology: logistics
+        class: Booking
+        where:
+          shipment_id: S-700412
+        purpose: "Current state of BK-700412-01 before reset"
+      - ontology: logistics
+        class: BookingHistory
+        where:
+          booking_id: BK-700412-01
+        max_results: 5
+        purpose: "Pending history rows for BK-700412-01 that will be cleared"
+
+outcomes:
+  auto_execute:
+    headline: "Auto-executed — demo bookings reset"
+    detail: "BK-700412-01 reverted to MSC ocean, BK-700499-01 to Maersk ocean, booking_history cleared for both. Audit trail captures the reset."
+
+_executor:
+  action_id: reset_demo_bookings
+  arguments: {}

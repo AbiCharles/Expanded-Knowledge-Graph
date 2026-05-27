@@ -20,6 +20,14 @@ arguments:
 executor:
   kind: sql_update
   data_source: logistics_sqlite
+  # Snapshot the row BEFORE we change it. The captured values are merged
+  # into the action args with `before_` prefix so additional_sql can
+  # reference them, and they're surfaced on execution_result.before so
+  # the diff card renders reliably even after a server restart.
+  before_select_sql: |
+    SELECT carrier_id, total_cost_usd, status, shipment_id
+      FROM bookings
+     WHERE booking_id = :booking_id
   sql: |
     UPDATE bookings
        SET carrier_id     = :new_carrier_id,
@@ -27,6 +35,41 @@ executor:
            status         = COALESCE(:new_status, 'tendered'),
            tendered_at    = strftime('%Y-%m-%dT%H:%MZ', 'now')
      WHERE booking_id = :booking_id
+  # After the UPDATE, append an immutable history row. References both the
+  # captured before_* values and the action args. __case_id is injected by
+  # the orchestrator at runtime so we can correlate the change back to the
+  # originating case.
+  additional_sql:
+    - |
+      INSERT INTO booking_history (
+        booking_id, shipment_id,
+        prev_carrier_id, new_carrier_id,
+        prev_cost, new_cost,
+        prev_status, new_status,
+        changed_at, case_id, action_id
+      ) VALUES (
+        :booking_id, :before_shipment_id,
+        :before_carrier_id, :new_carrier_id,
+        :before_total_cost_usd, :new_total_cost_usd,
+        :before_status, COALESCE(:new_status, 'tendered'),
+        strftime('%Y-%m-%dT%H:%MZ', 'now'),
+        :__case_id, 'retender_booking'
+      )
+idempotency:
+  description: >-
+    Skip the SQL UPDATE when the booking is already at the target carrier and
+    status — otherwise the reviewer sees a 'before / after' card with the
+    same values on both sides, which is confusing.
+  data_source: logistics_sqlite
+  predicate_sql: |
+    SELECT 1 FROM bookings
+     WHERE booking_id = :booking_id
+       AND carrier_id = :new_carrier_id
+       AND status     = COALESCE(:new_status, 'tendered')
+  no_op_message: >-
+    No change needed — booking {booking_id} is already with carrier {new_carrier_id}
+    in status '{new_status}'. The agent skipped the update; the audit trail
+    records the no-op.
 match_keywords:
   - retender
   - re-tender

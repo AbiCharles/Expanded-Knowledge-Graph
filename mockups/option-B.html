@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Option B — Slide-over audit</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#f7f6f1;color:#1f2a3a}
+  .app{display:grid;grid-template-rows:48px 1fr 64px;height:100vh}
+  .status{background:#102542;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:13px}
+  .audit-btn{font-family:monospace;font-size:11px;background:#1a3a6b;color:#fff;border:1px solid #00a8c8;padding:6px 12px;border-radius:3px;cursor:pointer}
+  .main{display:grid;grid-template-columns:340px 1fr;border-top:1px solid #d9dee6;position:relative}
+  .console{background:#fff;border-right:1px solid #d9dee6;padding:16px;font-size:12px}
+  .envelope{padding:16px;overflow:auto;font-size:12px}
+  .envelope .panel{background:#fff;border:1px solid #d9dee6;border-radius:4px;padding:10px;margin-bottom:8px}
+  .audit-drawer{position:absolute;right:0;top:0;bottom:0;width:380px;background:#102542;color:#fff;box-shadow:-8px 0 24px rgba(0,0,0,0.2);padding:14px;font-size:11px}
+  .audit-drawer .close{float:right;cursor:pointer;font-size:18px}
+  .label{font-family:monospace;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#888;margin-bottom:6px}
+  .audit-drawer .label{color:rgba(255,255,255,0.5)}
+  .composer{background:#fff;border-top:1px solid #d9dee6;display:flex;align-items:center;padding:0 20px;font-size:12px;color:#888}
+</style></head>
+<body><div class="app">
+  <div class="status"><span>TCS Knowledge Fabric · case-abc123 · admin</span><span class="audit-btn">Audit (47) &#x25B8;</span></div>
+  <div class="main">
+    <div class="console">
+      <div class="label">Console</div>operator chat thread &hellip;
+    </div>
+    <div class="envelope">
+      <div class="label">Envelope</div>
+      <div class="panel">Multi-source evidence map <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Knowledge graph <span style="float:right">Expand &#x2922;</span></div>
+      <div class="panel">Stage 1 · Policy &amp; scope</div>
+      <div class="panel">Stage 2 · Agent gathered</div>
+      <div class="panel">Stage 3 · For your decision</div>
+    </div>
+    <div class="audit-drawer">
+      <span class="close">&times;</span><div class="label">Audit trail (47 events)</div>
+      <div style="opacity:0.7">events stream &hellip;</div>
+    </div>
+  </div>
+  <div class="composer">Ask the agent &hellip;</div>
+</div></body></html>

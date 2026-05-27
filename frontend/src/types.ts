@@ -40,12 +40,31 @@ export interface FactRow {
   uri: string | null;
   title: string | null;
   summary: string | null;
+  via_ontology?: string | null;
+  via_source_binding?: string | null;
+  // Correlates this fact back to the ontology_query that produced it.
+  // Null/undefined for inline facts authored directly in the scenario.
+  query_index?: number | null;
+}
+
+// One ontology_query issued by the stage binder. The frontend's
+// QueryPlanPanel uses this to render "why these cards?" and to enable
+// click-to-highlight against the facts grid.
+export interface QuerySpec {
+  index: number;
+  ontology_type: string;
+  ontology: string | null;
+  where: Record<string, unknown>;
+  purpose: string;
+  max_results: number;
+  fact_count: number;
 }
 
 export interface StagePayload {
   stage: string;
   binder: string;
   facts: FactRow[];
+  queries?: QuerySpec[];
 }
 
 export interface LineageEvent {
@@ -101,6 +120,15 @@ export interface ScenarioMeta {
   outcomes: Record<string, { headline: string; detail: string }>;
   auto_approval_guardrail?: string;
   auto_approval_reason?: string;
+  // The write-action target the orchestrator will dispatch on approve
+  // (HITL) or directly (autonomous). Drives the Action Preview card
+  // shown before the reviewer acts, and the CHOSEN highlight on the
+  // matching evidence card (e.g. the FreightRate row whose total
+  // matches the executor's target cost).
+  executor?: {
+    action_id: string;
+    arguments: Record<string, string | number | boolean | null>;
+  } | null;
 }
 
 export interface CaseFull extends CaseSummary {
@@ -120,6 +148,11 @@ export interface ExecutionResult {
   detail: string;
   response_status?: number | null;
   args?: Record<string, unknown>;
+  // Pre-mutation snapshot captured by the executor's before_select_sql.
+  // Keys are the columns the SELECT returned (e.g. carrier_id, status,
+  // total_cost_usd). Used by the before/after diff card; reliable even
+  // after server restart (the bound Booking fact may not survive).
+  before?: Record<string, unknown> | null;
 }
 
 export interface QueueRow {

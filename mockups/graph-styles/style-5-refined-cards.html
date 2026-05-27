@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Style 5 — Refined Cards</title>
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;background:#fafafa;color:#0f172a;padding:32px}
+  h1{font-size:18px;font-weight:600;margin:0 0 4px;letter-spacing:-0.01em}
+  .eyebrow{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
+  .canvas{background:#f4f6fa;border:1px solid #e5e7eb;border-radius:8px;padding:48px 24px;margin-top:18px}
+  .notes{margin-top:18px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;font-size:12px;color:#475569;line-height:1.55}
+  .notes strong{color:#0f172a}
+  svg{display:block;width:100%;height:280px}
+  .node-card{filter:drop-shadow(0 1px 2px rgba(15,23,42,0.06)) drop-shadow(0 8px 24px rgba(15,23,42,0.06))}
+  .node-rect{fill:#ffffff;stroke:#e5e7eb;stroke-width:1;rx:8;ry:8}
+  .node-rect.selected{stroke:#2563eb;stroke-width:1.5;filter:drop-shadow(0 0 0 3px rgba(37,99,235,0.08))}
+  .node-header{font-family:"DM Mono",ui-monospace,monospace;font-size:9px;letter-spacing:0.22em;text-transform:uppercase}
+  .header-bar{fill:#f8fafc;rx:8;ry:8}
+  .accent-bar{rx:0;ry:0}
+  .accent-prompt {fill:#1e293b}
+  .accent-stage  {fill:#0d6e7f}
+  .accent-class  {fill:#7c3aed}
+  .accent-source {fill:#059669}
+  .accent-outcome{fill:#d97706}
+  .node-title{font-size:13px;font-weight:600;fill:#0f172a;letter-spacing:-0.005em}
+  .node-meta{font-family:"DM Mono",ui-monospace,monospace;font-size:9px;fill:#94a3b8;letter-spacing:0.04em}
+  .node-tag{font-family:"DM Mono",ui-monospace,monospace;font-size:9px;fill:#475569;letter-spacing:0.04em}
+  .tag-pill{fill:#f1f5f9;stroke:#e2e8f0;stroke-width:1;rx:3;ry:3}
+  .edge{stroke:#cbd5e1;stroke-width:1.4;fill:none}
+  .edge-arrow{fill:#94a3b8}
+</style></head>
+<body>
+  <div class="eyebrow">Graph style · 5 of 5</div>
+  <h1>Refined Cards</h1>
+
+  <div class="canvas">
+    <svg viewBox="0 0 1100 280">
+      <defs>
+        <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" class="edge-arrow"/>
+        </marker>
+      </defs>
+
+      <line x1="190" y1="140" x2="245" y2="140" class="edge" marker-end="url(#ar5)"/>
+      <line x1="420" y1="140" x2="475" y2="140" class="edge" marker-end="url(#ar5)"/>
+      <line x1="650" y1="140" x2="705" y2="140" class="edge" marker-end="url(#ar5)"/>
+      <line x1="880" y1="140" x2="935" y2="140" class="edge" marker-end="url(#ar5)"/>
+
+      <!-- Card 1 -->
+      <g class="node-card" transform="translate(20,80)">
+        <rect class="node-rect" width="170" height="120"/>
+        <rect class="accent-bar accent-prompt" x="0" y="0" width="170" height="3"/>
+        <text class="node-header" x="14" y="22" fill="#94a3b8">Query</text>
+        <text class="node-title" x="14" y="50">Onboard Hemlock</text>
+        <text class="node-meta" x="14" y="68">operator · 14:02:11</text>
+        <rect class="tag-pill" x="14" y="84" width="78" height="20"/>
+        <text class="node-tag" x="22" y="98">SC-PP-008</text>
+      </g>
+
+      <!-- Card 2 -->
+      <g class="node-card" transform="translate(245,80)">
+        <rect class="node-rect" width="175" height="120"/>
+        <rect class="accent-bar accent-stage" x="0" y="0" width="175" height="3"/>
+        <text class="node-header" x="14" y="22" fill="#94a3b8">Stage</text>
+        <text class="node-title" x="14" y="50">Agent gathered</text>
+        <text class="node-meta" x="14" y="68">11 facts · 4 ontologies</text>
+        <rect class="tag-pill" x="14" y="84" width="92" height="20"/>
+        <text class="node-tag" x="22" y="98">binder · v1.0</text>
+      </g>
+
+      <!-- Card 3 selected -->
+      <g class="node-card" transform="translate(475,80)">
+        <rect class="node-rect selected" width="175" height="120"/>
+        <rect class="accent-bar accent-class" x="0" y="0" width="175" height="3"/>
+        <text class="node-header" x="14" y="22" fill="#94a3b8">Class · selected</text>
+        <text class="node-title" x="14" y="50">Supplier</text>
+        <text class="node-meta" x="14" y="68">7 facts · click to expand</text>
+        <rect class="tag-pill" x="14" y="84" width="100" height="20"/>
+        <text class="node-tag" x="22" y="98">supply_chain</text>
+      </g>
+
+      <!-- Card 4 -->
+      <g class="node-card" transform="translate(705,80)">
+        <rect class="node-rect" width="175" height="120"/>
+        <rect class="accent-bar accent-source" x="0" y="0" width="175" height="3"/>
+        <text class="node-header" x="14" y="22" fill="#94a3b8">Source</text>
+        <text class="node-title" x="14" y="50">Neo4j graph</text>
+        <text class="node-meta" x="14" y="68">graph traversal · 5 hops</text>
+        <rect class="tag-pill" x="14" y="84" width="84" height="20"/>
+        <text class="node-tag" x="22" y="98">neo4j_default</text>
+      </g>
+
+      <!-- Card 5 -->
+      <g class="node-card" transform="translate(935,80)">
+        <rect class="node-rect" width="155" height="120"/>
+        <rect class="accent-bar accent-outcome" x="0" y="0" width="155" height="3"/>
+        <text class="node-header" x="14" y="22" fill="#94a3b8">Outcome</text>
+        <text class="node-title" x="14" y="50">Approved</text>
+        <text class="node-meta" x="14" y="68">reviewer · 14:02:18</text>
+        <rect class="tag-pill" x="14" y="84" width="58" height="20"/>
+        <text class="node-tag" x="22" y="98">human</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="notes">
+    <strong>Refined Cards.</strong> Cool-grey canvas, each node a structured card: 3-px coloured accent bar across the top (encodes type),
+    grey eyebrow header, bold title, mono meta line, and a tag pill at the bottom.
+    Selected nodes get a 1.5-px blue border + a soft 3-px blue ring.
+    Reads as a Stripe / Linear / Notion enterprise dashboard. Densest of the five — every node carries 3-4 lines of context, so the chart is also a list.
+    Best when reviewers need to scan rich metadata at a glance without clicking anything.
+  </div>
+</body></html>

@@ -97,6 +97,12 @@ stages:
           lane_id: ":lane_id"
         max_results: 5
         purpose: "Current rate cards on the lane (compare both carriers' contract/spot)"
+      - ontology: logistics
+        class: BookingHistory
+        where:
+          booking_id: ":booking_id"
+        max_results: 3
+        purpose: "Recent changes to this booking — surfaces 'previously changed from X to Y' on replay"
   review:
     binder: "TenderReviewBinder/2.0-live"
     ontology_queries:

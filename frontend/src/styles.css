@@ -5,16 +5,18 @@
    components in src/components/.
    ============================================================= */
 :root {
-  --navy-deep:    #0B1733;
-  --navy:         #142647;
-  --navy-soft:    #1F3864;
-  --paper:        #F4F1EA;
-  --paper-warm:   #EDE8DC;
-  --paper-deep:   #E1DACA;
-  --ink:          #0B1733;
-  --ink-soft:     #4A5568;
-  --ink-muted:    #7A8295;
-  --rule:         #C9C0AB;
+  /* Option-C palette — navy chrome (#102542) on cream paper (#f7f6f1)
+     with white panel cards and cool slate borders. */
+  --navy-deep:    #102542;
+  --navy:         #1a3a6b;
+  --navy-soft:    #2a5290;
+  --paper:        #f7f6f1;
+  --paper-warm:   #ffffff;
+  --paper-deep:   #ede8dc;
+  --ink:          #1f2a3a;
+  --ink-soft:     #4a5568;
+  --ink-muted:    #888888;
+  --rule:         #d9dee6;
   --cyan:         #00C9B7;
   --cyan-glow:    #00E5D1;
   --amber:        #D69E2E;
@@ -155,7 +157,10 @@ body {
 /* ---------- Main layout ---------- */
 .main {
   display: grid;
-  grid-template-columns: 360px 1fr 360px;
+  /* Third column is `auto` so the LineagePanel sizes itself — 44px when
+     collapsed (a vertical strip with three tabs) and 360px when one tab is
+     expanded. The transition runs in the panel's own width rule. */
+  grid-template-columns: 360px 1fr auto;
   min-height: calc(100vh - 65px);
   position: relative;
 }
@@ -168,7 +173,31 @@ body {
   }
   .console { min-height: 520px; }
   .flow-stage { min-height: 600px; }
-  .lineage-panel { min-height: 320px; border-bottom: none; }
+  .lineage-panel {
+    min-height: 320px;
+    border-bottom: none;
+    width: 100%;
+    flex-direction: column;
+  }
+  .lineage-panel .lineage-strip {
+    flex: 0 0 auto;
+    flex-direction: row;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(244,241,234,0.05);
+  }
+  .lineage-panel .lineage-tab {
+    flex: 1;
+    min-height: 56px;
+    border-bottom: none;
+    border-right: 1px solid rgba(244,241,234,0.05);
+  }
+  .lineage-panel .lineage-tab:last-child { border-right: none; }
+  .lineage-tab-label {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+  .lineage-tab-badge { position: static; transform: none; margin-right: 6px; }
 }
 
 /* ---------- Operator console (left) ---------- */
@@ -773,6 +802,96 @@ body {
 }
 .onboarding-hint-dismiss:hover { background: var(--paper-warm); }
 
+/* Action-preview card — pre-flight, shown while the case is awaiting a
+   reviewer. Mirrors the visual shape of the ExecutionResultCard so the
+   audience can see "before vs after" semantically: this card is what
+   WILL run; the diff card later is what DID run. */
+.action-preview-card {
+  margin: 8px 0 8px 30px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--cyan);
+  background: rgba(0, 201, 183, 0.04);
+  border-radius: 4px;
+  font-size: 12px;
+  max-width: 520px;
+}
+.action-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.action-preview-tag {
+  color: var(--cyan);
+  font-weight: 600;
+}
+.action-preview-id {
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: none;
+  margin-left: auto;
+}
+.action-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.action-preview-table tbody th {
+  text-align: left;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-muted);
+  padding: 4px 6px 4px 0;
+  width: 35%;
+}
+.action-preview-table tbody td {
+  font-family: 'DM Mono', monospace;
+  padding: 4px 6px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.action-preview-table tbody tr + tr th,
+.action-preview-table tbody tr + tr td {
+  border-top: 1px solid var(--paper-deep);
+}
+.action-preview-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+/* CHOSEN / ALTERNATIVE accents — applied to FreightRate cards when an
+   executor target cost is known. Mirrors the EXCEPTION/CONGESTED accent
+   system so the eye picks them up the same way. */
+.fact.fact-chosen {
+  border-left-color: #1f7a4a;
+  background: rgba(31, 122, 74, 0.06);
+  box-shadow: 0 0 0 1px rgba(31, 122, 74, 0.25);
+}
+.fact.fact-alternative {
+  opacity: 0.72;
+}
+.fact-accent-badge.chosen {
+  color: #1f7a4a;
+  background: rgba(31, 122, 74, 0.14);
+}
+.fact-accent-badge.alternative {
+  color: var(--ink-muted);
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 500;
+}
+
 /* Execution-result card — shown after a write action runs. For
    retender_booking renders a before/after diff table; other actions get
    a compact status line. Lives in the chat thread under the closing message. */
@@ -1225,14 +1344,12 @@ details[open] > .suggested-summary .suggested-chevron {
   position: relative;
   padding: 28px 36px;
   overflow-y: auto;
-  background:
-    linear-gradient(180deg, var(--paper) 0%, transparent 200px),
-    var(--paper);
+  background: #ffffff;
 }
 .flow-stage.reviewer-mode {
   background:
     linear-gradient(180deg, rgba(244,183,62,0.05) 0%, transparent 200px),
-    var(--paper);
+    #ffffff;
 }
 
 .flow-header { margin-bottom: 22px; }
@@ -1425,11 +1542,10 @@ details[open] > .suggested-summary .suggested-chevron {
 .envelope-counter strong { color: var(--ink); font-weight: 500; }
 
 .envelope {
-  background: white;
+  background: transparent;
   border: 1px solid var(--rule);
   border-radius: 6px;
   padding: 20px 24px;
-  box-shadow: var(--shadow-soft);
   position: relative;
   min-height: 140px;
   perspective: 1200px;
@@ -1536,6 +1652,710 @@ details[open] > .suggested-summary .suggested-chevron {
 .fact-accent-badge.risk    { color: #c14a4a; background: rgba(193, 74, 74, 0.12); }
 .fact-accent-badge.warning { color: #b46d00; background: rgba(214, 158, 46, 0.12); }
 .fact-accent-badge.premium { color: #a07b00; background: rgba(160, 123, 0, 0.12); }
+/* Full-screen graph modal — opened by the "Expand" button in either viz
+   panel. Larger canvas, interactive controls, click-node-to-highlight
+   semantics. Backdrop click or Esc closes. */
+/* Full-bleed graph modal — 100vw × 100vh, no rounded corners, no outer
+   gutter. The chrome lives in a slim 40px top bar (titles + layout switcher
+   + fit/reset/close) plus an optional collapsible 240px left filter rail
+   carrying node-search, per-type visibility checkboxes, and the legend. */
+/* Full-bleed graph modal — light chrome, variant-specific canvas tint.
+   Evidence map → off-white (Style 1 "Soft Glass"); knowledge graph →
+   cream (Style 3 "Editorial"). */
+.graph-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 300;
+  animation: graph-modal-fade 200ms ease;
+}
+@keyframes graph-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.graph-modal {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #fafafa;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: graph-modal-rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.graph-modal.variant-evidence  { background: #fafafa; }
+.graph-modal.variant-knowledge { background: #faf7f0; }
+@keyframes graph-modal-rise {
+  from { opacity: 0; transform: scale(0.995); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.graph-modal-stats-bar {
+  flex: 0 0 auto;
+  min-height: 48px;
+  background: #ffffff;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  gap: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.graph-modal-stats-left {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-width: 0;
+}
+.graph-modal-stats-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: #0f172a;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.graph-modal-stats-counts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #475569;
+}
+.graph-modal-stat-item { display: inline-flex; gap: 5px; }
+.graph-modal-stat-item strong { color: #0f172a; font-weight: 600; }
+.graph-modal-stat-sep { color: #cbd5e1; padding-right: 4px; }
+.graph-modal-stats-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.graph-toolbar-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #0f172a;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.graph-toolbar-btn:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+.graph-toolbar-btn.active {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+.graph-modal-close {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  font-size: 18px;
+  line-height: 1;
+  color: #0f172a;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+.graph-modal-close:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.graph-modal-layout-menu { position: relative; }
+.graph-modal-layout-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 10;
+  min-width: 130px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 8px 20px rgba(15,23,42,0.08);
+}
+.graph-modal-layout-option {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  color: #0f172a;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.graph-modal-layout-option:hover { background: #f1f5f9; color: #4f46e5; }
+.graph-modal-layout-option.active { background: rgba(79,70,229,0.08); color: #4f46e5; }
+
+.graph-modal-stage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  background: inherit;
+}
+.graph-modal-canvas {
+  flex: 1;
+  background: inherit;
+  position: relative;
+  overflow: hidden;
+}
+.graph-modal-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #475569;
+  padding: 0 40px;
+  text-align: center;
+}
+.graph-modal-state-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #4f46e5;
+}
+.graph-modal-state-body {
+  font-size: 13px;
+  color: #475569;
+  max-width: 56ch;
+  line-height: 1.5;
+}
+.graph-modal-state.error .graph-modal-state-eyebrow { color: #c14a4a; }
+
+/* Right-side legend panel — light theme. Always visible (collapsible).
+   Lists node types and the click-to-inspect caption; on the evidence
+   variant, a click on a class node surfaces its facts here. */
+.graph-modal-side-legend {
+  flex: 0 0 280px;
+  background: #ffffff;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  color: #0f172a;
+}
+.graph-modal-side-legend.collapsed { flex: 0 0 44px; }
+.graph-modal-side-legend-toggle {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  color: #0f172a;
+  padding: 14px 18px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.graph-modal-side-legend.collapsed .graph-modal-side-legend-toggle {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  padding: 18px 0;
+  justify-content: center;
+}
+.graph-modal-side-legend-toggle:hover { color: #4f46e5; }
+.graph-modal-side-legend-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.graph-modal-side-legend-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.45;
+  padding-bottom: 6px;
+  border-bottom: 1px dotted #e5e7eb;
+}
+.graph-modal-side-legend-section { display: flex; flex-direction: column; gap: 8px; }
+.graph-modal-side-legend-section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.graph-modal-side-legend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.graph-modal-side-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #0f172a;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+.graph-modal-side-legend-row.checkbox { cursor: pointer; }
+.graph-modal-side-legend-row.checkbox:hover { background: #f8fafc; }
+.graph-modal-side-legend-row.checkbox input { margin: 0; cursor: pointer; }
+.graph-modal-side-legend-name { flex: 1; min-width: 0; word-break: break-word; }
+.graph-modal-side-legend-caption {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+  font-style: italic;
+  padding-top: 8px;
+  border-top: 1px dotted #e5e7eb;
+}
+
+/* Selection-driven Facts section — surfaces when a class node is clicked
+   in the evidence variant. */
+.graph-modal-side-legend-section.selection-section {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.graph-modal-side-legend-section.selection-section .selection-label {
+  color: #5b21b6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.graph-modal-side-legend-dismiss {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #475569;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.graph-modal-side-legend-dismiss:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+.graph-modal-side-legend-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.graph-modal-fact-row {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0;
+}
+.graph-modal-fact-row > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.graph-modal-fact-row > summary::-webkit-details-marker { display: none; }
+.graph-modal-fact-row[open] {
+  background: #fafaf9;
+  border-color: #c4b5fd;
+}
+.graph-modal-fact-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.graph-modal-fact-id {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #7c3aed;
+}
+.graph-modal-fact-title {
+  font-size: 12px;
+  color: #0f172a;
+  word-break: break-word;
+}
+.graph-modal-fact-detail {
+  padding: 4px 8px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: #475569;
+  border-top: 1px dotted #e5e7eb;
+  margin-top: 4px;
+  word-break: break-all;
+}
+.graph-modal-fact-meta {
+  color: #94a3b8;
+  margin-right: 4px;
+}
+.graph-legend-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(15,23,42,0.12);
+}
+.graph-legend-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #4f46e5;
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+/* Edge-colour swatch for the Relationships section. Rendered as a short
+   solid bar (not a circle) so it visually maps to "line in the graph". */
+.graph-legend-edge-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.graph-modal-side-legend-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* Per-ontology-type legend dot colours (matches Cytoscape stylesheet). */
+.dot-type-Supplier,
+.dot-type-Carrier              { background: #c45a3e; border-color: #8a3f29; }
+.dot-type-SanctionedNetworkEntity { background: #d24545; border-color: #7a2424; }
+.dot-type-HoldingCompany       { background: #5a6678; border-color: #2f3845; }
+.dot-type-Alliance,
+.dot-type-AlliancePeer         { background: #a08550; border-color: #5e4924; }
+.dot-type-PurchaseOrder        { background: #3a8a8a; border-color: #266060; }
+.dot-type-Product              { background: #9b6db0; border-color: #5e4070; }
+.dot-type-Warehouse            { background: #3a8a8a; border-color: #266060; }
+.dot-type-Shipment             { background: #d4a93a; border-color: #8a6d20; }
+.dot-type-IngestionAdapter     { background: #888888; border-color: #5a5a5a; }
+
+/* "Open in full-page graph" buttons that replaced the inline previews. */
+.viz-card-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+  transition: border-color 140ms ease, background-color 140ms ease;
+  margin: 6px 0;
+}
+.viz-card-button:hover {
+  border-color: var(--cyan);
+  background: rgba(0,201,183,0.04);
+}
+.viz-card-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.viz-card-title {
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.viz-card-cta {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* "Expand" button + actions in the inline panel header */
+.viz-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.viz-expand-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: white;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.viz-expand-btn:hover {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  color: white;
+}
+
+/* Knowledge-graph viz panels — EvidenceMap + GraphPanel.
+   Both are collapsible <details> elements sitting at the top of the envelope,
+   above the stage blocks. Closed by default so they don't clutter casual
+   reads of the envelope; opened during the demo to show the agent's path. */
+.viz-panel {
+  margin: 6px 0;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: transparent;
+}
+.viz-panel + .viz-panel { margin-top: 8px; }
+.viz-summary {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.viz-summary::-webkit-details-marker { display: none; }
+.viz-summary:hover { background: rgba(0, 0, 0, 0.03); }
+.viz-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.viz-chevron {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  transition: transform 160ms ease;
+}
+.viz-panel[open] .viz-chevron { transform: rotate(90deg); }
+.viz-body {
+  padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.viz-canvas-wrap {
+  width: 100%;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.viz-loading,
+.viz-empty,
+.viz-error {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 24px 0;
+}
+.viz-error { color: #c14a4a; }
+.viz-stats {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  text-align: center;
+}
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  padding-top: 4px;
+}
+.viz-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.viz-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+.viz-dot-anchor      { background: #0d6e7f; color: #074550; }
+.viz-dot-risk        { background: #b53b3b; color: #7a2424; }
+.viz-dot-risk_path   { background: #5a6678; color: #b53b3b; }
+.viz-dot-alt         { background: #8c6f3f; color: #5e4924; }
+.viz-dot-default     { background: #dde0e6; color: #aab1bd; }
+
+.viz-legend.dense {
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 0;
+}
+/* Style-1 (Soft Glass) evidence palette — matches the
+   border-colour-encoded accents in evidenceStylesheet. */
+.viz-dot-prompt      { background: #1e293b; border-color: #1e293b; }
+.viz-dot-stage       { background: #0d6e7f; border-color: #0d6e7f; }
+.viz-dot-class       { background: #7c3aed; border-color: #7c3aed; }
+.viz-dot-source      { background: #10b981; border-color: #10b981; }
+.viz-dot-outcome     { background: #d97706; border-color: #92400e; }
+
+/* Query plan panel — collapsible "why these cards?" section between the
+   stage header and the facts grid. Lists every ontology_query the binder
+   ran, its declared purpose, the filter, and how many cards it returned.
+   Click a row to highlight matching cards (rest dim). Collapsed by default. */
+.query-plan {
+  margin: 0 0 8px;
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.015);
+}
+.query-plan-summary {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.query-plan-summary::-webkit-details-marker { display: none; }
+.query-plan-summary:hover { background: rgba(0, 0, 0, 0.03); }
+.query-plan-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.query-plan-count { color: var(--cyan); font-weight: 500; }
+.query-plan-chevron {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  transition: transform 160ms ease;
+}
+.query-plan[open] .query-plan-chevron { transform: rotate(90deg); }
+.query-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.query-plan-item-btn {
+  width: 100%;
+  text-align: left;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.query-plan-item-btn:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 201, 183, 0.04);
+}
+.query-plan-item.active .query-plan-item-btn {
+  border-color: var(--cyan);
+  background: rgba(0, 201, 183, 0.1);
+}
+.query-plan-item-purpose {
+  font-size: 12px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.query-plan-item-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+.query-plan-clear {
+  margin: 0 10px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px dashed var(--rule);
+  color: var(--ink-muted);
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.query-plan-clear:hover { color: var(--ink); border-color: var(--ink-muted); }
+
+/* Highlight / dim states for fact cards when a query is selected in the
+   QueryPlanPanel. Highlighted cards get a cyan border + lift; dimmed cards
+   fade to ~30% opacity so the eye lands on the matching set. */
+.fact.fact-highlighted {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(0, 201, 183, 0.25);
+  transform: translateY(-1px);
+  transition: all 160ms ease;
+}
+.fact.fact-dimmed {
+  opacity: 0.32;
+  transition: opacity 160ms ease;
+}
+
+/* Plain-English one-liner describing what THIS kind of fact represents.
+   Sourced from the CLASS_DISPLAY map; rendered just under the title so a
+   non-technical reader can answer "what am I looking at?" without learning
+   the ontology jargon. */
+.fact-meaning {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  margin-top: 3px;
+  margin-bottom: 4px;
+}
+
 /* Replaces the long pipe-delimited summary string with one chip per
    segment. Wraps naturally; small monospace so values stay aligned. */
 .fact-chips {
@@ -1716,44 +2536,96 @@ details[open] > .suggested-summary .suggested-chevron {
 }
 .outcome-detail { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
 
-/* ---------- Lineage panel ---------- */
+/* ---------- Lineage panel (tabbed right strip) ----------
+   Collapsed = 44px navy strip with three vertical tabs (Audit / Lineage /
+   Filters). Click a tab to expand the column to 360px showing its body; click
+   the active tab again to collapse. Two entry points — the strip's own tab
+   and the Filters checkbox state — share storage with the graph modal's left
+   rail via the graphFilters module. */
 .lineage-panel {
   background: var(--navy-deep);
   color: var(--paper);
   display: flex;
+  flex-direction: row;
+  width: 44px;
+  transition: width 180ms ease;
+  overflow: hidden;
+}
+.lineage-panel.lineage-open { width: 360px; }
+
+/* The vertical strip — always visible at the right edge. White rail with
+   navy active-tab + cyan count pill (matches mockups/option-3.html). */
+.lineage-strip {
+  flex: 0 0 44px;
+  display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--navy);
-  transition: max-width 200ms ease;
+  align-items: stretch;
+  background: #ffffff;
+  border-left: 1px solid #d9dee6;
 }
-.lineage-panel.lineage-collapsed {
-  /* Collapsed shrinks the panel to a thin column showing only the header.
-     Matches the parent grid layout (defined in `.main`) — when collapsed,
-     reduces footprint so the envelope gets more screen. */
-  max-width: 220px;
+.lineage-tab {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 110px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #e6e8ec;
+  cursor: pointer;
+  padding: 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5a6678;
+  transition: background-color 140ms ease, color 140ms ease;
 }
-.lineage-header {
+.lineage-tab:hover { background: #f4f3ee; color: #102542; }
+.lineage-tab.active {
+  background: #102542;
+  color: #ffffff;
+}
+.lineage-tab.active:hover { background: #102542; color: #ffffff; }
+.lineage-tab-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+.lineage-tab-badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #00a8c8;
+  color: #ffffff;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9px;
+  letter-spacing: 0.04em;
+}
+.lineage-tab.active .lineage-tab-badge {
+  background: #ffffff;
+  color: #102542;
+}
+
+/* The expanded body — visible only when one tab is active. */
+.lineage-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.lineage-head {
   padding: 18px 22px 14px;
   border-bottom: 1px solid rgba(244,241,234,0.08);
-  display: flex; align-items: center; justify-content: space-between;
-  width: 100%;
-  background: none;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: inherit;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
 }
-.lineage-header:hover { background: rgba(255, 255, 255, 0.03); }
-.lineage-chevron {
-  display: inline-block;
-  font-size: 10px;
-  margin-right: 6px;
-  color: rgba(244,241,234,0.6);
-  transition: transform 160ms ease;
-}
-.lineage-panel:not(.lineage-collapsed) .lineage-chevron { transform: rotate(90deg); }
 .lineage-count {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
@@ -1849,6 +2721,206 @@ details[open] > .suggested-summary .suggested-chevron {
   text-align: center;
   padding: 36px 16px;
 }
+
+/* Audit-by-stage rendering inside the right strip's expanded body.
+   Each StageBlock shows the stage name, the actor that ran it, the facts
+   collected at that stage, and an expandable list of raw lineage events. */
+.audit-stage {
+  border-top: 1px solid rgba(244,241,234,0.08);
+  padding: 14px 0 8px;
+}
+.audit-stage:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+.audit-stage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.audit-stage-name {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--cyan-glow);
+  letter-spacing: -0.005em;
+}
+.audit-stage-actor {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(244,241,234,0.55);
+}
+.audit-stage-section { margin-bottom: 8px; }
+.audit-section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(244,241,234,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  cursor: default;
+}
+.audit-section-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: none;
+  letter-spacing: 0.08em;
+  color: rgba(244,241,234,0.35);
+  font-style: italic;
+}
+.audit-section-empty {
+  font-size: 11px;
+  color: rgba(244,241,234,0.5);
+  font-style: italic;
+  padding: 4px 0 8px;
+}
+.audit-fact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.audit-fact-row {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr max-content;
+  gap: 8px;
+  font-size: 11px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px dotted rgba(244,241,234,0.08);
+}
+.audit-fact-row:last-child { border-bottom: none; }
+.audit-fact-type {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan-glow);
+}
+.audit-fact-id {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: rgba(244,241,234,0.8);
+}
+.audit-fact-title {
+  color: rgba(244,241,234,0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audit-fact-source {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  color: rgba(244,241,234,0.45);
+}
+.audit-stage-events {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+.audit-stage-events > summary::-webkit-details-marker { display: none; }
+.audit-stage-events > summary { list-style: none; cursor: pointer; }
+.audit-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+}
+.audit-event {
+  padding: 4px 0 6px;
+  border-left: 2px solid rgba(244,241,234,0.1);
+  padding-left: 8px;
+}
+.audit-event-meta {
+  display: flex;
+  gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(244,241,234,0.45);
+  margin-bottom: 2px;
+}
+.audit-event-meta .seq { color: var(--cyan-glow); font-weight: 500; }
+.audit-event-detail {
+  font-size: 10px;
+  color: rgba(244,241,234,0.7);
+  font-family: 'DM Mono', monospace;
+  line-height: 1.4;
+}
+
+/* Filters view (per-node-type checkboxes — shared store with the graph
+   modal's left rail). */
+.lineage-filter-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+}
+.lineage-filter-hint {
+  font-size: 12px;
+  color: rgba(244,241,234,0.7);
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.lineage-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lineage-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--paper);
+  font-size: 12px;
+}
+.lineage-filter-row:hover { background: rgba(255,255,255,0.04); }
+.lineage-filter-row input { margin: 0; cursor: pointer; }
+.lineage-filter-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(244,241,234,0.2);
+}
+.lineage-filter-name { flex: 1; }
+.lineage-filter-reset {
+  margin-top: 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  background: transparent;
+  border: 1px solid rgba(244,241,234,0.2);
+  color: rgba(244,241,234,0.7);
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.lineage-filter-reset:hover {
+  border-color: var(--cyan-glow);
+  color: var(--cyan-glow);
+}
+
+/* Filter swatches — mirror the Cytoscape palette used in GraphViz so the
+   user can map UI swatch → on-canvas colour at a glance. */
+.swatch-anchor     { background: #0d6e7f; border-color: #074550; }
+.swatch-sanctioned { background: #b53b3b; border-color: #7a2424; }
+.swatch-supplier   { background: #aab1bd; border-color: #7a8290; }
+.swatch-holding    { background: #5a6678; border-color: #2f3845; }
+.swatch-carrier    { background: #8c6f3f; border-color: #5e4924; }
+.swatch-alliance   { background: #8c6f3f; border-color: #5e4924; }
 
 /* ---------- Modals ---------- */
 .modal-backdrop {

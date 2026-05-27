@@ -107,6 +107,12 @@ stages:
           lane_id: ":lane_id"
         max_results: 6
         purpose: "Both ocean + air rate cards on this lane for cost comparison"
+      - ontology: logistics
+        class: BookingHistory
+        where:
+          booking_id: ":booking_id"
+        max_results: 3
+        purpose: "Recent changes to this booking — surfaces 'previously changed from X to Y' on replay"
   review:
     binder: "ModeSwitchReviewBinder/2.0-live"
     ontology_queries:

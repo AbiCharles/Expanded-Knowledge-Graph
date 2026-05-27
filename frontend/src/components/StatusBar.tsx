@@ -9,9 +9,10 @@ interface Props {
   onOpenKnowledge: () => void;
   onOpenScenariosHelp: () => void;
   onOpenMetrics: () => void;
+  onOpenPlatformFlow: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenPlatformFlow }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -59,6 +60,14 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
       </div>
 
       <div style={{ display: "flex", alignItems: "center" }}>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onOpenPlatformFlow}
+          title="See how the platform answered the active case"
+          disabled={!active}
+        >
+          How it works
+        </button>
         <button
           className="statusbar-action statusbar-action-quiet"
           onClick={onOpenMetrics}

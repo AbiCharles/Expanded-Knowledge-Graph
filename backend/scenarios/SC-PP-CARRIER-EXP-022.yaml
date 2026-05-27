@@ -1,0 +1,128 @@
+id: SC-PP-CARRIER-EXP-022
+title: "Carrier exposure on new SDN listing — multi-source containment review"
+domain: "Planning & Procurement"
+teams_channel: "#procurement-compliance"
+actor_id: "agent-compliance-08"
+operator_role: { label: "Operator", name: "compliance.analyst.kjacobs" }
+reviewer_role: { label: "Reviewer", name: "compliance.lead.kjacobs" }
+autonomous: false
+
+action_type: "carrier_exposure_review"
+action_payload:
+  sdn_id: "SDN-NET-001"
+  sdn_name: "Shengli Shell Trading"
+  originating_guardrail_id: "POL-PP-SDN-RESPONSE-2026"
+
+teams_headline: "Carrier exposure · Shengli Shell Trading just listed"
+execute_message: >-
+  OFAC just added <strong>Shengli Shell Trading (SDN-NET-001)</strong>.
+  The agent fans out from the new SDN through the supply-chain
+  <strong>graph</strong> to every supplier within 4 hops, then jumps
+  SHIPS_VIA to every carrier those suppliers ship through. The reviewer
+  sees one row per affected carrier with the shortest exposure trail,
+  alongside prior containment decisions and the policy playbook for
+  newly-listed entities.
+
+match_keywords: ["carrier exposure", "sdn just listed", "ofac just listed", "new sanctions listing", "carrier sanctions exposure", "sanctions response carriers", "shengli shell listed", "containment review", "sdn carrier fanout", "second-order sanctions risk"]
+interpreted_as: "fan out from newly-listed SDN-NET-001 (Shengli Shell Trading) to every exposed carrier"
+clarifying_question: >-
+  Confirm — run carrier-exposure containment for SDN
+  <code>SDN-NET-001</code> (Shengli Shell Trading). I'll bind data from
+  four sources: the supply-chain <strong>graph</strong> (the new SDN's
+  ownership chain, every Supplier reachable within 4 hops, every Carrier
+  those Suppliers ship via with the shortest trail), prior containment
+  decisions on previous SDN listings from the governance store, and the
+  relevant OFAC-response SOP excerpts via the policy vector store.
+  Compliance lead approves / rejects with full evidence on the audit
+  trail. Proceed?
+
+closing_messages:
+  approve: >-
+    <strong>Compliance lead approved the containment recommendation.</strong>
+    The exposure trail — SDN ownership chain, affected suppliers,
+    fanned-out carriers, prior containment cases, and SOP excerpts — is
+    captured on the audit trail. Quarantine workflow proceeds against
+    the flagged carriers.
+  reject: >-
+    <strong>Compliance lead declined the containment.</strong> Reason:
+    <em>"{rationale}"</em><br><br>The agent's exposure findings remain
+    on the audit trail. No carrier quarantine.
+  request_more_info: >-
+    <strong>Compliance lead needs more information.</strong> Specifically:
+    <em>"{rationale}"</em><br><br>Case is back in review.
+
+rationale_reasons:
+  reject:
+    - "Exposure trail goes through a divested holding — the ownership link is severed."
+    - "Carrier exposure is too distant (4+ hops) to warrant immediate quarantine."
+    - "Affected carriers have no active bookings in the next 30 days — defer to weekly review."
+  request_more_info:
+    - "Need legal sign-off that quarantining the alliance is policy-compliant under the new listing."
+    - "Need a 30-day forward booking forecast for each affected carrier before deciding."
+    - "Need confirmation that the holding-company stake in the SDN is still active (not paused or divested)."
+
+stages:
+  agent_intake:
+    binder: "PolicyAndScopeAgentBinder/1.0"
+    facts:
+      - source: "kf:graph"
+        ontology_type: "Policy"
+        id: "POL-PP-SDN-RESPONSE-2026"
+        uri: "kf.tcs/policy/POL-PP-SDN-RESPONSE-2026"
+        title: "SDN listing response policy"
+        payload: "When a new SDN is listed, compliance must (a) traverse the supply-chain graph 4 hops out for second-order exposure, (b) identify every carrier reachable through any tainted supplier, (c) surface a containment recommendation within 4 hours, (d) named compliance-lead approval required before any quarantine."
+      - source: "iam:scopes"
+        ontology_type: "ActorScope"
+        id: "agent-compliance-08"
+        uri: "iam.tcs/actors/agent-compliance-08"
+        title: "Actor scope"
+        payload: "Scopes: compliance.read, compliance.propose, compliance.quarantine_after_review · this case is propose-only (no autonomous write)."
+  proposal:
+    binder: "CarrierExposureProposalBinder/1.0"
+    ontology_queries:
+      - ontology: supply_chain
+        class: SanctionedNetworkEntity
+        where:
+          entity_id: ":sdn_id"
+        purpose: "Bind the newly-listed SDN entity (Neo4j — supply_chain.SanctionedNetworkEntity)"
+      - ontology: supply_chain
+        class: CarrierExposure
+        where:
+          sdn_id: ":sdn_id"
+        max_results: 8
+        purpose: "Fan out from the SDN — every carrier whose biggest customers are reachable from the new listing within 4 hops, with the shortest exposure trail"
+      - ontology: supply_chain
+        class: SanctionsProximity
+        where:
+          supplier_id: "SUP-001"
+        max_results: 4
+        purpose: "Cross-reference: Hemlock's existing sanctions-proximity readout (does the new listing change the picture for this tier-1 supplier?)"
+  review:
+    binder: "CarrierExposureReviewBinder/1.0"
+    ontology_queries:
+      - ontology: tcs_core
+        class: PriorOverride
+        where:
+          scenario_id: SC-PP-007
+        max_results: 4
+        purpose: "Prior compliance decisions on similar SDN listings (SQLite governance store)"
+      - ontology: tcs_core
+        class: PolicyExcerpt
+        where:
+          query: OFAC SDN listing response carrier quarantine second-order sanctions exposure
+          top_k: 3
+        purpose: "Relevant OFAC-response / containment SOP excerpts via the policy vector store"
+
+outcomes:
+  approve:
+    headline: "Approved — carriers flagged for quarantine"
+    detail: "Compliance lead accepted the multi-source exposure picture. Affected carriers enter the quarantine workflow; evidence package on the audit trail."
+  reject:
+    headline: "Rejected — no containment action"
+    detail: "Compliance lead declined the containment. Reasoning recorded; carriers remain in service."
+  request_more_info:
+    headline: "More information requested"
+    detail: "Reviewer requires additional legal / forward-booking / structural-severance data before deciding."
+
+_filter_from_prompt: true
+_custom_suggested_prompt: "OFAC just listed Shengli Shell Trading — run carrier exposure containment"

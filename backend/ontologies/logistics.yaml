@@ -161,6 +161,24 @@ classes:
     - {name: container_type, type: string, description: "20'|40'|40HC|reefer|LCL|air-kg"}
     - {name: valid_from, type: date}
     - {name: valid_to, type: date}
+  BookingHistory:
+    description: Append-only change log for bookings. Every retender_booking
+      run inserts a row capturing the prior carrier / cost / status and the
+      case that triggered the change. Used on replay to show "previously
+      changed from X to Y" so the reviewer has context.
+    attributes:
+    - {name: history_id, type: integer, identifier: true}
+    - {name: booking_id, type: string}
+    - {name: shipment_id, type: string}
+    - {name: prev_carrier_id, type: string}
+    - {name: new_carrier_id, type: string}
+    - {name: prev_cost, type: decimal}
+    - {name: new_cost, type: decimal}
+    - {name: prev_status, type: string}
+    - {name: new_status, type: string}
+    - {name: changed_at, type: string}
+    - {name: case_id, type: string}
+    - {name: action_id, type: string}
   DemurrageCharge:
     description: Accessorial fee accrued when a shipment exceeds its free-time
       allowance at a port (demurrage), at a yard (detention), or in storage.

@@ -377,6 +377,13 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
             "outcomes": scenario.get("outcomes", {}),
             "auto_approval_guardrail": scenario.get("auto_approval_guardrail"),
             "auto_approval_reason": scenario.get("auto_approval_reason"),
+            # The write-action target the orchestrator will dispatch on
+            # approve (HITL) or directly (autonomous). Exposed so the UI
+            # can render an "If you approve, this is what runs" preview
+            # alongside the bound facts — and so it can highlight the
+            # specific evidence card (e.g. matching FreightRate) that
+            # corresponds to the chosen values.
+            "executor": scenario.get("_executor"),
         }
     # After a restart, c.ctx is None but lineage is in SQLite — fetch it from
     # the persistent recorder so the operator still sees the audit trail.
@@ -405,8 +412,41 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
                         "summary": f.payload.get("summary"),
                         "via_ontology": f.payload.get("via_ontology"),
                         "via_source_binding": f.payload.get("via_source_binding"),
+                        # query_index correlates this fact back to the
+                        # KnowledgeQuery that produced it (None for inline
+                        # `facts:` blocks). Used by the frontend's
+                        # QueryPlanPanel for click-to-highlight.
+                        "query_index": f.payload.get("query_index"),
                     }
                     for f in sc.facts
+                ],
+                # Per-stage queries — what the agent ACTUALLY asked the
+                # ontology resolver for. Synthetic placeholder queries that
+                # the agent_intake binder records purely for audit-trail
+                # completeness (when a stage uses only inline `facts:` and
+                # ran no real ontology queries) are filtered out here so the
+                # frontend's "Why these cards?" panel only shows real lookups.
+                # The marker is the `__ontology__` filter key — present on
+                # every query that came from a scenario's ontology_queries
+                # block, absent on the synthetic placeholders.
+                "queries": [
+                    {
+                        "index": idx,
+                        "ontology_type": q.ontology_type,
+                        "ontology": q.filters.get("__ontology__"),
+                        "where": {
+                            k: v for k, v in q.filters.items()
+                            if k != "__ontology__"
+                        },
+                        "purpose": q.purpose,
+                        "max_results": q.max_results,
+                        "fact_count": sum(
+                            1 for f in sc.facts
+                            if f.payload.get("query_index") == idx
+                        ),
+                    }
+                    for idx, q in enumerate(sc.queries_issued)
+                    if q.filters.get("__ontology__") is not None
                 ],
             }
             for stage, sc in c.ctx.stages.items()

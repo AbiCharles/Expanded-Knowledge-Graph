@@ -36,7 +36,7 @@ class CaseRecord:
     # ctx is None.
     framework_case_id: Optional[str] = None
     ticket_id: Optional[str] = None
-    decision_kind: Optional[str] = None  # approve | reject | request_more_info | auto_execute
+    decision_kind: Optional[str] = None  # approve | reject | request_more_info | auto_execute | no_op
     rationale: Optional[str] = None
     follow_up: Optional[str] = None
     sibling_case_ids: list[str] = field(default_factory=list)
