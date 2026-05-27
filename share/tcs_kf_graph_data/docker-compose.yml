@@ -1,0 +1,40 @@
+# Spin up a local Neo4j you can seed with `seed_neo4j.py`.
+#
+#   docker compose up -d            # start
+#   docker compose down             # stop (volume preserved)
+#   docker compose down -v          # stop AND wipe the volume
+#
+# Once Neo4j is up:
+#   - Bolt:    bolt://localhost:7687    (drivers, the seed script)
+#   - Browser: http://localhost:7474    (interactive UI; sign in as `neo4j` / `passw0rd`)
+#
+# Default password is `passw0rd` — change it via NEO4J_AUTH below if you
+# plan to share the instance.
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: tcs_kf_neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP / Neo4j Browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: "neo4j/passw0rd"
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      # Bump heap a little — the default 512 MB cap is fine but we leave
+      # headroom for the demo's traversal queries (shortestPath, etc).
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "1G"
+    volumes:
+      - tcs_kf_neo4j_data:/data
+      - tcs_kf_neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p passw0rd 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  tcs_kf_neo4j_data:
+  tcs_kf_neo4j_logs:

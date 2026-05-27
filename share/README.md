@@ -1,4 +1,20 @@
-# TCS Knowledge Fabric — Shipping Data Snapshot
+# TCS Knowledge Fabric — Shareable Data Snapshots
+
+Two self-contained, **fully synthetic** datasets that power the TCS
+Knowledge Fabric demo. Both are bundled here so colleagues can stand
+up the same data locally without touching the live deployment.
+
+| Package | What's inside | When to share |
+|---|---|---|
+| **[`tcs_kf_shipment_data/`](tcs_kf_shipment_data/)** (also `.zip`) | 8 CSVs + a SQLite (bookings + demurrage). Models 3,000 shipments / 25 carriers / 40 lanes / 46 ports. The "operational" side of the demo. | Anyone reproducing the logistics / commercial / financial scenarios (SC-LN-*, SC-LN-TENDER-*, SC-LN-DEMURRAGE-*). |
+| **[`tcs_kf_graph_data/`](tcs_kf_graph_data/)** (also `.zip`) | Neo4j seed Cypher + Python runner + docker-compose. 43 nodes / 52 edges in a supplier-network / holding-chain / sanctions / alliance topology. | Anyone reproducing the Neo4j-backed graph scenarios (SC-PP-008, SC-PP-CARRIER-EXP-022, SC-PP-UBO-023, SC-PP-ALT-SUP-024, SC-PP-TIER-N-025). |
+
+Each package has its own README with quick-start, file inventory, and
+sample queries. Pick the one(s) you need; they're independent.
+
+---
+
+# Shipment data — what's inside
 
 A self-contained, **fully synthetic** logistics mock dataset used by the TCS Knowledge Fabric
 Knowledge Fabric demo. ~24,300 rows across 8 CSV files plus 2 SQLite tables,
