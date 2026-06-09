@@ -10,6 +10,7 @@ import {
   GraphEdge as ApiEdge,
   SubgraphResponse,
   getSupplierSubgraph,
+  getOntologyClasses,
 } from "../api";
 import {
   GraphFilterType,
@@ -96,6 +97,13 @@ export function GraphPanel({ active }: { active: CaseFull }) {
         <GraphModal
           title="Knowledge graph"
           subtitle={`${anchor.supplier_id} · ${anchor.supplierName}`}
+          explainer={
+            "The corporate ownership + supplier network around the case " +
+            "subject, pulled live from Neo4j. Each node is a real entity " +
+            "(supplier, holding company, sanctioned entity, carrier, " +
+            "alliance) and each line is a real relationship between them. " +
+            "Click any node to see what ontology class it represents."
+          }
           rawNodes={data?.nodes}
           rawEdges={data?.edges}
           defaultLayout="dagre"
@@ -141,6 +149,15 @@ export function EvidenceMap({ active }: { active: CaseFull }) {
         <GraphModal
           title="Multi-source evidence map"
           subtitle="Prompt → stages → ontology classes → data sources → outcome"
+          explainer={
+            "A picture of how the case was assembled. Reading left to " +
+            "right: your prompt triggers each stage of the agent's " +
+            "workflow, each stage queries one or more ontology classes, " +
+            "those classes resolve to the underlying data sources, and " +
+            "the chain ends at the outcome. Click any node to see what " +
+            "it represents; double-click a Neo4j-backed node ⤢ to drill " +
+            "into the live graph."
+          }
           elements={elements}
           defaultLayout="dagre"
           onClose={() => setModalOpen(false)}
@@ -153,6 +170,11 @@ export function EvidenceMap({ active }: { active: CaseFull }) {
         <GraphModal
           title="Knowledge graph"
           subtitle={`${drillAnchor.supplier_id} · ${drillAnchor.supplierName}`}
+          explainer={
+            "The corporate ownership + supplier network around the case " +
+            "subject, pulled live from Neo4j. Click any node to see what " +
+            "ontology class it represents."
+          }
           rawNodes={drillData?.nodes}
           rawEdges={drillData?.edges}
           defaultLayout="dagre"
@@ -170,10 +192,13 @@ export function EvidenceMap({ active }: { active: CaseFull }) {
 // collapsible left filter rail (240px) with legend + per-type checkboxes.
 // =============================================================================
 
-// Fact list surfaced to the side legend when a class node (or one of its
-// fact children) is clicked in the evidence map.
+// Fact list surfaced to the side legend when a class node is clicked.
+// Also carries the ontology id so the legend can lazy-fetch the class
+// definition (description / attributes / relations) and show it ABOVE
+// the facts.
 interface SelectedClassFacts {
   className: string;
+  ontologyId: string | null;
   facts: {
     id: string;
     title: string;
@@ -206,6 +231,10 @@ type GraphModalProps = {
   // handler reads to compute the anchor.
   onDrill?: (target: DrillTarget) => void;
   active?: CaseFull | null;
+  // 2-3 sentence plain-English "what is this graph?" paragraph shown
+  // at the top of the side legend. Per-modal copy (evidence map vs
+  // knowledge graph vs platform flow).
+  explainer?: string;
 };
 
 function GraphModal({
@@ -222,6 +251,7 @@ function GraphModal({
   error,
   onDrill,
   active,
+  explainer,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -410,6 +440,7 @@ function GraphModal({
             variant={variant}
             typeCounts={typeCounts}
             subtitle={subtitle}
+            explainer={explainer}
             selectedClassFacts={selectedClassFacts}
             onDismissFacts={() => setSelectedClassFacts(null)}
             drillHint={
@@ -436,6 +467,7 @@ function GraphModalSideLegend({
   variant,
   typeCounts,
   subtitle,
+  explainer,
   selectedClassFacts,
   onDismissFacts,
   drillHint,
@@ -445,6 +477,7 @@ function GraphModalSideLegend({
   variant: "knowledge" | "evidence";
   typeCounts: { type: string; count: number }[];
   subtitle?: string;
+  explainer?: string;
   selectedClassFacts?: SelectedClassFacts | null;
   onDismissFacts?: () => void;
   drillHint?: string | null;
@@ -457,7 +490,17 @@ function GraphModalSideLegend({
       </button>
       {open && (
         <div className="graph-modal-side-legend-body">
+          {explainer && (
+            <div className="graph-modal-side-legend-explainer">{explainer}</div>
+          )}
           {subtitle && <div className="graph-modal-side-legend-subtitle">{subtitle}</div>}
+          {selectedClassFacts && (
+            <ClassDetailsPanel
+              className={selectedClassFacts.className}
+              ontologyId={selectedClassFacts.ontologyId}
+              onDismiss={onDismissFacts}
+            />
+          )}
           {selectedClassFacts && selectedClassFacts.facts.length > 0 && (
             <div className="graph-modal-side-legend-section selection-section">
               <div className="graph-modal-side-legend-section-label selection-label">
@@ -483,7 +526,7 @@ function GraphModalSideLegend({
                     </div>
                   </details>
                 ))}
-              </div>
+            </div>
             </div>
           )}
           <div className="graph-modal-side-legend-section">
@@ -494,6 +537,20 @@ function GraphModalSideLegend({
                     <div key={tc.type} className="graph-modal-side-legend-row">
                       <span className={`graph-legend-dot ${dotClassFor(variant, tc.type)}`} aria-hidden="true" />
                       <span className="graph-modal-side-legend-name">{tc.type}</span>
+                      {variant === "evidence" && (
+                        <button
+                          type="button"
+                          className="graph-modal-side-legend-info"
+                          title={`Open the ${tc.type} class spec`}
+                          onClick={() =>
+                            window.dispatchEvent(
+                              new CustomEvent("open-case-spec", {
+                                detail: { tab: "ontology", anchor: `spec-class-${tc.type}` },
+                              }),
+                            )
+                          }
+                        >ⓘ</button>
+                      )}
                     </div>
                   ))
                 : (variant === "knowledge"
@@ -556,6 +613,132 @@ const EVIDENCE_RELATIONSHIPS = [
   { label: "resolves", color: "#7c3aed", description: "class → source" },
   { label: "informs",  color: "#d97706", description: "source → outcome" },
 ];
+
+// Module-level promise cache so repeated clicks on different classes
+// inside the same modal session don't refetch the ontology document.
+const _classDocCache: Map<string, Promise<any[]>> = new Map();
+function fetchClassesCached(ontologyId: string): Promise<any[]> {
+  let p = _classDocCache.get(ontologyId);
+  if (!p) {
+    p = getOntologyClasses(ontologyId).catch(() => []);
+    _classDocCache.set(ontologyId, p);
+  }
+  return p;
+}
+
+// Class-details panel — shown above the Facts section when a class
+// node is selected in the evidence map. Renders the ontology class's
+// description + attributes + relations from the ontology document
+// (lazy-fetched, cached per ontology).
+function ClassDetailsPanel({
+  className,
+  ontologyId,
+  onDismiss,
+}: {
+  className: string;
+  ontologyId: string | null;
+  onDismiss?: () => void;
+}) {
+  const [klass, setKlass] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!ontologyId) {
+      setKlass(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetchClassesCached(ontologyId)
+      .then((classes) => {
+        if (cancelled) return;
+        const match = (classes || []).find((c: any) => c.name === className) || null;
+        setKlass(match);
+      })
+      .catch(() => { if (!cancelled) setKlass(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [ontologyId, className]);
+
+  return (
+    <div className="graph-modal-side-legend-section class-details-section">
+      <div className="graph-modal-side-legend-section-label selection-label">
+        <span>Class · {className}</span>
+        {onDismiss && (
+          <button
+            type="button"
+            className="graph-modal-side-legend-dismiss"
+            onClick={onDismiss}
+            aria-label="Clear selection"
+          >×</button>
+        )}
+      </div>
+      {!ontologyId && (
+        <div className="class-details-empty">
+          This class isn't backed by a registered ontology (often the
+          case for hand-authored intake facts like Policy / ActorScope).
+        </div>
+      )}
+      {ontologyId && loading && !klass && (
+        <div className="class-details-empty">Loading class definition…</div>
+      )}
+      {ontologyId && !loading && !klass && (
+        <div className="class-details-empty">
+          The {className} class isn't defined in the {ontologyId} ontology
+          document — likely a freshly-added scenario class.
+        </div>
+      )}
+      {klass && (
+        <>
+          {(klass.plain_description || klass.description) && (
+            <p className="class-details-desc">
+              {klass.plain_description || klass.description}
+            </p>
+          )}
+          {Array.isArray(klass.attributes) && klass.attributes.length > 0 && (
+            <div className="class-details-block">
+              <div className="class-details-sublabel">Attributes</div>
+              <ul className="class-details-attrs">
+                {klass.attributes.map((a: any, i: number) => (
+                  <li key={i}>
+                    <span className="class-details-attr-name">{a.name}</span>
+                    <span className="class-details-attr-type">{a.type}</span>
+                    {a.identifier && <span className="class-details-id-pill">id</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Array.isArray(klass.relations) && klass.relations.length > 0 && (
+            <div className="class-details-block">
+              <div className="class-details-sublabel">Relations</div>
+              <ul className="class-details-relations">
+                {klass.relations.map((r: any, i: number) => (
+                  <li key={i}>
+                    {className} <strong>{r.name}</strong>{" "}
+                    {r.cardinality === "0..*" || r.cardinality === "1..*" ? "many" : "a"}{" "}
+                    <strong>{r.target}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button
+            type="button"
+            className="class-details-more"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("open-case-spec", {
+                  detail: { tab: "ontology", anchor: `spec-class-${className}` },
+                }),
+              )
+            }
+          >Open full spec ⤢</button>
+        </>
+      )}
+    </div>
+  );
+}
 
 function dotClassFor(variant: "knowledge" | "evidence", ontologyType: string): string {
   if (variant === "evidence") {
@@ -633,6 +816,17 @@ function attachEvidenceMapBehaviour(
   cy.on("tap", "node", (evt: any) => {
     const node = evt.target;
     const id = node.id();
+
+    // Platform-flow Scenario node → pop the Case-spec modal on the
+    // Scenario tab. Single-click suffices because nothing else competes
+    // for this node.
+    if (id === "pf:scenario") {
+      window.dispatchEvent(
+        new CustomEvent("open-case-spec", { detail: { tab: "scenario" } }),
+      );
+      return;
+    }
+
     const now = Date.now();
     const state: any = cy.scratch("_kfEvi") || {};
     const lastTap = state.lastTap as { id: string; time: number } | null;
@@ -650,18 +844,37 @@ function attachEvidenceMapBehaviour(
 
     const setFacts = cb?.setSelectedClassFacts as ((f: SelectedClassFacts | null) => void) | undefined;
     if (!setFacts) return;
-    if (!node.classes().includes("evidence-class")) {
+    const nodeClasses = node.classes();
+
+    // Knowledge-graph node — surface its ontology class definition.
+    // No fact list (Neo4j subgraph nodes don't carry case-level facts),
+    // but the ClassDetailsPanel in the legend still renders the class
+    // description + attributes + relations from /api/ontologies/.../classes.
+    // Hardcoded "supply_chain" because that's the only ontology the
+    // knowledge-graph subgraph is mapped to in this demo.
+    if (nodeClasses.includes("graph-node")) {
+      const nodeType = String(node.data("nodeType") || node.data("label") || "");
+      if (nodeType) {
+        setFacts({ className: nodeType, ontologyId: "supply_chain", facts: [] });
+      } else {
+        setFacts(null);
+      }
+      return;
+    }
+
+    if (!nodeClasses.includes("evidence-class")) {
       setFacts(null);
       return;
     }
-    const className = String(node.data("label") || id).split("\n")[0];
+    const className = String(node.data("ontology_class") || node.data("label") || id).split("\n")[0];
+    const ontologyId = (node.data("ontology_id") as string | undefined) || null;
     const facts = (node.data("facts") || []) as Array<{
       id: string;
       title: string;
       source: string;
       source_kind: string;
     }>;
-    setFacts({ className, facts });
+    setFacts({ className, ontologyId, facts });
   });
 
   cy.on("tap", (evt: any) => {
@@ -806,10 +1019,13 @@ function buildEvidenceElements(active: CaseFull): CyElement[] {
 
   // 2. Stage nodes + prompt → stage edges. While walking, collect for
   // each ontology class the set of stages it appears in, the set of
-  // source kinds it was bound through, and the actual facts.
+  // source kinds it was bound through, the actual facts, and (when
+  // tagged by the OntologyResolver) the ontology id this class came
+  // from — so the side legend can lazy-fetch its definition.
   const stagesByClass = new Map<string, Set<string>>();
   const sourcesByClass = new Map<string, Set<string>>();
   const factsByClass = new Map<string, FactFlat[]>();
+  const ontologyByClass = new Map<string, string>();
   for (const stage of stages) {
     const stageId = `stage:${stage.stage}`;
     elements.push({
@@ -841,6 +1057,19 @@ function buildEvidenceElements(active: CaseFull): CyElement[] {
         source_kind: kind,
         ontology_type: cls,
       });
+      // OntologyResolver tags resolved facts with `via_ontology` so we
+      // know which ontology to fetch the class definition from. Static
+      // / hand-authored facts (intake stage) won't have it — that's OK,
+      // those classes (Policy, ActorScope) tend to be self-explanatory.
+      // The backend formats this as "ontology_id.ClassName" (a
+      // fully-qualified tag); strip the class suffix so the legend hits
+      // the right /api/ontologies/<id>/classes endpoint.
+      if (f.via_ontology && !ontologyByClass.has(cls)) {
+        const ontId = f.via_ontology.includes(".")
+          ? f.via_ontology.split(".")[0]
+          : f.via_ontology;
+        ontologyByClass.set(cls, ontId);
+      }
     }
   }
 
@@ -854,11 +1083,14 @@ function buildEvidenceElements(active: CaseFull): CyElement[] {
     const facts = factsByClass.get(cls) || [];
     const srcs = sourcesByClass.get(cls) || new Set();
     const drillKind = drillKindFor(srcs, active);
+    const ontologyId = ontologyByClass.get(cls) || "";
     elements.push({
       data: {
         id: classId,
         label: `${cls}\n(${facts.length} fact${facts.length === 1 ? "" : "s"})`,
         facts,
+        ontology_id: ontologyId,
+        ontology_class: cls,
         ...(drillKind ? {
           drill_kind: drillKind,
           drill_glyph_uri: drillGlyphSvgUri(),
@@ -1006,11 +1238,18 @@ export function PlatformFlowModal({
     drillAnchor?.supplier_id ?? null,
     !!drillAnchor,
   );
+  const PLATFORM_FLOW_EXPLAINER =
+    "How this case was answered, end to end. Your query matched a " +
+    "scenario (the recipe), which asked specific ontology classes for " +
+    "facts, which were resolved through these data sources, leading to " +
+    "the outcome. Click the Scenario node to see its full recipe; click " +
+    "any class to see what it represents.";
   if (!active) {
     return (
       <GraphModal
         title="Platform flow"
         subtitle="Open a case to see how the platform answered the query."
+        explainer={PLATFORM_FLOW_EXPLAINER}
         elements={[]}
         defaultLayout="dagre"
         onClose={onClose}
@@ -1024,6 +1263,7 @@ export function PlatformFlowModal({
       <GraphModal
         title="Platform flow"
         subtitle={`How the platform answered: "${truncate(promptOneLine, 90)}"`}
+        explainer={PLATFORM_FLOW_EXPLAINER}
         elements={elements}
         defaultLayout="dagre"
         onClose={onClose}
@@ -1035,6 +1275,11 @@ export function PlatformFlowModal({
         <GraphModal
           title="Knowledge graph"
           subtitle={`${drillAnchor.supplier_id} · ${drillAnchor.supplierName}`}
+          explainer={
+            "The corporate ownership + supplier network around the case " +
+            "subject, pulled live from Neo4j. Click any node to see what " +
+            "ontology class it represents."
+          }
           rawNodes={drillData?.nodes}
           rawEdges={drillData?.edges}
           defaultLayout="dagre"

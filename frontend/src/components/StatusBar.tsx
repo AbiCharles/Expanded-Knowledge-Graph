@@ -10,9 +10,10 @@ interface Props {
   onOpenScenariosHelp: () => void;
   onOpenMetrics: () => void;
   onOpenPlatformFlow: () => void;
+  onOpenCaseSpec: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenPlatformFlow }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenPlatformFlow, onOpenCaseSpec }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -67,6 +68,14 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
           disabled={!active}
         >
           How it works
+        </button>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onOpenCaseSpec}
+          title="The scenario + ontology spec that drove this case"
+          disabled={!active}
+        >
+          Case spec
         </button>
         <button
           className="statusbar-action statusbar-action-quiet"

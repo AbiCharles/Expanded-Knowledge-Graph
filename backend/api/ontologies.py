@@ -105,6 +105,7 @@ def list_classes(ontology_id: str, request: Request):
         {
             "name": name,
             "description": cls.description,
+            "plain_description": cls.plain_description,
             "attributes": [a.model_dump(mode="json") for a in cls.attributes],
             "relations": [r.model_dump(mode="json") for r in cls.relations],
             "identifier_attribute": (

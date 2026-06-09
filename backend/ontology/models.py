@@ -42,6 +42,11 @@ class OntologyClass(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     description: Optional[str] = None
+    # Plain-English summary surfaced in the reviewer-facing Case-spec
+    # modal + the graph side-legend. Falls back to `description` (which
+    # is typically engineering-detailed) when absent. Optional so the
+    # schema stays back-compatible with classes that don't supply one.
+    plain_description: Optional[str] = None
     attributes: list[Attribute] = Field(default_factory=list)
     relations: list[Relation] = Field(default_factory=list)
 

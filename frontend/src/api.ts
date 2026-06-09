@@ -288,6 +288,16 @@ export async function getScenario(scenarioId: string): Promise<any> {
   );
 }
 
+// Full parsed scenario dict (stages, ontology_queries, outcomes,
+// closing_messages, rationale_reasons, …) — used by the read-only
+// Case-spec modal. The non-?full=1 endpoint returns only the editable
+// subset the editor modal needs.
+export async function getScenarioFull(scenarioId: string): Promise<any> {
+  return jsonOrThrow(
+    await authedFetch(`/api/scenarios/${scenarioId}?full=1`)
+  );
+}
+
 export interface MetricsSummary {
   scope: string;
   totals: { all_cases: number; complete: number; in_progress: number };

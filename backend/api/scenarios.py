@@ -332,12 +332,27 @@ class EditScenarioIn(BaseModel):
 
 
 @router.get("/scenarios/{scenario_id}")
-def get_scenario(scenario_id: str, request: Request) -> dict:
-    """Return the editable subset of a scenario for the editor modal."""
+def get_scenario(scenario_id: str, request: Request, full: int = 0) -> dict:
+    """Return scenario details.
+
+    Default response is the editable subset the editor modal needs. Pass
+    `?full=1` to get the full parsed scenario dict — used by the
+    read-only Case-spec modal which renders stages, ontology_queries,
+    outcomes, closing_messages, etc.
+    """
     state = request.app.state.app_state
     sc = state.scenarios.get(scenario_id)
     if sc is None:
         raise HTTPException(status_code=404, detail="scenario not found")
+    if full:
+        # Return the in-memory scenario dict verbatim. ScenarioRegistry
+        # holds it as plain dicts loaded from YAML, so this is safe to
+        # JSON-serialise. Adds the same is_builtin convenience flag
+        # so the frontend can hide admin-only chrome (Edit link).
+        return {
+            **sc,
+            "is_builtin": not (sc["id"].startswith("SC-CUSTOM-") or sc["id"].startswith("SC-AUTO-")),
+        }
     return {
         "id": sc["id"],
         "title": sc["title"],

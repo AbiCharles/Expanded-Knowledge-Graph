@@ -10,6 +10,10 @@ default: false
 classes:
   Supplier:
     description: Vendor or producer of goods.
+    plain_description: >-
+      A company you buy from. Suppliers can own each other (parent /
+      subsidiary), partner via joint ventures, sit under a holding
+      company, and ship through preferred carriers.
     attributes:
     - name: supplier_id
       type: string
@@ -39,6 +43,9 @@ classes:
       description: null
   PurchaseOrder:
     description: A confirmed order placed with a supplier.
+    plain_description: >-
+      A specific order you placed with a supplier — what was bought,
+      for how much, and on what date.
     attributes:
     - name: po_id
       type: string
@@ -63,6 +70,10 @@ classes:
       description: null
   Product:
     description: A SKU sold to customers.
+    plain_description: >-
+      A finished product you sell or assemble (an SKU). Each product
+      can be sourced from many suppliers, and tracing those layers is
+      what the multi-tier visibility scenario does.
     attributes:
     - name: product_id
       type: string
@@ -84,6 +95,11 @@ classes:
     description: A node listed on an OFAC SDN (or equivalent) program. Lives
       in Neo4j as a target the agent fans out FROM when a fresh listing
       drops, and as a target the agent walks TO when vetting a supplier.
+    plain_description: >-
+      An entity on the OFAC sanctions list (Specially Designated
+      Nationals or equivalent). The agent treats these as red flags:
+      it checks whether new or existing suppliers are connected to
+      one, even indirectly through a parent company or holding.
     attributes:
     - {name: entity_id, type: string, identifier: true}
     - {name: name, type: string}
@@ -96,6 +112,12 @@ classes:
       shortest path from the queried Supplier to a SanctionedNetworkEntity
       within N hops. Surfaces the indirect-ownership trail flat tables miss
       (e.g. "Hemlock → Apex Metalworks → Apex Holdings → Shengli Shell").
+    plain_description: >-
+      How close a supplier sits to a sanctioned entity. The agent
+      walks the corporate ownership graph and reports every sanctioned
+      party reachable within a few hops, plus the chain of companies
+      that connect them. This catches the indirect risk a name-only
+      sanctions check would miss.
     attributes:
     - {name: entity_id, type: string, identifier: true}
     - {name: name, type: string}
@@ -108,6 +130,12 @@ classes:
       via, the other carriers that share its alliance — used to surface
       concentration risk during onboarding (the supplier may "use multiple
       carriers" but they're all in the same alliance).
+    plain_description: >-
+      The "other carriers in the same alliance" as the ones a supplier
+      already ships through. Useful for spotting concentration risk —
+      a supplier may look diversified across carriers, but if all of
+      them belong to one shipping alliance, a single disruption hits
+      every lane.
     attributes:
     - {name: peer_carrier_id, type: string, identifier: true}
     - {name: peer_name, type: string}
@@ -120,6 +148,12 @@ classes:
       placed the PO; tier 2+ are reached by following SOURCES_FROM edges
       upstream. Surfaces deep-supply-chain dependencies (raw materials,
       sub-assemblies) that PO/CSV tables miss.
+    plain_description: >-
+      A supplier somewhere up your supply chain for a given product.
+      "Tier 1" is the supplier you buy from directly; "Tier 2" is who
+      THEY buy from; "Tier 3" is the layer beneath that. Knowing your
+      tier-3 suppliers is how you find single-points-of-failure that
+      a PO list can't show.
     attributes:
     - {name: tier_supplier_id, type: string, identifier: true}
     - {name: tier_supplier_name, type: string}
@@ -135,6 +169,13 @@ classes:
       parent Supplier, (c) direct joint-venture partners. One row per
       candidate, with the relationship reasons combined and the shortest
       path distance.
+    plain_description: >-
+      A drop-in replacement when a supplier becomes unavailable (a
+      sanctions hit, a failure, a price spike). The agent looks for
+      candidates in three places: other suppliers owned by the same
+      holding company, "siblings" sharing a parent supplier, and the
+      blocked supplier's existing joint-venture partners — ranked by
+      reliability.
     attributes:
     - {name: alt_supplier_id, type: string, identifier: true}
     - {name: alt_name, type: string}
@@ -148,6 +189,12 @@ classes:
       every HoldingCompany reached via CONTROLLED_BY. Used to answer
       "who ultimately owns SUP-XXX?" by surfacing the full UBO trail with
       hop distance and the control-percentage chain.
+    plain_description: >-
+      Who actually owns this supplier, all the way up. The agent walks
+      the parent / holding chain step by step and reports the
+      controlling shareholders at each level — answering the auditor's
+      "who really owns SUP-XXX?" with the percentages and the path,
+      not just the name on the invoice.
     attributes:
     - {name: owner_id, type: string, identifier: true}
     - {name: owner_name, type: string}
@@ -162,6 +209,12 @@ classes:
       those Suppliers ship via. Surfaces second-order risk that flat tables
       can't see — "this carrier itself isn't sanctioned, but its biggest
       customer is a supplier whose parent owns 22% of the new SDN."
+    plain_description: >-
+      Which carriers are at risk when a new entity is sanctioned. The
+      carrier itself isn't sanctioned, but if one of its biggest
+      customers is a supplier connected to the new SDN, the carrier
+      becomes exposed. The agent flags those carriers so compliance
+      can decide whether to quarantine.
     attributes:
     - {name: carrier_id, type: string, identifier: true}
     - {name: name, type: string}

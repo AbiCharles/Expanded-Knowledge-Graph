@@ -8,6 +8,10 @@ default: true
 classes:
   Product:
     description: Sales item / SKU sold to customers.
+    plain_description: >-
+      A finished product you sell. The demo uses this to look up a
+      sample of products the supplier could supply, as context for
+      the reviewer.
     attributes:
     - {name: product_id, type: string, identifier: true}
     - {name: name, type: string}
@@ -17,6 +21,10 @@ classes:
     - {name: category, type: string}
   SanctionedEntity:
     description: A counterparty appearing on a sanctions list (OFAC SDN-style).
+    plain_description: >-
+      An entity flagged on a sanctions list (OFAC SDN or equivalent).
+      Used to cross-check whether anyone in this case appears on a
+      list — direct name matches, not the graph traversal version.
     attributes:
     - {name: ent_id, type: string, identifier: true}
     - {name: name, type: string}
@@ -24,6 +32,11 @@ classes:
     - {name: country, type: string}
   PriorOverride:
     description: A historical reviewer decision on a similar case.
+    plain_description: >-
+      A past decision a reviewer made on a similar case, with their
+      rationale. The agent surfaces these so today's reviewer can see
+      how comparable situations were handled before — useful precedent
+      without forcing consistency.
     attributes:
     - {name: case_id, type: string, identifier: true}
     - {name: scenario_id, type: string}
@@ -31,6 +44,11 @@ classes:
     - {name: rationale, type: string}
   PolicyExcerpt:
     description: A semantic-search hit against the policy/SOP corpus.
+    plain_description: >-
+      A relevant passage from your internal policy + SOP library,
+      found by semantic search. The agent pulls these so the reviewer
+      can see exactly which company policy applies to the decision in
+      front of them.
     attributes:
     - {name: id, type: string, identifier: true}
     - {name: title, type: string}

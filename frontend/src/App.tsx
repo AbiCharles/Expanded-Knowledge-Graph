@@ -5,6 +5,7 @@ import { Console } from "./components/Console";
 import { LoginScreen } from "./components/LoginScreen";
 import { FlowStage } from "./components/FlowStage";
 import { PlatformFlowModal } from "./components/GraphViz";
+import { CaseSpecModal } from "./components/CaseSpecModal";
 import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { MetricsDashboard } from "./components/MetricsDashboard";
@@ -32,7 +33,8 @@ type ModalState =
   | { kind: "scenarios-help" }
   | { kind: "edit-scenario"; scenarioId: string }
   | { kind: "metrics" }
-  | { kind: "platform-flow" };
+  | { kind: "platform-flow" }
+  | { kind: "case-spec"; tab?: "scenario" | "ontology"; anchor?: string };
 
 export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioRow[]>([]);
@@ -90,6 +92,18 @@ export default function App() {
   useEffect(() => {
     api.listScenarios().then(setScenarios).catch(console.error);
     refreshCases();
+  }, []);
+
+  // The graph-modal side-legend ⓘ buttons and the platform-flow
+  // Scenario-node tap both dispatch this window event so they can pop
+  // the Case-spec modal without threading a callback through Cytoscape.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      setModal({ kind: "case-spec", tab: detail.tab, anchor: detail.anchor });
+    };
+    window.addEventListener("open-case-spec", handler as EventListener);
+    return () => window.removeEventListener("open-case-spec", handler as EventListener);
   }, []);
 
   // The "Field reference →" link inside the Save form (which is two modals
@@ -290,6 +304,7 @@ export default function App() {
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
         onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
+        onOpenCaseSpec={() => setModal({ kind: "case-spec" })}
       />
       <div className="main">
         <Console
@@ -352,6 +367,14 @@ export default function App() {
       )}
       {modal.kind === "platform-flow" && (
         <PlatformFlowModal active={active} onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "case-spec" && active && (
+        <CaseSpecModal
+          active={active}
+          initialTab={modal.tab}
+          initialAnchor={modal.anchor}
+          onClose={() => setModal({ kind: "none" })}
+        />
       )}
     </>
   );
