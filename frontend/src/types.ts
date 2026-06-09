@@ -15,6 +15,10 @@ export interface ScenarioRow {
   title: string;
   domain: string;
   autonomous: boolean;
+  // Immutable version number this scenario is currently at. Bumped on
+  // every edit; the case-spec modal renders historic snapshots via
+  // `?version=N`. Null on the rare in-memory-only scenarios.
+  version?: number | null;
   suggested_prompt: string;
   // Unix-seconds freshness; backend sorts newest-first. Optional because
   // older API responses may not have it.
@@ -96,6 +100,12 @@ export interface CaseSummary {
   case_id: string;
   prompt: string;
   scenario_id: string | null;
+  // The immutable scenario version this case ran against (or null for
+  // cases created before the versioning migration ran). The Case-spec
+  // modal uses this to fetch the historical version snapshot rather
+  // than the live scenario, so reviewers see exactly what the agent
+  // executed.
+  scenario_version?: number | null;
   phase: Phase;
   decision_kind: string | null;
   interpreted_as: string | null;

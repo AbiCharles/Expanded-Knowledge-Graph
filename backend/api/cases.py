@@ -83,10 +83,21 @@ async def create_case(
     # phase: we keep "awaiting_clarification" as long as we have at least one
     # candidate to suggest — the UI shows top-K buttons when confidence is low.
     has_candidates = bool(interpreted.scenario_id) or bool(candidates_payload)
+    # Pin the case to the live scenario's current version so a later
+    # edit (which bumps the scenario to v+1) doesn't retroactively
+    # change what this case ran against. Null when the binder later
+    # picks a scenario via clarification — the relink path stamps it
+    # then. See _relink_case() below.
+    scenario_version = None
+    if interpreted.scenario_id:
+        sc = state.scenarios.get(interpreted.scenario_id)
+        if sc and isinstance(sc.get("version"), int):
+            scenario_version = sc["version"]
     record = CaseRecord(
         case_id=case_id,
         prompt=payload.prompt,
         scenario_id=interpreted.scenario_id,
+        scenario_version=scenario_version,
         interpreted_as=interpreted.interpreted_as,
         clarifying_question=interpreted.clarifying_question,
         user_id=user.id,
@@ -148,6 +159,7 @@ async def relink_case(
     if sc is None:
         raise HTTPException(status_code=404, detail="unknown scenario_id")
     case.scenario_id = sc["id"]
+    case.scenario_version = sc.get("version") if isinstance(sc.get("version"), int) else None
     case.interpreted_as = sc.get("interpreted_as", "")
     case.clarifying_question = sc.get("clarifying_question", "")
     state.cases.save(case)
@@ -244,10 +256,19 @@ async def replay_case(
         raise HTTPException(status_code=400, detail="invalid decision")
 
     new_id = f"case-{uuid.uuid4().hex[:10]}"
+    # Replays run against the LIVE scenario version (not the original
+    # case's version), so a replay can exercise the post-edit behaviour.
+    # Operators who want to re-run on the exact prior version should
+    # rollback the scenario first.
+    sc_live = state.scenarios.get(original.scenario_id)
+    replay_version = (
+        sc_live.get("version") if sc_live and isinstance(sc_live.get("version"), int) else None
+    )
     new_case = CaseRecord(
         case_id=new_id,
         prompt=original.prompt,
         scenario_id=original.scenario_id,
+        scenario_version=replay_version,
         interpreted_as=original.interpreted_as,
         clarifying_question=None,
         user_id=user.id,
@@ -344,6 +365,7 @@ def _case_summary(c: CaseRecord) -> dict:
         "case_id": c.case_id,
         "prompt": c.prompt,
         "scenario_id": c.scenario_id,
+        "scenario_version": c.scenario_version,
         "phase": c.phase,
         "decision_kind": c.decision_kind,
         "interpreted_as": c.interpreted_as,

@@ -4909,6 +4909,138 @@ details[open] > .suggested-summary .suggested-chevron {
 * { scrollbar-width: auto; scrollbar-color: rgba(11,23,51,0.35) rgba(11,23,51,0.05); }
 .lineage-feed { scrollbar-color: rgba(244,241,234,0.4) rgba(244,241,234,0.04); }
 
+/* Scenario versioning UI — pill on Case-spec header, versions modal,
+   "saves as v{N+1}" hint in the Scenario-edit modal. */
+.scenario-edit-versioning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 4px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  border-top: 1px dotted var(--rule);
+  margin-top: 8px;
+}
+.scenario-edit-version-now {
+  font-family: 'DM Mono', monospace;
+}
+.scenario-edit-version-now strong {
+  color: #5b21b6;
+  background: #ede9fe;
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid #c4b5fd;
+}
+.scenario-edit-versions-link {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #4f46e5;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+.scenario-edit-versions-link:hover {
+  background: #eef2ff;
+}
+
+/* Versions modal — sits ABOVE the edit modal (which is itself above the
+   knowledge modal); z-index higher than .modal-backdrop's 100. */
+.modal-backdrop.scenario-versions-backdrop { z-index: 250; }
+.scenario-versions-modal { max-height: 88vh; display: flex; flex-direction: column; }
+.scenario-versions-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  padding: 16px 22px 22px;
+  min-height: 0;
+}
+.scenario-versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.scenario-versions-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: baseline;
+  text-align: left;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.scenario-versions-row:hover {
+  border-color: #4f46e5;
+  background: #f5f3ff;
+}
+.scenario-versions-row.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+.scenario-versions-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5b21b6;
+}
+.scenario-versions-title {
+  font-size: 13px;
+  color: var(--ink);
+}
+.scenario-versions-when {
+  grid-column: 2 / 3;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+.scenario-versions-detail {
+  background: #f8fafc;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: auto;
+  padding: 10px 12px;
+}
+.scenario-versions-hint {
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.scenario-versions-yaml {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* "Ran against v3" pill shown next to the scenario id in the Case-spec
+   modal header. Visible only when the case has a recorded scenario
+   version (cases pre-versioning omit it). */
+.case-spec-version-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ---------- Case-spec modal ---------- */
 /* Sits ABOVE the graph-modal-backdrop (z-index 300) so the "Open full
    spec ⤢" button — which can be clicked from inside the graph modal's

@@ -600,6 +600,33 @@ The chip's edit modal does **not** offer a Remove button for built-ins — to
 delete one, remove its YAML file and restart uvicorn. This is intentional:
 built-ins represent the canonical, version-controlled scenario catalogue.
 
+#### Versioning (Phase 1, shipped)
+
+Every edit through the API or the in-app modal creates a new immutable
+version. The previous content survives forever as `_versions/<id>/v<N>.yaml`;
+the live `<id>.yaml` is then rewritten to match the new state with `version: N+1`
+stamped on it. Every case records the scenario version it ran against at
+creation, so a case opened after a later edit still renders the historical
+snapshot rather than the live spec.
+
+- **Edit modal** shows `Currently v3 · Saving creates v4` plus a
+  `Version history →` link.
+- **Versions modal** lists every saved version with timestamp + title;
+  click a row to read the full content.
+- **Case-spec modal** shows a `Ran against v3` pill on cases with a
+  pinned version.
+
+API surface:
+
+```
+GET  /api/scenarios/{id}?version=N    → historical snapshot (full content)
+GET  /api/scenarios/{id}/versions     → list every saved version
+PATCH /api/scenarios/{id}             → returns the new {version: N+1}
+```
+
+See [scenario-versioning.md](scenario-versioning.md) for the full design
+note, registry API, migration semantics, and verification steps.
+
 ### Auto-scenarios — `SC-AUTO-<source_id>`
 
 Created automatically by [`backend/auto_scenario.py`](../backend/auto_scenario.py)

@@ -23,8 +23,14 @@ class CaseRecord:
     case_id: str
     prompt: str
     scenario_id: Optional[str]
-    interpreted_as: Optional[str]
-    clarifying_question: Optional[str]
+    # The immutable scenario version this case ran against. Stamped at
+    # case-creation time from the live scenario's `version` field, so a
+    # later edit (which would bump to v+1) doesn't retroactively change
+    # what this case was tested under. Null for cases created before the
+    # versioning migration shipped.
+    scenario_version: Optional[int] = None
+    interpreted_as: Optional[str] = None
+    clarifying_question: Optional[str] = None
     user_id: Optional[int] = None  # owner; None for legacy cases pre-auth
     confidence: float = 0.0
     candidates: list[dict] = field(default_factory=list)  # [{scenario_id, title, confidence}]

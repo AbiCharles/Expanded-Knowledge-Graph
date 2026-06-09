@@ -291,10 +291,33 @@ export async function getScenario(scenarioId: string): Promise<any> {
 // Full parsed scenario dict (stages, ontology_queries, outcomes,
 // closing_messages, rationale_reasons, …) — used by the read-only
 // Case-spec modal. The non-?full=1 endpoint returns only the editable
-// subset the editor modal needs.
-export async function getScenarioFull(scenarioId: string): Promise<any> {
+// subset the editor modal needs. Pass `version` to fetch a specific
+// historical snapshot (always full content).
+export async function getScenarioFull(
+  scenarioId: string,
+  opts: { version?: number } = {},
+): Promise<any> {
+  const qs = opts.version != null
+    ? `?version=${opts.version}`
+    : `?full=1`;
   return jsonOrThrow(
-    await authedFetch(`/api/scenarios/${scenarioId}?full=1`)
+    await authedFetch(`/api/scenarios/${scenarioId}${qs}`)
+  );
+}
+
+export interface ScenarioVersionRow {
+  version: number;
+  saved_at: number | null;  // unix seconds
+  title: string;
+}
+
+// Every saved version of a scenario, newest-first. Used by
+// ScenarioVersionsModal to render the history list.
+export async function listScenarioVersions(
+  scenarioId: string,
+): Promise<ScenarioVersionRow[]> {
+  return jsonOrThrow(
+    await authedFetch(`/api/scenarios/${scenarioId}/versions`)
   );
 }
 

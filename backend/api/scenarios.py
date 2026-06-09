@@ -332,15 +332,33 @@ class EditScenarioIn(BaseModel):
 
 
 @router.get("/scenarios/{scenario_id}")
-def get_scenario(scenario_id: str, request: Request, full: int = 0) -> dict:
+def get_scenario(
+    scenario_id: str, request: Request, full: int = 0, version: Optional[int] = None,
+) -> dict:
     """Return scenario details.
 
     Default response is the editable subset the editor modal needs. Pass
     `?full=1` to get the full parsed scenario dict — used by the
     read-only Case-spec modal which renders stages, ontology_queries,
     outcomes, closing_messages, etc.
+
+    Pass `?version=N` to fetch a specific historical version (always full
+    content, regardless of `full=`). Used by the Case-spec modal so a
+    case opened after the scenario was edited still renders the version
+    the case actually ran against.
     """
     state = request.app.state.app_state
+    if version is not None:
+        sc = state.scenarios.read_version(scenario_id, version)
+        if sc is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"scenario {scenario_id!r} has no version {version}",
+            )
+        return {
+            **sc,
+            "is_builtin": not (scenario_id.startswith("SC-CUSTOM-") or scenario_id.startswith("SC-AUTO-")),
+        }
     sc = state.scenarios.get(scenario_id)
     if sc is None:
         raise HTTPException(status_code=404, detail="scenario not found")
@@ -358,6 +376,7 @@ def get_scenario(scenario_id: str, request: Request, full: int = 0) -> dict:
         "title": sc["title"],
         "domain": sc.get("domain", ""),
         "autonomous": bool(sc.get("autonomous")),
+        "version": sc.get("version"),
         "match_keywords": sc.get("match_keywords", []),
         "interpreted_as": sc.get("interpreted_as", ""),
         "clarifying_question": sc.get("clarifying_question", ""),
@@ -367,6 +386,29 @@ def get_scenario(scenario_id: str, request: Request, full: int = 0) -> dict:
         "action_type": sc.get("action_type", ""),
         "is_builtin": not (sc["id"].startswith("SC-CUSTOM-") or sc["id"].startswith("SC-AUTO-")),
     }
+
+
+@router.get("/scenarios/{scenario_id}/versions")
+def list_scenario_versions(scenario_id: str, request: Request) -> list[dict]:
+    """List every saved version for a scenario, newest-first.
+
+    Each entry includes the version number, when the snapshot was saved
+    (unix seconds), and the title at that version so the UI can render
+    `v3 · Supplier onboarding — multi-source review`.
+    """
+    state = request.app.state.app_state
+    if state.scenarios.get(scenario_id) is None:
+        raise HTTPException(status_code=404, detail="scenario not found")
+    out: list[dict] = []
+    for v in state.scenarios.versions_of(scenario_id):
+        snap = state.scenarios.read_version(scenario_id, v) or {}
+        out.append({
+            "version": v,
+            "saved_at": state.scenarios.saved_at_for_version(scenario_id, v),
+            "title": snap.get("title", ""),
+        })
+    out.sort(key=lambda r: r["version"], reverse=True)
+    return out
 
 
 @router.patch("/scenarios/{scenario_id}")
@@ -391,9 +433,14 @@ def edit_scenario(scenario_id: str, payload: EditScenarioIn, request: Request) -
     if payload.description is not None:
         sc["description"] = payload.description
 
-    # Persist via the registry's save path
+    # Persist via the registry's save path — bumps version + writes an
+    # immutable snapshot first, then overwrites the live YAML.
     state.scenarios.register(sc, persist=True)
-    return {"scenario_id": scenario_id, "updated": True}
+    return {
+        "scenario_id": scenario_id,
+        "updated": True,
+        "version": sc.get("version"),
+    }
 
 
 @router.delete("/scenarios/{scenario_id}")

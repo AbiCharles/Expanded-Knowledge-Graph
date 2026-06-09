@@ -8,12 +8,14 @@
  */
 import { useEffect, useState } from "react";
 import * as api from "../api";
+import { ScenarioVersionsModal } from "./ScenarioVersionsModal";
 
 interface ScenarioDetail {
   id: string;
   title: string;
   domain: string;
   autonomous: boolean;
+  version?: number | null;
   match_keywords: string[];
   interpreted_as: string;
   clarifying_question: string;
@@ -54,17 +56,26 @@ export function ScenarioEditModal({
       .catch((e) => setError((e as Error).message));
   }, [scenarioId]);
 
+  const [showVersions, setShowVersions] = useState(false);
+
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
-      await api.editScenario(scenarioId, {
+      const res = await api.editScenario(scenarioId, {
         title: title.trim(),
         match_keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean),
         clarifying_question: clarifier,
         interpreted_as: interpreted,
         suggested_prompt: prompt.trim(),
       });
+      // Light-touch confirmation — surface the new version number so the
+      // operator can verify a snapshot was written.
+      const newVersion = (res as any)?.version;
+      if (typeof newVersion === "number") {
+        // eslint-disable-next-line no-alert
+        alert(`Saved as v${newVersion}. The prior content is preserved as v${newVersion - 1}.`);
+      }
       onSaved();
       onClose();
     } catch (e) {
@@ -153,6 +164,20 @@ export function ScenarioEditModal({
               changing them mid-flight risks breaking running cases. Hand-edit the YAML
               and restart uvicorn for those.
             </div>
+            <div className="scenario-edit-versioning">
+              {detail.version != null && (
+                <span className="scenario-edit-version-now">
+                  Currently <strong>v{detail.version}</strong> · Saving creates v{detail.version + 1}
+                </span>
+              )}
+              <button
+                type="button"
+                className="scenario-edit-versions-link"
+                onClick={() => setShowVersions(true)}
+              >
+                Version history →
+              </button>
+            </div>
 
             <div className="scenario-edit-actions">
               {isRemovable ? (
@@ -181,6 +206,12 @@ export function ScenarioEditModal({
           </div>
         )}
       </div>
+      {showVersions && (
+        <ScenarioVersionsModal
+          scenarioId={scenarioId}
+          onClose={() => setShowVersions(false)}
+        />
+      )}
     </div>
   );
 }

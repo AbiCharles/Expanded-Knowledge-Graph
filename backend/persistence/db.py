@@ -39,6 +39,9 @@ class CaseRow(Base):
 
     case_id = Column(String, primary_key=True)
     scenario_id = Column(String, nullable=True, index=True)
+    # Immutable scenario version this case was created against. Null for
+    # cases created before the versioning migration ran.
+    scenario_version = Column(Integer, nullable=True)
     phase = Column(String, nullable=False, index=True)
     decision_kind = Column(String, nullable=True, index=True)
     prompt = Column(Text, nullable=False)
@@ -125,6 +128,7 @@ class Database:
             "ALTER TABLE cases ADD COLUMN user_id INTEGER",
             "ALTER TABLE cases ADD COLUMN framework_case_id TEXT",
             "CREATE INDEX IF NOT EXISTS idx_cases_framework_case_id ON cases(framework_case_id)",
+            "ALTER TABLE cases ADD COLUMN scenario_version INTEGER",
         ]:
             with self._engine.connect() as conn:
                 try:

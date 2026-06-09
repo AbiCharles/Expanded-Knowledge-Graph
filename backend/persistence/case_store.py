@@ -34,6 +34,7 @@ def _record_to_payload(rec: CaseRecord) -> dict:
         "case_id": rec.case_id,
         "prompt": rec.prompt,
         "scenario_id": rec.scenario_id,
+        "scenario_version": rec.scenario_version,
         "interpreted_as": rec.interpreted_as,
         "clarifying_question": rec.clarifying_question,
         "user_id": rec.user_id,
@@ -56,6 +57,7 @@ def _payload_to_record(payload: dict) -> CaseRecord:
         case_id=payload["case_id"],
         prompt=payload.get("prompt", ""),
         scenario_id=payload.get("scenario_id"),
+        scenario_version=payload.get("scenario_version"),
         interpreted_as=payload.get("interpreted_as"),
         clarifying_question=payload.get("clarifying_question"),
         user_id=payload.get("user_id"),
@@ -105,6 +107,7 @@ class PersistentCaseStore:
             stmt = sqlite_insert(CaseRow.__table__).values(
                 case_id=rec.case_id,
                 scenario_id=rec.scenario_id,
+                scenario_version=rec.scenario_version,
                 phase=rec.phase,
                 decision_kind=rec.decision_kind,
                 prompt=rec.prompt,
@@ -116,6 +119,7 @@ class PersistentCaseStore:
                 index_elements=[CaseRow.case_id],
                 set_={
                     "scenario_id": rec.scenario_id,
+                    "scenario_version": rec.scenario_version,
                     "phase": rec.phase,
                     "decision_kind": rec.decision_kind,
                     "prompt": rec.prompt,

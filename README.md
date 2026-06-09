@@ -90,6 +90,10 @@ isn't your own laptop.
 - **Save as scenario** — turn an iterated query into a runnable agent
   scenario, with optional LLM-suggested keywords / clarifier / prompt
 - **Edit existing scenarios** in-app (titles, keywords, clarifier text);
+  every save creates a new immutable version (`_versions/<id>/vN.yaml`)
+  and the live YAML is bumped to that version. Every case records the
+  exact scenario version it ran against; the Case-spec modal renders
+  that historical snapshot. See [docs/scenario-versioning.md](docs/scenario-versioning.md).
   Remove for auto- and custom-scenarios
 - **One-click lookup chip per ontology class** — register a source, map
   it to ontology classes via the Knowledge tile, click "Generate lookup

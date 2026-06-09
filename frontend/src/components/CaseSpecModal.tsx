@@ -32,12 +32,18 @@ export function CaseSpecModal({
   useEffect(() => {
     if (!active.scenario_id) return;
     let cancelled = false;
+    // Pin to the case's recorded version when present, so a later edit
+    // to the live scenario doesn't change what we render here. Falls
+    // back to the live full spec for cases created before versioning.
+    const opts = active.scenario_version != null
+      ? { version: active.scenario_version }
+      : {};
     api
-      .getScenarioFull(active.scenario_id)
+      .getScenarioFull(active.scenario_id, opts)
       .then((d) => { if (!cancelled) setFull(d); })
       .catch((e) => { if (!cancelled) setError((e as Error).message); });
     return () => { cancelled = true; };
-  }, [active.scenario_id]);
+  }, [active.scenario_id, active.scenario_version]);
 
   // Esc closes the modal.
   useEffect(() => {
@@ -72,7 +78,14 @@ export function CaseSpecModal({
       <div className="ds-modal case-spec-modal" style={{ maxWidth: 980, width: "92vw" }}>
         <div className="ds-header">
           <div>
-            <div className="ds-eyebrow">Case spec · {active.scenario_id}</div>
+            <div className="ds-eyebrow">
+              Case spec · {active.scenario_id}
+              {active.scenario_version != null && (
+                <span className="case-spec-version-pill">
+                  Ran against v{active.scenario_version}
+                </span>
+              )}
+            </div>
             <div className="ds-title">{title}</div>
           </div>
           <button className="teams-close" onClick={onClose}>×</button>
