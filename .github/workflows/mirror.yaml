@@ -53,4 +53,13 @@ jobs:
           # until tracked content actually changes. Note: Azure SHAs
           # will not match GitHub SHAs as a result.
           git filter-repo --invert-paths --path .claude --force
-          git push --mirror "https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
+          # Push branches + tags WITHOUT delete-ops. `--mirror` would
+          # try to delete any branch present on Azure but absent on
+          # GitHub (e.g. the Azure-only `Development` branch), which
+          # branch policies block. The explicit refspecs below sync
+          # every GitHub branch/tag onto Azure but leave Azure-only
+          # refs untouched. Leading `+` is force (we rewrote history).
+          AZURE_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
+          git push "${AZURE_URL}" \
+            '+refs/heads/*:refs/heads/*' \
+            '+refs/tags/*:refs/tags/*'
