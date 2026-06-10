@@ -16,7 +16,10 @@ Versioning (Phase 1 of the "compounding" roadmap):
 """
 from __future__ import annotations
 
+import logging
 import re
+import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -24,10 +27,17 @@ from typing import Any, Optional
 import yaml
 
 
+logger = logging.getLogger(__name__)
+
+
 # Sub-directory under the scenarios dir holding immutable per-version
 # snapshots. Leading underscore keeps it out of `glob("*.yaml")` scans.
 VERSIONS_DIRNAME = "_versions"
 _VERSION_FILE_RE = re.compile(r"^v(\d+)\.yaml$")
+# Matches a top-level `version:` declaration at column 0 of any line; used
+# by the migration to detect whether the operator-authored YAML already
+# carries a version field before falling back to safe_dump.
+_TOP_LEVEL_VERSION_RE = re.compile(r"^version\s*:", re.MULTILINE)
 
 
 class ScenarioSchemaError(RuntimeError):
@@ -54,7 +64,7 @@ def _validate_no_legacy_queries(scenario_id: str, data: dict[str, Any]) -> None:
             f"stage(s) {offending}. Migrate to `ontology_queries:` (see "
             "docs/ontology.md). Each `queries:` entry maps to one "
             "`ontology_queries:` entry by replacing `data_source` + "
-            "`ontology_type` + `filter` with `ontology` + `class` + `version`."
+            "`ontology_type` + `filter` with `ontology` + `class` + `where`."
         )
 
 
@@ -73,6 +83,11 @@ class ScenarioRegistry:
         # mtime; updated on register/persist; falls back to current time for
         # in-memory-only entries.
         self._mtimes: dict[str, float] = {}
+        # Serialises register/unregister so two concurrent PATCH requests
+        # can't both compute the same next_version and overwrite each
+        # other's snapshot. RLock so a future unregister→register nested
+        # call won't deadlock.
+        self._lock = threading.RLock()
 
     # -------------------------------------------------------------------------
     # Loading + migration
@@ -81,8 +96,8 @@ class ScenarioRegistry:
     def from_directory(cls, directory: Path) -> "ScenarioRegistry":
         reg = cls({}, directory=directory)
         for path in sorted(directory.glob("*.yaml")):
-            with path.open(encoding="utf-8") as fh:
-                data = yaml.safe_load(fh)
+            raw_text = path.read_text(encoding="utf-8")
+            data = yaml.safe_load(raw_text)
             if not isinstance(data, dict) or "id" not in data:
                 raise RuntimeError(f"Scenario {path} is missing top-level `id`")
             _validate_no_legacy_queries(data["id"], data)
@@ -91,31 +106,86 @@ class ScenarioRegistry:
             # have versioning yet. Idempotent: a scenario that already
             # carries `version: N` and has the matching snapshot is left
             # alone; only the missing snapshot file (if any) is healed.
-            reg._migrate_to_versioned(path, data)
+            # Also detects + heals crash-window orphans (snapshot ahead
+            # of live).
+            reg._migrate_to_versioned(path, data, raw_text)
             reg._scenarios[data["id"]] = data
             reg._mtimes[data["id"]] = path.stat().st_mtime
         return reg
 
-    def _migrate_to_versioned(self, live_path: Path, data: dict[str, Any]) -> None:
-        """Seed a v1 snapshot for un-versioned scenarios (idempotent).
+    def _migrate_to_versioned(
+        self,
+        live_path: Path,
+        data: dict[str, Any],
+        raw_text: str,
+    ) -> None:
+        """Idempotent migration to the versioned layout.
 
-        Mutates `data` to add `version: 1` when missing and rewrites the
-        live YAML so the field sticks.
+        Handles three states:
+          1. Un-versioned live YAML → stamp `version: 1` by appending a
+             top-level field to the raw text (NOT re-serialising via
+             `safe_dump`, which would strip operator-authored comments
+             and reflow block scalars).
+          2. Missing snapshot for the current live version → mirror live
+             raw bytes so the snapshot is byte-identical to the file the
+             operator wrote.
+          3. Snapshot ahead of live (`max(on_disk) > version`) → the
+             previous register() crashed after writing the snapshot but
+             before rewriting the live YAML. Honour the operator's save:
+             promote the latest snapshot back to live.
+
+        Mutates `data` so the caller's reference reflects the healed
+        state.
         """
         if self._directory is None:
             return
         sid = data["id"]
         existing = data.get("version")
+
+        # Case 1 — un-versioned live YAML. Append `version: 1` to the
+        # raw text only if it isn't already present; safe_dump would
+        # destroy comments and block-scalar formatting.
         if not isinstance(existing, int) or existing < 1:
             data["version"] = 1
             existing = 1
-            # Re-serialise the live YAML so the field is persisted.
-            live_path.write_text(_dump_scenario(data), encoding="utf-8")
-        # Ensure the matching snapshot file exists.
+            if not _TOP_LEVEL_VERSION_RE.search(raw_text):
+                if not raw_text.endswith("\n"):
+                    raw_text += "\n"
+                raw_text += "version: 1\n"
+                live_path.write_text(raw_text, encoding="utf-8")
+
+        # Case 3 — heal forward from a crash-window orphan. The
+        # snapshot has the operator's save in it; the live file never
+        # caught up. Promote the snapshot.
+        on_disk = self.versions_of(sid)
+        latest = on_disk[-1] if on_disk else 0
+        if latest > existing:
+            snapshot_path = self._version_path(sid, latest)
+            try:
+                snapshot_text = snapshot_path.read_text(encoding="utf-8")
+                snapshot_data = yaml.safe_load(snapshot_text)
+            except (OSError, yaml.YAMLError):
+                snapshot_data = None
+            if isinstance(snapshot_data, dict) and snapshot_data.get("id") == sid:
+                logger.warning(
+                    "Healing scenario %s forward: live YAML at v%d but "
+                    "snapshot v%d exists (crash-window orphan). Promoting "
+                    "snapshot to live.",
+                    sid, existing, latest,
+                )
+                live_path.write_text(snapshot_text, encoding="utf-8")
+                data.clear()
+                data.update(snapshot_data)
+                raw_text = snapshot_text
+                existing = latest
+
+        # Case 2 — heal a missing snapshot for the current live version
+        # using the raw live bytes (byte-for-byte parity preserves
+        # operator-authored comments + formatting).
         snapshot = self._version_path(sid, existing)
         if not snapshot.exists():
             snapshot.parent.mkdir(parents=True, exist_ok=True)
-            snapshot.write_text(_dump_scenario(data), encoding="utf-8")
+            snapshot.write_text(raw_text, encoding="utf-8")
 
     # -------------------------------------------------------------------------
     # Read API
@@ -219,39 +289,42 @@ class ScenarioRegistry:
             raise ValueError("scenario missing 'id'")
         _validate_no_legacy_queries(sid, scenario)
 
-        if persist and self._directory is not None:
-            # Bump to next version (current live + 1 if known, else
-            # max-on-disk + 1). Either way the resulting number is
-            # strictly greater than any existing snapshot for this id.
-            current = (self._scenarios.get(sid) or {}).get("version")
-            current = current if isinstance(current, int) else 0
-            on_disk = max(self.versions_of(sid) or [0])
-            next_version = max(current, on_disk) + 1
-            scenario["version"] = next_version
+        with self._lock:
+            if persist and self._directory is not None:
+                # Bump to next version (current live + 1 if known, else
+                # max-on-disk + 1). Either way the resulting number is
+                # strictly greater than any existing snapshot for this id.
+                current = (self._scenarios.get(sid) or {}).get("version")
+                current = current if isinstance(current, int) else 0
+                on_disk = max(self.versions_of(sid) or [0])
+                next_version = max(current, on_disk) + 1
+                scenario["version"] = next_version
 
-            # Snapshot first (immutable), then overwrite the live file.
-            snapshot = self._version_path(sid, next_version)
-            snapshot.parent.mkdir(parents=True, exist_ok=True)
-            payload = _dump_scenario(scenario)
-            snapshot.write_text(payload, encoding="utf-8")
-            live = self._directory / f"{sid}.yaml"
-            live.write_text(payload, encoding="utf-8")
-            self._mtimes[sid] = live.stat().st_mtime
-        else:
-            # Ephemeral / no directory backing — keep an in-memory
-            # `version` so consumers don't have to special-case None.
-            scenario.setdefault("version", 1)
-            self._mtimes[sid] = time.time()
+                # Snapshot first (immutable), then overwrite the live file.
+                # The two writes are not atomic together — if the process
+                # dies between them, _migrate_to_versioned heals forward on
+                # next boot using the snapshot.
+                snapshot = self._version_path(sid, next_version)
+                snapshot.parent.mkdir(parents=True, exist_ok=True)
+                payload = _dump_scenario(scenario)
+                snapshot.write_text(payload, encoding="utf-8")
+                live = self._directory / f"{sid}.yaml"
+                live.write_text(payload, encoding="utf-8")
+                self._mtimes[sid] = live.stat().st_mtime
+            else:
+                # Ephemeral / no directory backing — keep an in-memory
+                # `version` so consumers don't have to special-case None.
+                scenario.setdefault("version", 1)
+                self._mtimes[sid] = time.time()
 
-        self._scenarios[sid] = scenario
+            self._scenarios[sid] = scenario
 
     def unregister(self, scenario_id: str, *, persist: bool = True) -> None:
-        self._scenarios.pop(scenario_id, None)
-        self._mtimes.pop(scenario_id, None)
-        if persist and self._directory is not None:
-            (self._directory / f"{scenario_id}.yaml").unlink(missing_ok=True)
-            vdir = self.versions_dir(scenario_id)
-            if vdir and vdir.is_dir():
-                for f in vdir.iterdir():
-                    f.unlink()
-                vdir.rmdir()
+        with self._lock:
+            self._scenarios.pop(scenario_id, None)
+            self._mtimes.pop(scenario_id, None)
+            if persist and self._directory is not None:
+                (self._directory / f"{scenario_id}.yaml").unlink(missing_ok=True)
+                vdir = self.versions_dir(scenario_id)
+                if vdir and vdir.is_dir():
+                    shutil.rmtree(vdir, ignore_errors=True)

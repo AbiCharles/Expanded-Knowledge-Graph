@@ -69,13 +69,15 @@ export function ScenarioEditModal({
         interpreted_as: interpreted,
         suggested_prompt: prompt.trim(),
       });
-      // Light-touch confirmation — surface the new version number so the
-      // operator can verify a snapshot was written.
-      const newVersion = (res as any)?.version;
-      if (typeof newVersion === "number") {
-        // eslint-disable-next-line no-alert
-        alert(`Saved as v${newVersion}. The prior content is preserved as v${newVersion - 1}.`);
-      }
+      // Light-touch confirmation — use the server's authoritative
+      // version number (not a client-side guess), and skip the
+      // "preserved as v(N-1)" line when N=1 since v0 doesn't exist.
+      const newVersion = res.version;
+      const priorLine = newVersion > 1
+        ? ` The prior content is preserved as v${newVersion - 1}.`
+        : "";
+      // eslint-disable-next-line no-alert
+      alert(`Saved as v${newVersion}.${priorLine}`);
       onSaved();
       onClose();
     } catch (e) {

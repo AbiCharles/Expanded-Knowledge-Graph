@@ -33,10 +33,11 @@ export function ScenarioVersionsModal({
   }, [scenarioId]);
 
   useEffect(() => {
-    if (selected == null) {
-      setSelectedContent(null);
-      return;
-    }
+    // Clear the right pane before issuing the new fetch so we never
+    // render the previous version's body under the new version's
+    // header pill while the request is in flight.
+    setSelectedContent(null);
+    if (selected == null) return;
     let cancelled = false;
     api
       .getScenarioFull(scenarioId, { version: selected })

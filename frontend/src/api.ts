@@ -272,8 +272,17 @@ export interface EditScenarioArgs {
   description?: string;
 }
 
-export async function editScenario(scenarioId: string, args: EditScenarioArgs): Promise<void> {
-  await jsonOrThrow(
+export interface EditScenarioResult {
+  scenario_id: string;
+  updated: number;
+  version: number;
+}
+
+export async function editScenario(
+  scenarioId: string,
+  args: EditScenarioArgs,
+): Promise<EditScenarioResult> {
+  return jsonOrThrow(
     await authedFetch(`/api/scenarios/${scenarioId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
