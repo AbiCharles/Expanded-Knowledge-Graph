@@ -50,7 +50,13 @@ mappings:
         outcome: outcome
         rationale: rationale
       table: null
-      query_template: null
+      query_template: |
+        SELECT case_id, scenario_id, outcome, rationale
+        FROM prior_cases
+        WHERE (:case_id IS NULL OR case_id = :case_id)
+          AND (:scenario_id IS NULL OR scenario_id = :scenario_id)
+        ORDER BY case_id DESC
+        LIMIT :max_results
       http_path_template: null
       confidence: 0.99
       suggested_by: llm
