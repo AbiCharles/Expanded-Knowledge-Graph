@@ -141,12 +141,34 @@ export interface ScenarioMeta {
   } | null;
 }
 
+// Phase 3b — an auto_promoted_pattern from the scenario that matched
+// at least N facts of the configured ontology_type on this case.
+// Surfaced as an advisory chip on the Envelope so the reviewer sees
+// "in 8 of 8 similar cases, reviewers rejected for this ontology
+// type" before they decide.
+export interface MatchedPromotedPattern {
+  id: string;
+  decision_kind: string;
+  suggested_rationale: string | null;
+  trigger: { ontology_type: string; min_facts: number };
+  metadata: {
+    promoted_at?: string;
+    promoted_by?: string;
+    source_case_count?: number;
+    source_share_of_kind_pct?: number;
+    source_total_decided?: number;
+  };
+  matched_fact_count: number;
+  matched_fact_ids: string[];
+}
+
 export interface CaseFull extends CaseSummary {
   stages: StagePayload[];
   lineage: LineageEvent[];
   scenario?: ScenarioMeta;
   closing_message?: string;
   execution_result?: ExecutionResult | null;
+  matched_promoted_patterns?: MatchedPromotedPattern[];
 }
 
 // Result of a write action's executor (sql_update or http_request). Populated

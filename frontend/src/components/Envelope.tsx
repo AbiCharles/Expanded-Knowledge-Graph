@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CaseFull, StagePayload } from "../types";
+import { CaseFull, MatchedPromotedPattern, StagePayload } from "../types";
 import { EvidenceMap, GraphPanel } from "./GraphViz";
 
 // Plain-English labels for the operator. Raw stage names (agent_intake /
@@ -49,6 +49,9 @@ export function Envelope({ active }: { active: CaseFull | null }) {
       </div>
       <div className="envelope">
         {stages.length === 0 && <div className="envelope-empty">Awaiting first binding…</div>}
+        {active && (active.matched_promoted_patterns || []).length > 0 && (
+          <PromotedPatternBanner patterns={active.matched_promoted_patterns!} />
+        )}
         {active && stages.length > 0 && (
           <>
             <EvidenceMap active={active} />
@@ -639,6 +642,49 @@ function GlossaryModal({ onClose }: { onClose: () => void }) {
 
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Phase 3b — promoted-pattern advisory banner
+// =============================================================================
+function PromotedPatternBanner({ patterns }: { patterns: MatchedPromotedPattern[] }) {
+  return (
+    <div className="promoted-pattern-banner">
+      <div className="promoted-pattern-eyebrow">
+        Compounding loop · {patterns.length} promoted pattern{patterns.length === 1 ? "" : "s"} matched
+      </div>
+      <div className="promoted-pattern-help">
+        Patterns the platform learned from prior reviewer behaviour.
+        Advisory — you're not bound by them.
+      </div>
+      {patterns.map((p) => {
+        const md = p.metadata || {};
+        return (
+          <div key={p.id} className="promoted-pattern-row">
+            <div className="promoted-pattern-headline">
+              <span className={`promoted-pattern-decision ${p.decision_kind}`}>
+                {p.decision_kind === "request_more_info" ? "Request more info" : p.decision_kind}
+              </span>
+              <span className="promoted-pattern-ot">{p.trigger.ontology_type}</span>
+              <span className="promoted-pattern-meta">
+                · matched {p.matched_fact_count} fact{p.matched_fact_count === 1 ? "" : "s"} on this case
+              </span>
+            </div>
+            <div className="promoted-pattern-body">
+              {p.suggested_rationale}
+            </div>
+            {(md.source_case_count != null && md.source_share_of_kind_pct != null) && (
+              <div className="promoted-pattern-source">
+                Based on {md.source_case_count} prior case{md.source_case_count === 1 ? "" : "s"} ·{" "}
+                {md.source_share_of_kind_pct}% of {p.decision_kind} decisions on this scenario
+                {md.promoted_at && ` · promoted ${md.promoted_at.slice(0, 10)}`}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

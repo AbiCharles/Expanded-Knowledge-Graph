@@ -23,9 +23,25 @@ const DECISION_CLASS: Record<string, string> = {
 };
 
 
+type PromoteTarget = {
+  scenario_id: string;
+  decision_kind: api.PromoteIn["decision_kind"];
+  fact_ontology_type: string;
+  case_count: number;
+  share_of_decision_kind: number;
+};
+
 export function InsightsModal({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<api.PatternsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [promoteTarget, setPromoteTarget] = useState<PromoteTarget | null>(null);
+
+  const reload = () => {
+    api
+      .getInsightsPatterns()
+      .then((d) => setData(d))
+      .catch((e) => setError((e as Error).message));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +109,7 @@ export function InsightsModal({ onClose }: { onClose: () => void }) {
                     <th>Share of decision</th>
                     <th>Share of all</th>
                     <th>Sample fact ids</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -110,12 +127,118 @@ export function InsightsModal({ onClose }: { onClose: () => void }) {
                       <td className="insights-samples">
                         {p.sample_fact_ids.length === 0 ? <span className="insights-meta">—</span> : p.sample_fact_ids.join(", ")}
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="insights-promote-btn"
+                          onClick={() => setPromoteTarget({
+                            scenario_id: s.scenario_id,
+                            decision_kind: p.decision_kind as PromoteTarget["decision_kind"],
+                            fact_ontology_type: p.fact_ontology_type,
+                            case_count: p.case_count,
+                            share_of_decision_kind: p.share_of_decision_kind,
+                          })}
+                        >
+                          Promote →
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ))}
+        </div>
+      </div>
+      {promoteTarget && (
+        <PromoteConfirm
+          target={promoteTarget}
+          onCancel={() => setPromoteTarget(null)}
+          onPromoted={(version) => {
+            setPromoteTarget(null);
+            reload();
+            // eslint-disable-next-line no-alert
+            alert(
+              `Promoted. ${promoteTarget.scenario_id} is now at v${version}.\n` +
+              `Future cases that bind ${promoteTarget.fact_ontology_type} facts ` +
+              `will show an advisory chip pointing at this pattern.`,
+            );
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+function PromoteConfirm({
+  target,
+  onCancel,
+  onPromoted,
+}: {
+  target: PromoteTarget;
+  onCancel: () => void;
+  onPromoted: (version: number) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api.promotePattern({
+        scenario_id: target.scenario_id,
+        decision_kind: target.decision_kind,
+        fact_ontology_type: target.fact_ontology_type,
+      });
+      onPromoted(res.version);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className="modal-backdrop layer-2"
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div className="ds-modal" style={{ maxWidth: 520, width: "92vw" }}>
+        <div className="ds-header">
+          <div>
+            <div className="ds-eyebrow">Phase 3b · promote pattern</div>
+            <div className="ds-title">Promote this driver to a scenario rule?</div>
+          </div>
+          <button className="teams-close" onClick={onCancel}>×</button>
+        </div>
+        <div style={{ padding: 18 }}>
+          <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.55 }}>
+            This will write a new auto-promoted-pattern entry on{" "}
+            <code>{target.scenario_id}</code> and bump it to the next
+            version. Future cases that bind a{" "}
+            <strong>{target.fact_ontology_type}</strong> fact will surface
+            an advisory chip suggesting reviewers typically choose{" "}
+            <strong>{target.decision_kind}</strong> in this situation
+            ({target.case_count} of recent cases · {target.share_of_decision_kind}%).
+          </p>
+          <p style={{ fontSize: 12, color: "#6b7280", marginTop: 12 }}>
+            Reversible — use Demote on the next visit to remove it.
+            The scenario version stays bumped either way for the audit
+            trail.
+          </p>
+          {err && <div className="ds-error">{err}</div>}
+        </div>
+        <div className="rationale-footer">
+          <button className="rationale-cancel" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            className="rationale-submit"
+            onClick={submit}
+            disabled={busy}
+          >
+            {busy ? "Promoting…" : "Promote pattern"}
+          </button>
         </div>
       </div>
     </div>

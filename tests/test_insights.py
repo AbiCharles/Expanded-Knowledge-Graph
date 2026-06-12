@@ -154,3 +154,180 @@ def test_patterns_empty_when_no_highlights(
 ) -> None:
     body = client.get("/api/insights/patterns", headers=admin_headers).json()
     assert body["scenarios"] == []
+
+
+# =============================================================================
+# Phase 3b — promote / demote
+# =============================================================================
+def _scenario_state(client: TestClient, scenario_id: str) -> dict:
+    state = client.app.state.app_state
+    return state.scenarios.get(scenario_id) or {}
+
+
+def test_promote_writes_pattern_and_bumps_version(
+    client: TestClient, admin_headers: dict
+) -> None:
+    _seed_full(client)
+    sc_before = _scenario_state(client, "SC-PP-008")
+    version_before = sc_before.get("version", 1)
+
+    resp = client.post(
+        "/api/insights/patterns/promote",
+        json={
+            "scenario_id": "SC-PP-008",
+            "decision_kind": "reject",
+            "fact_ontology_type": "SanctionsProximity",
+        },
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["scenario_id"] == "SC-PP-008"
+    assert body["version"] == version_before + 1
+    assert body["pattern_id"].startswith("auto-")
+    assert body["replaced"] is False
+
+    sc_after = _scenario_state(client, "SC-PP-008")
+    promoted = sc_after.get("auto_promoted_patterns") or []
+    assert len(promoted) == 1
+    entry = promoted[0]
+    assert entry["decision_kind"] == "reject"
+    assert entry["trigger"]["ontology_type"] == "SanctionsProximity"
+    assert entry["metadata"]["source_case_count"] == 3
+    assert entry["metadata"]["promoted_by"] == "admin"
+
+
+def test_promote_idempotent_replaces_existing_pattern(
+    client: TestClient, admin_headers: dict
+) -> None:
+    _seed_full(client)
+    first = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "reject",
+              "fact_ontology_type": "SanctionsProximity"},
+        headers=admin_headers,
+    ).json()
+    second = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "reject",
+              "fact_ontology_type": "SanctionsProximity",
+              "suggested_rationale": "Override the rationale this time."},
+        headers=admin_headers,
+    ).json()
+    # Same pattern id, second bump replaces the entry rather than appending.
+    assert first["pattern_id"] == second["pattern_id"]
+    assert second["replaced"] is True
+    promoted = _scenario_state(client, "SC-PP-008").get("auto_promoted_patterns") or []
+    assert len(promoted) == 1
+    assert promoted[0]["suggested_rationale"] == "Override the rationale this time."
+
+
+def test_promote_blocked_by_case_count_guardrail(
+    client: TestClient, admin_headers: dict
+) -> None:
+    _seed_full(client)
+    resp = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "approve",
+              "fact_ontology_type": "Product",
+              "min_case_count": 5},  # we only have 1 such case
+        headers=admin_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert "case_count" in resp.text
+
+
+def test_promote_blocked_by_share_guardrail(
+    client: TestClient, admin_headers: dict
+) -> None:
+    _seed_full(client)
+    resp = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "reject",
+              "fact_ontology_type": "CarrierExposure",
+              # CarrierExposure shows on 2/3 rejects = 66.7% — below 90%
+              "min_share_of_kind_pct": 90.0},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 409
+    assert "share_of_decision_kind" in resp.text
+
+
+def test_promote_404_on_unknown_scenario(
+    client: TestClient, admin_headers: dict
+) -> None:
+    resp = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-NOPE", "decision_kind": "reject",
+              "fact_ontology_type": "X"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_demote_removes_pattern_and_bumps_version(
+    client: TestClient, admin_headers: dict
+) -> None:
+    _seed_full(client)
+    promoted = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "reject",
+              "fact_ontology_type": "SanctionsProximity"},
+        headers=admin_headers,
+    ).json()
+    pid = promoted["pattern_id"]
+    pre_v = _scenario_state(client, "SC-PP-008")["version"]
+
+    resp = client.post(
+        "/api/insights/patterns/demote",
+        json={"scenario_id": "SC-PP-008", "pattern_id": pid},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["remaining_patterns"] == 0
+    assert body["version"] == pre_v + 1
+    assert (_scenario_state(client, "SC-PP-008").get("auto_promoted_patterns") or []) == []
+
+
+def test_demote_404_on_unknown_pattern_id(
+    client: TestClient, admin_headers: dict
+) -> None:
+    resp = client.post(
+        "/api/insights/patterns/demote",
+        json={"scenario_id": "SC-PP-008", "pattern_id": "auto-doesnotexist"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_promote_and_demote_are_admin_only(
+    client: TestClient, admin_headers: dict
+) -> None:
+    # Create a non-admin user via the admin
+    resp = client.post(
+        "/api/auth/register",
+        json={"username": "op2", "password": "pw1234"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(
+        "/api/auth/login",
+        data={"username": "op2", "password": "pw1234"},
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    )
+    tok = resp.json()["access_token"]
+
+    promote_resp = client.post(
+        "/api/insights/patterns/promote",
+        json={"scenario_id": "SC-PP-008", "decision_kind": "reject",
+              "fact_ontology_type": "SanctionsProximity"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert promote_resp.status_code == 403
+    demote_resp = client.post(
+        "/api/insights/patterns/demote",
+        json={"scenario_id": "SC-PP-008", "pattern_id": "x"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert demote_resp.status_code == 403

@@ -5628,3 +5628,81 @@ details[open] > .suggested-summary .suggested-chevron {
 .insights-decision.info { background: #fef3c7; color: #92400e; }
 .insights-samples { font-family: monospace; color: #4b5563; font-size: 12px; }
 .insights-meta { color: #9ca3af; }
+
+/* ============================================================
+   Phase 3b — Promote button in InsightsModal + advisory banner
+   in Envelope
+   ============================================================ */
+.insights-promote-btn {
+  border: 1px solid #4f46e5;
+  background: #fff;
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.insights-promote-btn:hover { background: #4f46e5; color: #fff; }
+.insights-promote-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.promoted-pattern-banner {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-left: 4px solid #4f46e5;
+  background: linear-gradient(to right, #eef2ff, #fafafa);
+  border-radius: 6px;
+}
+.promoted-pattern-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4f46e5;
+  margin-bottom: 4px;
+}
+.promoted-pattern-help {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.promoted-pattern-row {
+  padding: 10px 12px;
+  border: 1px solid #e0e7ff;
+  border-radius: 6px;
+  background: #fff;
+  margin-bottom: 6px;
+}
+.promoted-pattern-row:last-child { margin-bottom: 0; }
+.promoted-pattern-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.promoted-pattern-decision {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.promoted-pattern-decision.reject { background: #fee2e2; color: #991b1b; }
+.promoted-pattern-decision.approve { background: #dcfce7; color: #166534; }
+.promoted-pattern-decision.request_more_info { background: #fef3c7; color: #92400e; }
+.promoted-pattern-ot { font-weight: 600; color: #1f2937; }
+.promoted-pattern-meta { font-size: 12px; color: #6b7280; }
+.promoted-pattern-body {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.promoted-pattern-source {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 6px;
+}

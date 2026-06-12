@@ -498,4 +498,49 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
             for stage, sc in c.ctx.stages.items()
         ]
         out["lineage"] = [ev.model_dump(mode="json") for ev in c.ctx.lineage]
+    # Phase 3b — match the case's bound facts against any
+    # `auto_promoted_patterns` the scenario carries. The UI shows
+    # these as advisory chips ("In 8 of 8 similar SC-PP-008 cases,
+    # reviewers rejected for SanctionsProximity"). Empty list when
+    # the scenario has no promoted patterns or none of them fire on
+    # this case's facts.
+    out["matched_promoted_patterns"] = _matched_promoted_patterns(scenario, out["stages"])
     return out
+
+
+def _matched_promoted_patterns(
+    scenario: Optional[dict], stages: list[dict]
+) -> list[dict]:
+    """Walk every promoted pattern on the scenario; for each, count
+    how many bound facts match its trigger; if the count meets
+    `trigger.min_facts`, return the pattern annotated with the count
+    and a hint of which facts matched."""
+    if not scenario:
+        return []
+    patterns = scenario.get("auto_promoted_patterns") or []
+    if not patterns:
+        return []
+    # Flatten facts across stages and index by ontology_type for cheap lookup.
+    by_ontology_type: dict[str, list[dict]] = {}
+    for s in stages:
+        for f in s.get("facts") or []:
+            ot = f.get("ontology_type")
+            if ot:
+                by_ontology_type.setdefault(ot, []).append(f)
+    matched: list[dict] = []
+    for p in patterns:
+        trig = p.get("trigger") or {}
+        ot = trig.get("ontology_type")
+        min_facts = int(trig.get("min_facts") or 1)
+        hits = by_ontology_type.get(ot or "", [])
+        if len(hits) >= min_facts:
+            matched.append({
+                "id": p.get("id"),
+                "decision_kind": p.get("decision_kind"),
+                "suggested_rationale": p.get("suggested_rationale"),
+                "trigger": trig,
+                "metadata": p.get("metadata") or {},
+                "matched_fact_count": len(hits),
+                "matched_fact_ids": [h.get("id") for h in hits[:3]],
+            })
+    return matched

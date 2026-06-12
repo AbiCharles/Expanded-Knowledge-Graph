@@ -128,17 +128,124 @@ curl -H "Authorization: Bearer <admin-token>" \
 
 ---
 
-## Out of scope (deferred to Phase 3b)
+## Phase 3b — promote + demote
 
-- **Promote button** — an admin action that takes a pattern row and
-  drafts a new scenario version with the pattern encoded (e.g. auto-route
-  any case whose binders surface a `SanctionsProximity` ≥ 1-hop hit to
-  the procurement lead).
-- **Confidence guardrails** — a minimum `case_count` + minimum
-  `share_of_decision_kind` before a pattern is promotable.
+The admin-only action that turns a recurring pattern into a scenario
+rule. The patterns endpoint above is the read side; this is the write
+side that closes the compounding loop.
+
+### Endpoints
+
+```
+POST /api/insights/patterns/promote
+  body: { scenario_id, decision_kind, fact_ontology_type,
+          suggested_rationale?, min_case_count?, min_share_of_kind_pct? }
+  → { scenario_id, version, pattern_id, replaced, stats }
+
+POST /api/insights/patterns/demote
+  body: { scenario_id, pattern_id }
+  → { scenario_id, version, pattern_id, remaining_patterns }
+```
+
+Both bump the scenario version via Phase 1 `register()`, so every
+promote / demote is an immutable audit-trail snapshot — see the
+Versions modal.
+
+### Guardrails
+
+| Guardrail | Default | Override |
+|---|---|---|
+| `min_case_count` | 2 | per-request body field |
+| `min_share_of_kind_pct` | 50 | per-request body field |
+
+Defaults are deliberately permissive so a small demo dataset can
+illustrate the loop end-to-end. Production deployments should crank
+both up (e.g. `min_case_count=10, min_share_of_kind_pct=80`) before
+trusting promoted patterns to influence reviewer behaviour.
+
+Guardrails are re-checked at promote time against the **live**
+aggregate (not the value the UI rendered), so a stale modal can't
+promote a pattern whose confidence has since decayed.
+
+### Idempotent
+
+Promoting the same `(scenario_id, decision_kind, fact_ontology_type)`
+twice replaces the existing entry rather than appending. The
+`pattern_id` is preserved across re-promotion so the audit trail stays
+single-row per scenario+trigger.
+
+### Promoted-pattern shape on the scenario YAML
+
+```yaml
+auto_promoted_patterns:
+  - id: auto-7f3a1c
+    decision_kind: reject
+    trigger:
+      ontology_type: SanctionsProximity
+      min_facts: 1
+    suggested_rationale: >-
+      Reviewers cited SanctionsProximity in 8 of 8 reject decisions
+      on this scenario (auto-promoted pattern).
+    metadata:
+      promoted_at: 2026-06-12T17:00:00Z
+      promoted_by: admin
+      source_case_count: 8
+      source_share_of_kind_pct: 100.0
+      source_total_decided: 12
+```
+
+### Case-detail integration
+
+When a future case binds at least `min_facts` of `trigger.ontology_type`,
+the case-detail endpoint surfaces a `matched_promoted_patterns: [...]`
+field on the response. The frontend Envelope renders these as advisory
+chips above the evidence map:
+
+> **Compounding loop · 1 promoted pattern matched**
+> **REJECT** · SanctionsProximity · matched 1 fact on this case
+> Reviewers cited SanctionsProximity in 8 of 8 reject decisions on
+> this scenario (auto-promoted pattern).
+> Based on 8 prior cases · 100% of reject decisions · promoted 2026-06-12
+
+Reviewer is not bound by the suggestion — it's evidence, not coercion.
+
+### Verification
+
+Backend: `pytest tests/test_insights.py` (13 tests including promote
+success, idempotency replacement, case-count + share guardrails,
+unknown-scenario 404, demote round-trip, admin-only).
+
+Frontend: `cd frontend && npm test`:
+- `InsightsModal.test.tsx` (4) — Phase 3a render + Esc + errors
+- `InsightsModal.promote.test.tsx` (4) — confirm modal opens, cancel
+  does nothing, success refreshes patterns, guardrail error keeps the
+  modal open with the server error visible
+
+### Live verification
+
+After deploying:
+
+1. Log in as admin → status bar → **Insights**.
+2. Pick a pattern row → **Promote →**.
+3. Confirmation modal appears; submit.
+4. A toast confirms the scenario bumped to `vN+1`.
+5. Re-open the scenario in the Edit modal → footer shows `Currently vN+1`
+   and Version history lists the new snapshot.
+6. Start a new case that binds the trigger ontology type → the
+   advisory banner appears above the evidence map.
+
+---
+
+## Out of scope (deferred)
+
 - **Time-bounded windows** — currently aggregates all-time. A
   `?since=` param + "patterns over the last 30 days" view will matter
   when scenario behaviour drifts.
-- **Per-scenario drill-down** — the modal currently lists every
-  scenario; a per-scenario detail page with the underlying case list is
-  the obvious next step.
+- **Multi-trigger patterns** — currently each promoted pattern is one
+  ontology type. Composite triggers (e.g. *"SanctionsProximity AND
+  CarrierExposure"*) are a natural follow-up.
+- **Per-scenario drill-down** — the modal lists every scenario; a
+  detail page with the underlying case list is the obvious next step.
+- **Reviewer one-click apply** — when a promoted pattern matches, the
+  rationale modal could pre-fill the suggested_rationale. Not done
+  yet; the chip is advisory only.

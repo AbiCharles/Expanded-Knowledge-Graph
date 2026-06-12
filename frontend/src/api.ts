@@ -137,6 +137,50 @@ export async function getInsightsPatterns(): Promise<PatternsResponse> {
   return jsonOrThrow(await authedFetch("/api/insights/patterns"));
 }
 
+// Phase 3b — promote a recurring pattern into the scenario YAML so
+// future cases see an advisory chip when the trigger fires. Bumps the
+// scenario version automatically (Phase 1 register).
+export interface PromoteIn {
+  scenario_id: string;
+  decision_kind: "approve" | "reject" | "request_more_info";
+  fact_ontology_type: string;
+  suggested_rationale?: string;
+  min_case_count?: number;
+  min_share_of_kind_pct?: number;
+}
+export interface PromoteOut {
+  scenario_id: string;
+  version: number;
+  pattern_id: string;
+  replaced: boolean;
+  stats: {
+    case_count: number;
+    decisions_of_kind: number;
+    decisions_total: number;
+    share_of_kind_pct: number;
+  };
+}
+export async function promotePattern(args: PromoteIn): Promise<PromoteOut> {
+  return jsonOrThrow(await authedFetch("/api/insights/patterns/promote", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(args),
+  }));
+}
+
+export async function demotePattern(args: { scenario_id: string; pattern_id: string }): Promise<{
+  scenario_id: string;
+  version: number;
+  pattern_id: string;
+  remaining_patterns: number;
+}> {
+  return jsonOrThrow(await authedFetch("/api/insights/patterns/demote", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(args),
+  }));
+}
+
 // Phase 2 — reviewer-flagged load-bearing fact ref. Matches the backend
 // HighlightedFactRef Pydantic shape; the (source, ontology_type, id)
 // triple is the same identity used in KnowledgeRef / FactRow.

@@ -36,7 +36,7 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 | Element | Deck verdict | Status | Where |
 |---|---|---|---|
 | Structured override capture (decision + driver facts) | Build #2 | ✅ | [override-capture.md](override-capture.md) — shipped Phase 2 |
-| Promotion / certification loop (pattern → new scenario version) | Build #3 — the payoff | 🟡 | Phase 3a (mining) ✅ [pattern-mining.md](pattern-mining.md); Phase 3b (admin promote UI) ⬜ |
+| Promotion / certification loop (pattern → new scenario version) | Build #3 — the payoff | ✅ | [pattern-mining.md](pattern-mining.md) — Phase 3a mining + Phase 3b promote/demote shipped |
 
 ## Out of scope (deliberately not built)
 
@@ -55,10 +55,13 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 | Phase 1 | Scenario versioning + case → version pinning | ✅ live | [scenario-versioning.md](scenario-versioning.md) |
 | Phase 2 | Structured override capture ("both" mode: passive snapshot + optional active highlight) | ✅ live | [override-capture.md](override-capture.md) |
 | Phase 3a | Pattern mining + insights surface (admin-only) | ✅ live | [pattern-mining.md](pattern-mining.md) |
-| Phase 3b | Promotion flow — pattern → new scenario version draft (admin approval) | ⬜ | TBD |
+| Phase 3b | Promotion flow — promote/demote endpoints + matched-pattern advisory chip on the Envelope | ✅ live | [pattern-mining.md](pattern-mining.md) |
 
-The deck's roadmap was a 3-step build. After Phase 1, the substrate
-governance gap is closed: every case records the exact scenario state
-it ran against, every edit creates an immutable artifact, and historic
-content is inspectable in the UI. Phase 2 builds the data feed for
-compounding; Phase 3 turns that data into the auto-resolution itself.
+The deck's roadmap was a 3-step build. **All three are now shipped.**
+Phase 1 closed the substrate governance gap (every case pinned to an
+immutable scenario version). Phase 2 added the structured signal
+("which facts were load-bearing?") feeding the compounding loop.
+Phase 3 closed the loop end-to-end: 3a mines patterns from the
+captures, 3b promotes them into the scenario YAML as advisory rules
+that fire on future cases. The platform now writes its own next rule
+— with admin sign-off and a reversible audit trail.
