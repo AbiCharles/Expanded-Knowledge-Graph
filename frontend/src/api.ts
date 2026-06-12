@@ -111,6 +111,32 @@ export async function getCaseHighlights(caseId: string): Promise<CaseHighlights>
   return jsonOrThrow(await authedFetch(`/api/cases/${caseId}/highlights`));
 }
 
+// Phase 3a — mining endpoint over the Phase 2 captures. Admin-only.
+// "For each scenario, which fact ontology types drove each decision
+// kind, and how often?" Phase 3b will use the same shape as input to
+// a "draft a new scenario version" admin flow.
+export interface PatternRow {
+  decision_kind: string;
+  fact_ontology_type: string;
+  case_count: number;
+  share_of_decisions: number;      // % of all decisions on this scenario
+  share_of_decision_kind: number;  // % of decisions of THIS kind on this scenario
+  sample_fact_ids: string[];
+}
+export interface ScenarioPatterns {
+  scenario_id: string;
+  total_decided_cases: number;
+  patterns: PatternRow[];
+}
+export interface PatternsResponse {
+  generated_at_seconds: number;
+  scenarios: ScenarioPatterns[];
+}
+
+export async function getInsightsPatterns(): Promise<PatternsResponse> {
+  return jsonOrThrow(await authedFetch("/api/insights/patterns"));
+}
+
 // Phase 2 — reviewer-flagged load-bearing fact ref. Matches the backend
 // HighlightedFactRef Pydantic shape; the (source, ontology_type, id)
 // triple is the same identity used in KnowledgeRef / FactRow.

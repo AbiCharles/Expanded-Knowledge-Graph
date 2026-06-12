@@ -8,6 +8,7 @@ import { PlatformFlowModal } from "./components/GraphViz";
 import { CaseSpecModal } from "./components/CaseSpecModal";
 import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
+import { InsightsModal } from "./components/InsightsModal";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -33,6 +34,7 @@ type ModalState =
   | { kind: "scenarios-help" }
   | { kind: "edit-scenario"; scenarioId: string }
   | { kind: "metrics" }
+  | { kind: "insights" }
   | { kind: "platform-flow" }
   | { kind: "case-spec"; tab?: "scenario" | "ontology"; anchor?: string };
 
@@ -309,6 +311,7 @@ export default function App() {
         onOpenKnowledge={() => setModal({ kind: "knowledge", tab: "sources" })}
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
+        onOpenInsights={() => setModal({ kind: "insights" })}
         onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
         onOpenCaseSpec={() => setModal({ kind: "case-spec" })}
       />
@@ -370,6 +373,9 @@ export default function App() {
       )}
       {modal.kind === "metrics" && (
         <MetricsDashboard onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "insights" && (
+        <InsightsModal onClose={() => setModal({ kind: "none" })} />
       )}
       {modal.kind === "platform-flow" && (
         <PlatformFlowModal active={active} onClose={() => setModal({ kind: "none" })} />

@@ -9,11 +9,12 @@ interface Props {
   onOpenKnowledge: () => void;
   onOpenScenariosHelp: () => void;
   onOpenMetrics: () => void;
+  onOpenInsights: () => void;
   onOpenPlatformFlow: () => void;
   onOpenCaseSpec: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenPlatformFlow, onOpenCaseSpec }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenInsights, onOpenPlatformFlow, onOpenCaseSpec }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -84,6 +85,15 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
         >
           Metrics
         </button>
+        {user.role === "admin" && (
+          <button
+            className="statusbar-action statusbar-action-quiet"
+            onClick={onOpenInsights}
+            title="Recurring override drivers (admin)"
+          >
+            Insights
+          </button>
+        )}
         <button
           className="statusbar-action statusbar-action-quiet"
           onClick={onOpenScenariosHelp}

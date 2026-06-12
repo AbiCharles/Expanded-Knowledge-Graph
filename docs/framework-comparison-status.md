@@ -36,7 +36,7 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 | Element | Deck verdict | Status | Where |
 |---|---|---|---|
 | Structured override capture (decision + driver facts) | Build #2 | ✅ | [override-capture.md](override-capture.md) — shipped Phase 2 |
-| Promotion / certification loop (pattern → new scenario version) | Build #3 — the payoff | ⬜ | Phase 3 — admin-only "promote → new version" admin UI on top of Phase 2 data |
+| Promotion / certification loop (pattern → new scenario version) | Build #3 — the payoff | 🟡 | Phase 3a (mining) ✅ [pattern-mining.md](pattern-mining.md); Phase 3b (admin promote UI) ⬜ |
 
 ## Out of scope (deliberately not built)
 
@@ -54,7 +54,8 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 |---|---|---|---|
 | Phase 1 | Scenario versioning + case → version pinning | ✅ live | [scenario-versioning.md](scenario-versioning.md) |
 | Phase 2 | Structured override capture ("both" mode: passive snapshot + optional active highlight) | ✅ live | [override-capture.md](override-capture.md) |
-| Phase 3 | Promotion loop — pattern mining + admin approval → new scenario version | ⬜ | TBD |
+| Phase 3a | Pattern mining + insights surface (admin-only) | ✅ live | [pattern-mining.md](pattern-mining.md) |
+| Phase 3b | Promotion flow — pattern → new scenario version draft (admin approval) | ⬜ | TBD |
 
 The deck's roadmap was a 3-step build. After Phase 1, the substrate
 governance gap is closed: every case records the exact scenario state

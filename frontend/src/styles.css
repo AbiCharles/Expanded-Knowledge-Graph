@@ -5605,3 +5605,26 @@ details[open] > .suggested-summary .suggested-chevron {
 .spec-highlight-row:last-child { border-bottom: none; }
 .spec-highlight-pos { color: #6b7280; font-weight: 600; min-width: 18px; }
 .spec-highlight-title { color: #4b5563; }
+
+/* ============================================================
+   Phase 3a — InsightsModal (pattern mining over Phase 2 captures)
+   ============================================================ */
+.insights-modal { background: #fff; border-radius: 10px; }
+.insights-body { padding: 16px 20px 24px; max-height: 70vh; overflow-y: auto; }
+.insights-intro { font-size: 13px; color: #4b5563; margin: 0 0 16px; line-height: 1.55; }
+.insights-loading, .insights-empty { padding: 24px; text-align: center; color: #6b7280; }
+.insights-scenario { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 14px; background: #fafafa; }
+.insights-scenario-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.insights-scenario-id { font-weight: 600; font-family: monospace; color: #111827; }
+.insights-scenario-meta { font-size: 12px; color: #6b7280; }
+.insights-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid #e5e7eb; }
+.insights-table th, .insights-table td { padding: 7px 10px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+.insights-table thead th { background: #f9fafb; font-weight: 600; color: #374151; font-size: 12px; }
+.insights-num { text-align: right; font-variant-numeric: tabular-nums; }
+.insights-ot { font-weight: 600; }
+.insights-decision { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.insights-decision.approve { background: #dcfce7; color: #166534; }
+.insights-decision.reject { background: #fee2e2; color: #991b1b; }
+.insights-decision.info { background: #fef3c7; color: #92400e; }
+.insights-samples { font-family: monospace; color: #4b5563; font-size: 12px; }
+.insights-meta { color: #9ca3af; }

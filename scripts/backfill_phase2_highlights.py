@@ -36,20 +36,38 @@ from typing import Any
 # Curated seed map — only used in --mode demo. Each entry says: when
 # we're showing this case in a demo, render these facts as if the
 # reviewer had flagged them. Picked by an SME, not derived.
+#
+# IMPORTANT: every closed case of `scenario_id` gets the SAME seeds.
+# That's fine for "make the demo UI look populated" but it inflates
+# Phase 3 pattern confidence if these rows are mined. Treat as cosmetic
+# data, not reviewer signal.
 DEMO_SEEDS: dict[str, list[dict[str, Any]]] = {
-    # Supplier onboarding — sanctions proximity drove the reject in the
-    # canonical SC-PP-008 demo.
+    # Supplier onboarding — sanctions proximity + carrier concentration
+    # drove the canonical reject case. Tier-1 reliability score made up
+    # the third leg in the deck's narrative.
     "SC-PP-008": [
         {"source": "graph:neo4j_default", "ontology_type": "SanctionsProximity",
-         "id": "SUP-001-PROX", "title": "3-hop indirect ownership"},
+         "id": "SUP-001-PROX", "title": "3-hop indirect ownership of OFAC SDN entity"},
         {"source": "graph:neo4j_default", "ontology_type": "CarrierExposure",
-         "id": "SUP-001-CARRIER", "title": "Single-alliance concentration"},
+         "id": "SUP-001-CARRIER", "title": "All preferred carriers in one alliance"},
+        {"source": "sqlite:governance_sqlite", "ontology_type": "PriorOverride",
+         "id": "C-PP-007-001", "title": "Prior reject on similar tier-1 candidate"},
     ],
-    # Mode-switch ocean→air — the prior-override precedent + the SLA
-    # urgency were what the planner cited.
+    # Mode-switch ocean → air on a critical lane. The planner cited the
+    # prior reroute precedent + the upcoming customer SLA window.
     "SC-LN-002": [
         {"source": "sqlite:governance_sqlite", "ontology_type": "PriorOverride",
-         "id": "PO-SC-LN-002-001", "title": "Prior reroute approved on same lane"},
+         "id": "C-LN-002-001", "title": "Prior reroute approved on same lane"},
+        {"source": "sqlite:logistics_sqlite", "ontology_type": "FreightRate",
+         "id": "FR-LHCA-AIR-001", "title": "Air rate within recovery envelope (+18%)"},
+    ],
+    # Ultimate Beneficial Owner disclosure — the ownership walk turned
+    # up a tier-3 holding company the supplier hadn't declared.
+    "SC-PP-UBO-023": [
+        {"source": "graph:neo4j_default", "ontology_type": "UltimateBeneficialOwner",
+         "id": "UBO-APEX-HOLDINGS", "title": "Undisclosed tier-3 owner: Apex Holdings"},
+        {"source": "sqlite:governance_sqlite", "ontology_type": "PriorOverride",
+         "id": "C-PP-UBO-PRIOR", "title": "Prior request-more-info on similar gap"},
     ],
 }
 
