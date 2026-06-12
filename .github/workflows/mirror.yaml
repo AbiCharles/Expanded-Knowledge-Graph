@@ -58,7 +58,15 @@ jobs:
           # branch policies block. The explicit refspecs below sync
           # every GitHub branch/tag onto Azure but leave Azure-only
           # refs untouched. Leading `+` is force (we rewrote history).
+          #
+          # `main` is also force-pushed onto Azure's `dev` branch so
+          # downstream consumers tracking either branch see the same
+          # tip on every sync. If a real `dev` branch is later created
+          # on GitHub, the wildcard above will start carrying it
+          # instead — the explicit `main->dev` push then becomes a
+          # no-op (already-up-to-date).
           AZURE_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
           git push "${AZURE_URL}" \
             '+refs/heads/*:refs/heads/*' \
-            '+refs/tags/*:refs/tags/*'
+            '+refs/tags/*:refs/tags/*' \
+            '+refs/heads/main:refs/heads/dev'
