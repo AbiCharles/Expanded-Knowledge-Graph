@@ -5525,3 +5525,83 @@ details[open] > .suggested-summary .suggested-chevron {
   border-color: #ddd6fe;
   background: #f5f3ff;
 }
+
+/* ============================================================
+   Phase 2 — load-bearing fact picker (RationaleModal + ApproveModal)
+   and the read-only echo in CaseSpecModal.
+   ============================================================ */
+.rationale-loadbearing {
+  margin-top: 18px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.loadbearing-count {
+  color: #6b7280;
+  font-weight: 500;
+  margin-left: 4px;
+}
+.loadbearing-help {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 4px 0 10px;
+  line-height: 1.5;
+}
+.loadbearing-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.loadbearing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 80ms;
+}
+.loadbearing-chip:hover { border-color: #6366f1; }
+.loadbearing-chip.on {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+.loadbearing-chip.disabled { opacity: 0.45; cursor: not-allowed; }
+.loadbearing-chip-type { font-weight: 600; }
+.loadbearing-chip-id { opacity: 0.85; font-family: monospace; }
+.loadbearing-chip-title { opacity: 0.75; }
+
+.confirm-highlights {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.confirm-highlight-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.confirm-highlight-pos { color: #6b7280; font-weight: 600; min-width: 18px; }
+.confirm-highlight-type { font-weight: 600; }
+.confirm-highlight-id { font-family: monospace; color: #4b5563; }
+.confirm-highlight-title { color: #6b7280; }
+
+.spec-highlights { display: flex; flex-direction: column; gap: 4px; }
+.spec-highlight-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.spec-highlight-row:last-child { border-bottom: none; }
+.spec-highlight-pos { color: #6b7280; font-weight: 600; min-width: 18px; }
+.spec-highlight-title { color: #4b5563; }

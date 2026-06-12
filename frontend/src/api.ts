@@ -96,9 +96,40 @@ export async function listQueue(): Promise<QueueRow[]> {
   return jsonOrThrow(await authedFetch("/api/decisions/queue"));
 }
 
+// Phase 2 — read-back of the reviewer-flagged load-bearing facts for a
+// closed case. Empty `highlighted_fact_refs` when the reviewer skipped,
+// when the case was autonomous, or when the case predates Phase 2.
+export interface CaseHighlights {
+  case_id: string;
+  scenario_id: string | null;
+  scenario_version: number | null;
+  decision_kind: string | null;
+  highlighted_fact_refs: Array<HighlightedFactRef & { position: number; highlighted_at: string | null }>;
+}
+
+export async function getCaseHighlights(caseId: string): Promise<CaseHighlights> {
+  return jsonOrThrow(await authedFetch(`/api/cases/${caseId}/highlights`));
+}
+
+// Phase 2 — reviewer-flagged load-bearing fact ref. Matches the backend
+// HighlightedFactRef Pydantic shape; the (source, ontology_type, id)
+// triple is the same identity used in KnowledgeRef / FactRow.
+export interface HighlightedFactRef {
+  source: string;
+  ontology_type: string;
+  id: string;
+  title?: string | null;
+}
+
 export async function postDecision(
   ticketId: string,
-  args: { decision: DecisionKind; reviewer_id: string; rationale: string; follow_up?: string | null }
+  args: {
+    decision: DecisionKind;
+    reviewer_id: string;
+    rationale: string;
+    follow_up?: string | null;
+    highlighted_fact_refs?: HighlightedFactRef[];
+  }
 ): Promise<void> {
   await jsonOrThrow(
     await authedFetch(`/api/decisions/${ticketId}`, {

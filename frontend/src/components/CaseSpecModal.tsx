@@ -27,6 +27,13 @@ export function CaseSpecModal({
   const [tab, setTab] = useState<"scenario" | "ontology">(initialTab || "scenario");
   const [full, setFull] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Phase 2 — reviewer-flagged load-bearing facts for this case. Empty
+  // for autonomous cases, pre-Phase-2 cases, or when the reviewer
+  // skipped picking any. Fetched lazily; the section just hides itself
+  // when nothing came back.
+  const [highlights, setHighlights] = useState<
+    Awaited<ReturnType<typeof api.getCaseHighlights>>["highlighted_fact_refs"]
+  >([]);
 
   // Load the full parsed scenario dict (stages, outcomes, closing_msgs).
   useEffect(() => {
@@ -44,6 +51,18 @@ export function CaseSpecModal({
       .catch((e) => { if (!cancelled) setError((e as Error).message); });
     return () => { cancelled = true; };
   }, [active.scenario_id, active.scenario_version]);
+
+  // Phase 2 — pull the reviewer-flagged highlights for this case. Safe
+  // to call even on undecided cases (returns []).
+  useEffect(() => {
+    if (!active.case_id) return;
+    let cancelled = false;
+    api
+      .getCaseHighlights(active.case_id)
+      .then((d) => { if (!cancelled) setHighlights(d.highlighted_fact_refs); })
+      .catch(() => { /* highlights are best-effort; never block the spec view */ });
+    return () => { cancelled = true; };
+  }, [active.case_id]);
 
   // Esc closes the modal.
   useEffect(() => {
@@ -109,7 +128,7 @@ export function CaseSpecModal({
           <div className="case-spec-loading">Loading the scenario spec…</div>
         )}
 
-        {full && tab === "scenario" && <ScenarioTab full={full} active={active} />}
+        {full && tab === "scenario" && <ScenarioTab full={full} active={active} highlights={highlights} />}
         {full && tab === "ontology" && <OntologyTab full={full} active={active} />}
       </div>
     </div>
@@ -119,7 +138,15 @@ export function CaseSpecModal({
 // =============================================================================
 // Scenario tab
 // =============================================================================
-function ScenarioTab({ full, active }: { full: any; active: CaseFull }) {
+function ScenarioTab({
+  full,
+  active,
+  highlights,
+}: {
+  full: any;
+  active: CaseFull;
+  highlights: Awaited<ReturnType<typeof api.getCaseHighlights>>["highlighted_fact_refs"];
+}) {
   const matchKeywords: string[] = full.match_keywords || [];
   const stages = full.stages || {};
   const outcomes = full.outcomes || {};
@@ -173,6 +200,33 @@ function ScenarioTab({ full, active }: { full: any; active: CaseFull }) {
               "{full.interpreted_as}"
             </div>
           )}
+        </div>
+      )}
+
+      {/* ---------- Phase 2: reviewer-flagged load-bearing facts ---------- */}
+      {highlights.length > 0 && (
+        <div className="spec-section">
+          <div className="spec-section-label">
+            Reviewer marked these facts as load-bearing ({highlights.length})
+          </div>
+          <p className="spec-intro">
+            When the reviewer decided <code>{active.decision_kind || "?"}</code>{" "}
+            on this case, they flagged the facts below as the ones that
+            tipped the call. Phase 3's promotion loop mines patterns
+            across many such cases to learn which evidence shapes drive
+            overrides.
+          </p>
+          <div className="spec-highlights">
+            {highlights.map((h, i) => (
+              <div key={`${h.source}|${h.id}|${i}`} className="spec-highlight-row">
+                <span className="spec-highlight-pos">{i + 1}.</span>
+                <span className="spec-class-name">{h.ontology_type}</span>
+                <span className="spec-fact-id">{h.id}</span>
+                {h.title && <span className="spec-highlight-title">{h.title}</span>}
+                <span className="spec-meta">· {h.source}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

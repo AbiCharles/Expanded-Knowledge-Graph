@@ -54,3 +54,11 @@ class CaseRecord:
     # the named action's executor and stashes the outcome here so the
     # case-detail endpoint can render it.
     execution_result: Optional[dict] = None
+    # Phase 2 — structured override capture. Optional reviewer-flagged
+    # facts that were load-bearing in the decision. Each item is
+    # `{source, ontology_type, id, title?}`; the (source, ontology_type,
+    # id) triple matches the fact's KnowledgeRef so Phase 3 can join.
+    # Capped at 3 by the API to keep the signal sharp. Empty list when
+    # the reviewer didn't single anything out (or for autonomous cases
+    # where there's no reviewer to ask).
+    highlighted_fact_refs: list[dict] = field(default_factory=list)

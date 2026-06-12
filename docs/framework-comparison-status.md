@@ -35,7 +35,7 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 
 | Element | Deck verdict | Status | Where |
 |---|---|---|---|
-| Structured override capture (decision + driver facts) | Build #2 | ⬜ | Phase 2 — fact-snapshot at decision time + optional reviewer highlight ("both" mode) |
+| Structured override capture (decision + driver facts) | Build #2 | ✅ | [override-capture.md](override-capture.md) — shipped Phase 2 |
 | Promotion / certification loop (pattern → new scenario version) | Build #3 — the payoff | ⬜ | Phase 3 — admin-only "promote → new version" admin UI on top of Phase 2 data |
 
 ## Out of scope (deliberately not built)
@@ -53,7 +53,7 @@ Status legend: ✅ done · 🟡 in flight · ⬜ to build · 🚫 deliberately o
 | Phase | Scope | Status | Doc |
 |---|---|---|---|
 | Phase 1 | Scenario versioning + case → version pinning | ✅ live | [scenario-versioning.md](scenario-versioning.md) |
-| Phase 2 | Structured override capture ("both" mode: passive snapshot + optional active highlight) | ⬜ | TBD |
+| Phase 2 | Structured override capture ("both" mode: passive snapshot + optional active highlight) | ✅ live | [override-capture.md](override-capture.md) |
 | Phase 3 | Promotion loop — pattern mining + admin approval → new scenario version | ⬜ | TBD |
 
 The deck's roadmap was a 3-step build. After Phase 1, the substrate

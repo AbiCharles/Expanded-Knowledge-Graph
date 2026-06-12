@@ -70,6 +70,41 @@ class LineageRow(Base):
     knowledge_refs = Column(JSON, nullable=False, default=list)
 
 
+class CaseHighlightedFactRow(Base):
+    """Phase 2 — flat, queryable record of "facts the reviewer flagged as
+    load-bearing" per decided case.
+
+    Denormalised on purpose: Phase 3's pattern-mining will GROUP BY
+    `(scenario_id, scenario_version, decision_kind, fact_ontology_type)`
+    to find recurring override drivers. A JSON blob on `cases.payload`
+    is fine for read-back, but the aggregates need columns + indexes.
+
+    Insert-only — when a case is replayed or its decision changes (which
+    today only happens via the rare admin endpoint), the previous rows
+    for that case are deleted before the new ones are written, so
+    `(case_id, position)` is effectively unique."""
+    __tablename__ = "case_highlighted_facts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    case_id = Column(String, ForeignKey("cases.case_id", ondelete="CASCADE"), nullable=False, index=True)
+    # Snapshot of the case's scenario + version at decision time, so
+    # Phase 3 can mine patterns per `(scenario_id, version)` without a
+    # join back to cases (and so the row survives a later case mutation).
+    scenario_id = Column(String, nullable=False, index=True)
+    scenario_version = Column(Integer, nullable=True)
+    decision_kind = Column(String, nullable=False, index=True)
+    # The fact's (source, ontology_type, id) triple — matches KnowledgeRef
+    # exactly. Reviewer-supplied title kept for cheap UI render.
+    fact_source = Column(String, nullable=False)
+    fact_ontology_type = Column(String, nullable=False, index=True)
+    fact_id = Column(String, nullable=False)
+    fact_title = Column(Text, nullable=True)
+    # 0..2 — preserves the order the reviewer picked. Useful when later
+    # tooling wants "the most load-bearing fact."
+    position = Column(Integer, nullable=False)
+    highlighted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class UserRow(Base):
     """Users table — populated by the auth iteration. Schema declared now so
     we don't migrate later."""
@@ -129,6 +164,12 @@ class Database:
             "ALTER TABLE cases ADD COLUMN framework_case_id TEXT",
             "CREATE INDEX IF NOT EXISTS idx_cases_framework_case_id ON cases(framework_case_id)",
             "ALTER TABLE cases ADD COLUMN scenario_version INTEGER",
+            # Phase 2 — composite index for the Phase 3 mining query
+            # `GROUP BY scenario_id, decision_kind, fact_ontology_type`.
+            (
+                "CREATE INDEX IF NOT EXISTS idx_case_highlighted_facts_mining "
+                "ON case_highlighted_facts(scenario_id, decision_kind, fact_ontology_type)"
+            ),
         ]:
             with self._engine.connect() as conn:
                 try:

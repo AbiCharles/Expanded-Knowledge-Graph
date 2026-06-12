@@ -178,7 +178,8 @@ Expected output after migration: every scenario shows `version=1`,
 - **Diff view** between versions (Versions modal is read-only-current).
 - **Rollback** (write a new version that copies an old one's content).
 - **Per-version notes / changelog** in the YAML.
-- **Override capture** — fact snapshots + optional reviewer highlights
-  recorded against the case's pinned version.
+- ~~**Override capture** — fact snapshots + optional reviewer highlights
+  recorded against the case's pinned version.~~ → shipped in Phase 2,
+  see [override-capture.md](override-capture.md).
 - **Promotion** — admin-only flow that turns repeated override patterns
   into a new scenario version (auto-approval guardrails).

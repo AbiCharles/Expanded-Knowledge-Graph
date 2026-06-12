@@ -17,6 +17,13 @@ vi.mock("../../api", () => ({
   getScenarioFull: vi.fn(),
   getOntologyClasses: vi.fn().mockResolvedValue([]),
   getMappings: vi.fn().mockResolvedValue({ ontology_id: "tcs_core", mappings: {} }),
+  getCaseHighlights: vi.fn().mockResolvedValue({
+    case_id: "C-001",
+    scenario_id: "SC-PP-008",
+    scenario_version: 3,
+    decision_kind: null,
+    highlighted_fact_refs: [],
+  }),
 }));
 
 const getFull = api.getScenarioFull as ReturnType<typeof vi.fn>;

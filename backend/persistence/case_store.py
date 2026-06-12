@@ -19,11 +19,13 @@ from __future__ import annotations
 import logging
 from typing import Iterator, Optional
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from ..case_record import CaseRecord
-from .db import CaseRow, Database
+from .db import CaseHighlightedFactRow, CaseRow, Database
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,7 @@ def _record_to_payload(rec: CaseRecord) -> dict:
         "sibling_case_ids": rec.sibling_case_ids,
         "replay_decision": rec.replay_decision,
         "closing_message": rec.closing_message,
+        "highlighted_fact_refs": rec.highlighted_fact_refs,
     }
 
 
@@ -72,6 +75,7 @@ def _payload_to_record(payload: dict) -> CaseRecord:
         sibling_case_ids=list(payload.get("sibling_case_ids", []) or []),
         replay_decision=payload.get("replay_decision"),
         closing_message=payload.get("closing_message"),
+        highlighted_fact_refs=list(payload.get("highlighted_fact_refs", []) or []),
         # ctx is not persisted — it's derived from lineage on demand. For our
         # demo, in-flight ctx is lost on restart, but that's fine.
     )
@@ -173,3 +177,63 @@ class PersistentCaseStore:
 
     def items(self):
         return self._cache.items()
+
+    # ---- Phase 2: highlighted-fact denormalised table ---------------------
+    def write_highlighted_facts(self, rec: CaseRecord) -> None:
+        """Replace any prior highlight rows for this case with the current
+        record's `highlighted_fact_refs`. Idempotent — safe to call multiple
+        times per case (e.g. on replay).
+
+        Splits the work in two so the in-memory `rec.highlighted_fact_refs`
+        stays the canonical "what the UI shows" view while the table powers
+        Phase 3 aggregate queries.
+        """
+        if not rec.scenario_id or not rec.decision_kind:
+            return  # not a decided case yet
+        with self._db.session() as session:
+            session.execute(
+                delete(CaseHighlightedFactRow).where(
+                    CaseHighlightedFactRow.case_id == rec.case_id
+                )
+            )
+            now = datetime.utcnow()
+            for position, ref in enumerate(rec.highlighted_fact_refs or []):
+                session.add(
+                    CaseHighlightedFactRow(
+                        case_id=rec.case_id,
+                        scenario_id=rec.scenario_id,
+                        scenario_version=rec.scenario_version,
+                        decision_kind=rec.decision_kind,
+                        fact_source=str(ref.get("source") or ""),
+                        fact_ontology_type=str(ref.get("ontology_type") or ""),
+                        fact_id=str(ref.get("id") or ""),
+                        fact_title=ref.get("title") or None,
+                        position=position,
+                        highlighted_at=now,
+                    )
+                )
+            session.commit()
+
+    def read_highlighted_facts(self, case_id: str) -> list[dict]:
+        """Read back the denormalised rows for a case (ordered by position)."""
+        with self._db.session() as session:
+            rows = (
+                session.execute(
+                    select(CaseHighlightedFactRow)
+                    .where(CaseHighlightedFactRow.case_id == case_id)
+                    .order_by(CaseHighlightedFactRow.position.asc())
+                )
+                .scalars()
+                .all()
+            )
+        return [
+            {
+                "source": r.fact_source,
+                "ontology_type": r.fact_ontology_type,
+                "id": r.fact_id,
+                "title": r.fact_title,
+                "position": r.position,
+                "highlighted_at": r.highlighted_at.isoformat() if r.highlighted_at else None,
+            }
+            for r in rows
+        ]

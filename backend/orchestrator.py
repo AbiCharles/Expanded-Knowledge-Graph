@@ -154,6 +154,12 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
         _maybe_run_executor(state, case, scenario)
 
     state.cases.save(case)
+    # Phase 2 — mirror the reviewer's load-bearing-fact picks into the
+    # denormalised mining table. The list lives on `case.highlighted_fact_refs`
+    # already (decisions.record_decision_internal stashed it before
+    # unblocking us); this just keeps the queryable copy in sync.
+    if hasattr(state.cases, "write_highlighted_facts"):
+        state.cases.write_highlighted_facts(case)
 
     await state.bus.emit(
         case.case_id,

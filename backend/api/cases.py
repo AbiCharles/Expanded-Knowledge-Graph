@@ -341,6 +341,30 @@ async def get_case(
     return _case_full(state, case)
 
 
+@router.get("/cases/{case_id}/highlights")
+async def case_highlights(
+    case_id: str, request: Request, user: CurrentUser = Depends(current_user)
+) -> dict:
+    """Phase 2 — the load-bearing facts the reviewer flagged.
+
+    Read-back of the denormalised `case_highlighted_facts` rows for a
+    case. Empty list when the reviewer didn't flag anything, when the
+    case is autonomous (no reviewer), or when the case predates Phase 2.
+    """
+    state: AppState = request.app.state.app_state
+    case = _own_case_or_403(state, case_id, user)
+    rows: list[dict] = []
+    if hasattr(state.cases, "read_highlighted_facts"):
+        rows = state.cases.read_highlighted_facts(case_id)
+    return {
+        "case_id": case.case_id,
+        "scenario_id": case.scenario_id,
+        "scenario_version": case.scenario_version,
+        "decision_kind": case.decision_kind,
+        "highlighted_fact_refs": rows,
+    }
+
+
 @router.get("/cases/{case_id}/events")
 async def case_events(case_id: str, request: Request):
     """SSE stream of events for one case."""

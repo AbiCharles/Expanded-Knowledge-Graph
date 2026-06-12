@@ -100,6 +100,88 @@ function ActionPayload({ caseFull }: { caseFull: CaseFull }) {
 }
 
 // =============================================================================
+// Phase 2 — load-bearing fact picker (shared by RationaleModal + ApproveModal)
+// =============================================================================
+// Backend caps at 3 (decisions.MAX_HIGHLIGHTED_FACTS). Mirrored here so
+// the UI can disable further selections at the cap.
+const MAX_HIGHLIGHTED_FACTS = 3;
+
+function LoadBearingFactsPicker({
+  active,
+  selected,
+  onChange,
+}: {
+  active: CaseFull;
+  selected: import("../api").HighlightedFactRef[];
+  onChange: (refs: import("../api").HighlightedFactRef[]) => void;
+}) {
+  // Flatten facts across stages — the picker should let the reviewer
+  // single out anything the agent surfaced, not just the review stage.
+  const allFacts = (active.stages || []).flatMap((s) =>
+    s.facts.map((f) => ({
+      source: f.source,
+      ontology_type: f.ontology_type,
+      id: f.id,
+      title: f.title || null,
+    })),
+  );
+
+  if (allFacts.length === 0) return null;
+
+  const refKey = (r: { source: string; ontology_type: string; id: string }) =>
+    `${r.source}|${r.ontology_type}|${r.id}`;
+  const selectedKeys = new Set(selected.map(refKey));
+
+  const toggle = (fact: import("../api").HighlightedFactRef) => {
+    const key = refKey(fact);
+    if (selectedKeys.has(key)) {
+      onChange(selected.filter((r) => refKey(r) !== key));
+      return;
+    }
+    if (selected.length >= MAX_HIGHLIGHTED_FACTS) return;  // hit the cap
+    onChange([...selected, fact]);
+  };
+
+  return (
+    <div className="rationale-loadbearing">
+      <div className="rationale-section-label">
+        Which facts were load-bearing? · optional · pick up to {MAX_HIGHLIGHTED_FACTS}
+        <span className="loadbearing-count">
+          {" "}({selected.length}/{MAX_HIGHLIGHTED_FACTS})
+        </span>
+      </div>
+      <div className="loadbearing-help">
+        Phase 2 of the compounding loop. When you flag the 1–3 facts that
+        tipped the decision, the platform learns which evidence patterns
+        actually drive overrides — feeding the eventual auto-promotion of
+        new scenario versions.
+      </div>
+      <div className="loadbearing-chips">
+        {allFacts.map((f, idx) => {
+          const isOn = selectedKeys.has(refKey(f));
+          const atCap = !isOn && selected.length >= MAX_HIGHLIGHTED_FACTS;
+          return (
+            <button
+              key={`${refKey(f)}|${idx}`}
+              type="button"
+              className={`loadbearing-chip${isOn ? " on" : ""}${atCap ? " disabled" : ""}`}
+              onClick={() => toggle(f)}
+              disabled={atCap}
+              aria-pressed={isOn}
+              title={atCap ? `Cap of ${MAX_HIGHLIGHTED_FACTS} reached` : undefined}
+            >
+              <span className="loadbearing-chip-type">{f.ontology_type}</span>
+              <span className="loadbearing-chip-id">{f.id}</span>
+              {f.title && <span className="loadbearing-chip-title">{f.title}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Rationale modal — two views: edit + confirm
 // =============================================================================
 export function RationaleModal({
@@ -111,13 +193,22 @@ export function RationaleModal({
   active: CaseFull;
   decision: "reject" | "request_more_info";
   onClose: () => void;
-  onSubmit: (rationale: string, followUp: string | null) => void;
+  onSubmit: (
+    rationale: string,
+    followUp: string | null,
+    highlightedRefs: import("../api").HighlightedFactRef[],
+  ) => void;
 }) {
   const isReject = decision === "reject";
   const reasons = active.scenario?.rationale_reasons?.[decision] ?? [];
   const [text, setText] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [view, setView] = useState<"edit" | "confirm">("edit");
+  // Phase 2 — reviewer's optional load-bearing fact picks. Ordered =
+  // the order they were tapped; capped at MAX_HIGHLIGHTS by the API.
+  const [highlightedRefs, setHighlightedRefs] = useState<
+    import("../api").HighlightedFactRef[]
+  >([]);
 
   return (
     <div
@@ -177,6 +268,11 @@ export function RationaleModal({
                   </button>
                 ))}
               </div>
+              <LoadBearingFactsPicker
+                active={active}
+                selected={highlightedRefs}
+                onChange={setHighlightedRefs}
+              />
               <div className="rationale-help">
                 This reason and any follow-up will be recorded in the audit lineage and shown back to the operator.
               </div>
@@ -218,6 +314,21 @@ export function RationaleModal({
                   <div className="confirm-followup">⏱ Revisit in {followUpLabel(followUp)}</div>
                 </>
               )}
+              {highlightedRefs.length > 0 && (
+                <>
+                  <div className="rationale-section-label">Load-bearing facts</div>
+                  <div className="confirm-highlights">
+                    {highlightedRefs.map((r, i) => (
+                      <div key={`${r.source}|${r.id}|${i}`} className="confirm-highlight-row">
+                        <span className="confirm-highlight-pos">{i + 1}.</span>
+                        <span className="confirm-highlight-type">{r.ontology_type}</span>
+                        <span className="confirm-highlight-id">{r.id}</span>
+                        {r.title && <span className="confirm-highlight-title">{r.title}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="rationale-footer">
               <button className="rationale-cancel" onClick={() => setView("edit")}>
@@ -225,7 +336,7 @@ export function RationaleModal({
               </button>
               <button
                 className={`rationale-submit${isReject ? "" : " mode-info"}`}
-                onClick={() => onSubmit(text, followUp || null)}
+                onClick={() => onSubmit(text, followUp || null, highlightedRefs)}
               >
                 {isReject ? "Yes, reject" : "Yes, send back"}
               </button>
@@ -254,9 +365,15 @@ export function ApproveModal({
 }: {
   active: CaseFull;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (highlightedRefs: import("../api").HighlightedFactRef[]) => void;
 }) {
   const msg = active.scenario?.execute_message || "The agent will proceed with this action.";
+  // Phase 2 — even on approve, the reviewer can mark which facts
+  // CONFIRMED the agent's recommendation. Phase 3 mines both directions
+  // (overrides + confirmations) to learn which evidence patterns matter.
+  const [highlightedRefs, setHighlightedRefs] = useState<
+    import("../api").HighlightedFactRef[]
+  >([]);
   return (
     <div className="modal-backdrop layer-2" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="approve-card">
@@ -266,12 +383,17 @@ export function ApproveModal({
         </div>
         <div className="approve-body">
           <div className="approve-msg" dangerouslySetInnerHTML={{ __html: msg }} />
+          <LoadBearingFactsPicker
+            active={active}
+            selected={highlightedRefs}
+            onChange={setHighlightedRefs}
+          />
         </div>
         <div className="approve-footer">
           <button className="rationale-cancel" onClick={onCancel}>
             Cancel
           </button>
-          <button className="approve-submit" onClick={onConfirm}>
+          <button className="approve-submit" onClick={() => onConfirm(highlightedRefs)}>
             Confirm execute
           </button>
         </div>

@@ -2,13 +2,28 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from tcs_hitl_context import ReviewDecision, ReviewDecisionKind
 
 from ..state import AppState, CaseRecord
+
+
+# Phase 2 — reviewer-flagged load-bearing facts. Capped at 3 to keep the
+# Phase 3 mining signal sharp; more than that and "load-bearing" loses
+# meaning.
+MAX_HIGHLIGHTED_FACTS = 3
+
+
+class HighlightedFactRef(BaseModel):
+    """A reviewer-marked fact reference. Triple matches `KnowledgeRef` so
+    Phase 3 can join straight against the lineage."""
+    source: str = Field(min_length=1)
+    ontology_type: str = Field(min_length=1)
+    id: str = Field(min_length=1)
+    title: Optional[str] = None
 
 router = APIRouter(tags=["decisions"])
 
@@ -18,6 +33,9 @@ class RecordDecisionIn(BaseModel):
     reviewer_id: str = "reviewer"
     rationale: str = ""
     follow_up: Optional[str] = None
+    # Phase 2 — optional list of facts the reviewer flagged as
+    # load-bearing in the decision. Order matters (most → least).
+    highlighted_fact_refs: list[HighlightedFactRef] = Field(default_factory=list)
 
 
 @router.get("/decisions/queue")
@@ -43,6 +61,17 @@ def list_pending(request: Request) -> list[dict]:
 
 @router.post("/decisions/{ticket_id}")
 async def post_decision(ticket_id: str, payload: RecordDecisionIn, request: Request) -> dict:
+    # Static-payload validation first — return a 4xx on bad shape before
+    # touching the case store. Saves a DB hit and keeps error semantics
+    # crisp for clients (bad request != not found).
+    if len(payload.highlighted_fact_refs) > MAX_HIGHLIGHTED_FACTS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"at most {MAX_HIGHLIGHTED_FACTS} highlighted_fact_refs allowed "
+                f"(got {len(payload.highlighted_fact_refs)})"
+            ),
+        )
     state: AppState = request.app.state.app_state
     case = state.case_for_ticket(ticket_id)
     if case is None:
@@ -56,6 +85,7 @@ async def post_decision(ticket_id: str, payload: RecordDecisionIn, request: Requ
         reviewer_id=payload.reviewer_id,
         rationale=payload.rationale,
         follow_up=payload.follow_up,
+        highlighted_fact_refs=[ref.model_dump() for ref in payload.highlighted_fact_refs],
     )
 
 
@@ -68,9 +98,16 @@ async def record_decision_internal(
     reviewer_id: str,
     rationale: str,
     follow_up: Optional[str],
+    highlighted_fact_refs: Optional[list[dict]] = None,
 ) -> dict:
     """Write the decision into the framework's decision store and signal the
-    orchestrator that's blocked waiting for it."""
+    orchestrator that's blocked waiting for it.
+
+    `highlighted_fact_refs` (Phase 2) is the reviewer's optional list of
+    load-bearing facts. We stash it on the case *before* unblocking the
+    orchestrator so the orchestrator can write the denormalised table
+    once the case completes.
+    """
     if decision not in {"approve", "reject", "request_more_info"}:
         raise HTTPException(status_code=400, detail="invalid decision kind")
     if not case.ticket_id:
@@ -86,6 +123,10 @@ async def record_decision_internal(
     )
     state.decision_store.put(rd)
     case.follow_up = follow_up
+    # Stash highlights now so the orchestrator can pick them up after its
+    # decision_event wakes. Empty list when the reviewer skipped (or for
+    # auto-approve / replay paths that don't pass any).
+    case.highlighted_fact_refs = list(highlighted_fact_refs or [])
 
     case.phase = "reviewing"
     state.cases.save(case)

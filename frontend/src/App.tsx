@@ -233,7 +233,7 @@ export default function App() {
     else setModal({ kind: "rationale", decision: d });
   };
 
-  const onApproveConfirm = async () => {
+  const onApproveConfirm = async (highlightedRefs: api.HighlightedFactRef[]) => {
     if (!active) return;
     const ticket = active.lineage.find((l) => l.action === "submitted")?.detail?.match(/async-[a-f0-9]+/)?.[0];
     if (!ticket) return;
@@ -241,11 +241,16 @@ export default function App() {
       decision: "approve",
       reviewer_id: active.scenario?.reviewer_role?.name || "reviewer",
       rationale: "",
+      highlighted_fact_refs: highlightedRefs,
     });
     setModal({ kind: "none" });
   };
 
-  const onRationaleSubmit = async (rationale: string, followUp: string | null) => {
+  const onRationaleSubmit = async (
+    rationale: string,
+    followUp: string | null,
+    highlightedRefs: api.HighlightedFactRef[],
+  ) => {
     if (!active || modal.kind !== "rationale") return;
     const ticket = active.lineage.find((l) => l.action === "submitted")?.detail?.match(/async-[a-f0-9]+/)?.[0];
     if (!ticket) return;
@@ -254,6 +259,7 @@ export default function App() {
       reviewer_id: active.scenario?.reviewer_role?.name || "reviewer",
       rationale,
       follow_up: followUp,
+      highlighted_fact_refs: highlightedRefs,
     });
     setModal({ kind: "none" });
   };
