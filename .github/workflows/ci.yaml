@@ -68,6 +68,9 @@ jobs:
       - name: Type-check + build
         working-directory: frontend
         run: npm run build
+      - name: Component tests (Vitest)
+        working-directory: frontend
+        run: npm test
 
   ruff-lint:
     runs-on: ubuntu-latest
