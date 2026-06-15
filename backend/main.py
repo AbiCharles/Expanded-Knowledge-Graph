@@ -200,8 +200,28 @@ def create_app() -> FastAPI:
     if dist_dir.is_dir():
         index_file = dist_dir / "index.html"
         assets_dir = dist_dir / "assets"
+
+        # Cache strategy for an SPA whose JS bundle name is hash-tagged
+        # by Vite (e.g. index-CgXcNLoD.js):
+        #   - /assets/* (the hashed bundles + css):  cache forever +
+        #     `immutable` so a browser doesn't even revalidate. Safe
+        #     because the filename changes on every rebuild.
+        #   - index.html:  never cache. It's what tells the browser which
+        #     hashed bundle to load; if it's stale the user keeps loading
+        #     yesterday's JS forever even after a deploy.
+        # Without these headers anuj-style "I'm still on the old UI"
+        # bugs are guaranteed after every release.
+        IMMUTABLE = "public, max-age=31536000, immutable"
+        NO_CACHE = "no-cache, no-store, must-revalidate"
+
+        class _ImmutableStatic(StaticFiles):
+            async def get_response(self, path, scope):
+                resp = await super().get_response(path, scope)
+                resp.headers["Cache-Control"] = IMMUTABLE
+                return resp
+
         if assets_dir.is_dir():
-            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+            app.mount("/assets", _ImmutableStatic(directory=assets_dir), name="assets")
 
         # SPA fallback so React Router routes survive a hard refresh. Skips
         # /api/* so unmatched API paths still 404 instead of silently
@@ -213,8 +233,13 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=404, detail="Not Found")
             asset = dist_dir / full_path
             if full_path and asset.is_file():
-                return FileResponse(asset)
-            return FileResponse(index_file)
+                # Hashed bundle that escaped /assets — still immutable.
+                return FileResponse(
+                    asset, headers={"Cache-Control": IMMUTABLE}
+                )
+            return FileResponse(
+                index_file, headers={"Cache-Control": NO_CACHE}
+            )
 
     return app
 
