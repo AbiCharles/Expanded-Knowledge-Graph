@@ -161,11 +161,14 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
     app = FastAPI(title="HITL Context Framework", version="0.1.0", lifespan=lifespan)
+    # CORS — open to all origins since the Fly API is hit from external
+    # clients (Azure deployment, local dev, demo audience browsers).
+    # allow_credentials stays False so the "*" wildcard is browser-spec
+    # compliant (credentials + wildcard origins is rejected client-side).
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
+        allow_origins=["*"],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
