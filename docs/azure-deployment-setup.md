@@ -22,12 +22,50 @@ running on Fly today.
 | `LLM_PROVIDER` | `openai` \| `azure` \| `fake`. Use `fake` for demos that don't need real LLM calls. | Yes |
 | `OPENAI_API_KEY` | OpenAI API key (only when `LLM_PROVIDER=openai`). | Conditional |
 | `HITL_ADMIN_PASSWORD` | The admin login password the seeded admin user gets. Don't leave this as the default in any environment a stakeholder can reach. | Yes |
-| `NEO4J_URI` | `bolt://hostname:7687` for the shared Neo4j. | Yes (for graph) |
+| `NEO4J_URI` | `bolt+s://tcs-kf-neo4j.fly.dev:7687` — the Fly-hosted Neo4j is now publicly reachable over TLS (see "Neo4j public route" below). | Yes (for graph) |
 | `NEO4J_USER` | Neo4j username (typically `neo4j`). | Yes (for graph) |
 | `NEO4J_PASSWORD` | Neo4j password. | Yes (for graph) |
 
 Optional add-ons: `NEO4J_DATABASE` (Enterprise multi-DB), `CORS_ORIGINS` (defaults to localhost dev),
 `LOG_LEVEL`, `HITL_MAX_VECTOR_CHUNKS`, the Azure OpenAI variants.
+
+---
+
+## Neo4j public route (2026-06-16)
+
+The Fly-hosted Neo4j companion app (`tcs-kf-neo4j`) was originally
+reachable only over Fly's internal 6PN network. As of 2026-06-16 it
+also accepts TLS-wrapped bolt traffic from the public internet, so
+the Azure deployment can connect to the same graph as the Fly main
+app.
+
+```
+Internal route (Fly main app keeps using this — faster, free):
+    bolt://tcs-kf-neo4j.internal:7687
+
+Public TLS route (Azure deployment + any non-Fly client):
+    bolt+s://tcs-kf-neo4j.fly.dev:7687
+    neo4j+s://tcs-kf-neo4j.fly.dev:7687
+```
+
+Configuration lives in [`infra/tcs-kf-neo4j/fly.toml`](../infra/tcs-kf-neo4j/fly.toml).
+TLS is terminated at Fly's edge using the auto-provisioned Let's Encrypt
+cert for `tcs-kf-neo4j.fly.dev`. Inside the container, Neo4j speaks
+plain bolt on 7687.
+
+**Auth.** The `NEO4J_PASSWORD` is a 48-char hex token (192 bits of
+entropy) — uncrackable by brute force even with the bolt port exposed.
+Rotate via `fly secrets set NEO4J_PASSWORD=…` on **both** the
+`tcs-kf-neo4j` and `tcs-knowledge-fabric` apps in lock-step if it ever
+leaks.
+
+**Hardening to consider later.** Right now the bolt port is reachable
+from anywhere on the internet (still password-protected). If that's
+ever uncomfortable, options include:
+
+- Disable the dedicated IPv4 (saves $2/mo) and keep IPv6-only.
+- Move Neo4j to a managed Aura instance with IP allow-listing.
+- Stand up a private network between Fly and Azure via WireGuard.
 
 ---
 

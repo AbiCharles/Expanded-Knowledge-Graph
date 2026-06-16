@@ -1,0 +1,59 @@
+# fly.toml for the standalone Neo4j companion Fly app.
+#
+# Originally deployed standalone in May 2026 with no public exposure
+# (Fly internal 6PN only). 2026-06-16: opened bolt port 7687 to the
+# public internet over TLS so an external Azure deployment can connect
+# to the same graph as the Fly main app.
+#
+# Internal route (still preferred for the Fly main app):
+#     bolt://tcs-kf-neo4j.internal:7687
+#
+# Public route (use from Azure or any non-Fly client):
+#     bolt+s://tcs-kf-neo4j.fly.dev:7687
+#     neo4j+s://tcs-kf-neo4j.fly.dev:7687
+#
+# TLS is terminated at Fly's edge using the auto-provisioned
+# Let's Encrypt cert for tcs-kf-neo4j.fly.dev; Neo4j inside the
+# container speaks plain bolt on 7687.
+#
+# Security: the bolt password is a 48-char hex token (192 bits of
+# entropy) set as a Fly secret on the tcs-knowledge-fabric app, which
+# is the only legitimate consumer beyond TCS-internal admins. Rotate
+# via `fly secrets set NEO4J_PASSWORD=...` on both apps if it ever
+# leaks.
+
+app = 'tcs-kf-neo4j'
+primary_region = 'iad'
+
+[build]
+  image = 'neo4j:5-community'
+
+[env]
+  NEO4J_ACCEPT_LICENSE_AGREEMENT = 'yes'
+  NEO4J_server_config_strict__validation_enabled = 'false'
+  NEO4J_server_default__listen__address = '0.0.0.0'
+  NEO4J_server_memory_heap_initial__size = '512m'
+  NEO4J_server_memory_heap_max__size = '1024m'
+  NEO4J_server_memory_pagecache_size = '256m'
+
+[[mounts]]
+  source = 'neo4j_data'
+  destination = '/data'
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 2048
+
+# Public bolt service. Fly proxy terminates TLS at the edge using the
+# Let's Encrypt cert for tcs-kf-neo4j.fly.dev; the Neo4j container
+# speaks plain bolt on port 7687.
+[[services]]
+  protocol = 'tcp'
+  internal_port = 7687
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 7687
+    handlers = ['tls']
