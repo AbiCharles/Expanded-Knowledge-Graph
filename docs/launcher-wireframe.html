@@ -184,6 +184,8 @@ const state = {
   launchedView: 'operator', // 'operator' | 'reviewer' | 'admin' — top-level mode in the launched instance
   adminTab: 'overview',     // when launchedView==='admin': 'overview' | 'ontology' | 'scenarios' | 'actions' | 'reviewers' | 'audit'
   packKind: 'populated',    // preview toggle: 'populated' (Shipping pack, busy state) | 'empty' (Custom blank slate)
+  expandedStages: {1: true, 2: true, 3: true, 4: true}, // stage cards expanded/collapsed in the Scenarios build form
+  testPanelOpen: false,     // "Test with sample data…" dashed panel in the Write actions build form
   reviewerTab: 'inbox',     // 'inbox' (pending decisions) | 'reviewed' (decided by me, undo window)
   reviewerActiveCase: 'C-3f7a2b', // selected case in the Inbox tab
   reviewerActiveReviewed: 'C-2a3b5d', // selected case in the Reviewed-by-me tab
@@ -1216,11 +1218,11 @@ function tabHome() {
     </div>
 
     <div class="li-checklist">
-      <div class="check-row"><span class="badge warn">1</span> <b>Define your ontology classes.</b> Currently: <span class="muted">0 classes</span> · <a class="li-link" onclick="state.launchedTab='ontology'; render();">Open ontology →</a></div>
-      <div class="check-row"><span class="badge warn">2</span> <b>Draft scenarios.</b> Currently: <span class="muted">0 scenarios</span> · <a class="li-link" onclick="state.launchedTab='scenarios'; render();">Open scenarios →</a></div>
-      <div class="check-row"><span class="badge warn">3</span> <b>Configure write actions.</b> Currently: <span class="muted">0 actions</span> · <a class="li-link" onclick="state.launchedTab='actions'; render();">Open write actions →</a></div>
-      <div class="check-row"><span class="badge warn">4</span> <b>Map reviewers to scenarios.</b> Currently: <span class="muted">no scenarios to map yet</span> · <a class="li-link" onclick="state.launchedTab='reviewers'; render();">Open reviewers →</a></div>
-      <div class="check-row"><span class="badge warn">5</span> <b>Run test cases + go live.</b> Currently: <span class="muted">0 test cases run</span> · <a class="li-link" onclick="state.launchedTab='reviewers'; render();">Open go-live →</a></div>
+      <div class="check-row"><span class="badge warn">1</span> <b>Define your ontology classes.</b> Currently: <span class="muted">0 classes</span> · <a class="li-link" onclick="state.adminTab='ontology'; render();">Open ontology →</a></div>
+      <div class="check-row"><span class="badge warn">2</span> <b>Draft scenarios.</b> Currently: <span class="muted">0 scenarios</span> · <a class="li-link" onclick="state.adminTab='scenarios'; render();">Open scenarios →</a></div>
+      <div class="check-row"><span class="badge warn">3</span> <b>Configure write actions.</b> Currently: <span class="muted">0 actions</span> · <a class="li-link" onclick="state.adminTab='actions'; render();">Open write actions →</a></div>
+      <div class="check-row"><span class="badge warn">4</span> <b>Map reviewers to scenarios.</b> Currently: <span class="muted">no scenarios to map yet</span> · <a class="li-link" onclick="state.adminTab='reviewers'; render();">Open reviewers →</a></div>
+      <div class="check-row"><span class="badge warn">5</span> <b>Run test cases + go live.</b> Currently: <span class="muted">0 test cases run</span> · <a class="li-link" onclick="state.adminTab='reviewers'; render();">Open go-live →</a></div>
     </div>
 
     <div class="li-meta">
@@ -1306,10 +1308,10 @@ function tabScenarios() {
               <div style="font-size:13px; font-weight:600; color:#1E2761;">agent_intake <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "Policy &amp; scope"</span></div>
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · inline facts only · no ontology queries</div>
             </div>
-            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[1]=!state.expandedStages[1]; render();">${state.expandedStages[1] ? 'Edit ▾' : 'Edit ▸'}</button>
             <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
           </div>
-          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+          ${state.expandedStages[1] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Tell the agent (and downstream stages) what it's doing + who's responsible. Reviewer sees these as the "Policy &amp; scope" envelope cards.</div>
             <div style="margin-top:8px; padding:8px 12px; background:#fafafa; border-radius:3px; font-family:'SF Mono', monospace; font-size:11px; color:#374151;">
               <div>● actor &nbsp; &nbsp; &nbsp; &nbsp; <span style="color:#1E2761;">agent-pricing-12</span></div>
@@ -1318,10 +1320,10 @@ function tabScenarios() {
               <div>● policy_guardrail <span style="color:#1E2761;">POL-AP-PRICING-2026</span></div>
             </div>
             <a class="li-link" style="margin-top:6px; display:inline-block; font-size:11px;">+ Add inline fact</a>
-          </div>
+          </div>` : ''}
         </div>
 
-        <!-- Stage 2 of 3 — default: proposal / agent gathered -->
+        <!-- Stage 2 of 4 — default: proposal / agent gathered -->
         <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
           <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
             <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">2</span>
@@ -1329,10 +1331,10 @@ function tabScenarios() {
               <div style="font-size:13px; font-weight:600; color:#1E2761;">proposal <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "Agent gathered"</span></div>
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · the bulk of evidence · pulled from ontology classes you defined</div>
             </div>
-            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[2]=!state.expandedStages[2]; render();">${state.expandedStages[2] ? 'Edit ▾' : 'Edit ▸'}</button>
             <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
           </div>
-          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+          ${state.expandedStages[2] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Run live ontology queries to gather the facts the reviewer needs to see. Each row below produces fact cards in the operator + reviewer UI.</div>
             <table class="admin-table" style="margin-top:8px;">
               <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
@@ -1352,10 +1354,10 @@ function tabScenarios() {
                 <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
               </tbody>
             </table>
-          </div>
+          </div>` : ''}
         </div>
 
-        <!-- Stage 3 of 3 — default: review / for your decision -->
+        <!-- Stage 3 of 4 — default: review / for your decision -->
         <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
           <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
             <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">3</span>
@@ -1363,10 +1365,10 @@ function tabScenarios() {
               <div style="font-size:13px; font-weight:600; color:#1E2761;">review <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "For your decision"</span></div>
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · prior cases + policy excerpts · anchors the reviewer's call</div>
             </div>
-            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[3]=!state.expandedStages[3]; render();">${state.expandedStages[3] ? 'Edit ▾' : 'Edit ▸'}</button>
             <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
           </div>
-          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+          ${state.expandedStages[3] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Show the reviewer "what similar decisions looked like" + the SOP text that applies. Frames their call.</div>
             <table class="admin-table" style="margin-top:8px;">
               <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
@@ -1386,7 +1388,7 @@ function tabScenarios() {
                 <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
               </tbody>
             </table>
-          </div>
+          </div>` : ''}
         </div>
 
         <!-- Stage 4 of 4 — default: outcome / what happens after the decision -->
@@ -1397,10 +1399,10 @@ function tabScenarios() {
               <div style="font-size:13px; font-weight:600; color:#1E2761;">outcome <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "What happens next"</span></div>
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · what fires after the decision · closing messages + executor binding + canned reasons</div>
             </div>
-            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[4]=!state.expandedStages[4]; render();">${state.expandedStages[4] ? 'Edit ▾' : 'Edit ▸'}</button>
             <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
           </div>
-          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+          ${state.expandedStages[4] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Define what happens when the reviewer (or the platform) decides. Closing message text, the executor action that runs on Approve, and the canned rationale options reviewers can pick from all live here.</div>
 
             <!-- Closing messages -->
@@ -1453,7 +1455,7 @@ function tabScenarios() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </div>` : ''}
         </div>
 
         <div style="margin-top:10px; padding:10px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 4px 4px 0;">
@@ -1499,15 +1501,15 @@ function tabActions() {
         <label>Executor</label><textarea>UPDATE customer_pricing
    SET discount_pct = :discount_pct, expires = :expires
  WHERE customer_id = :customer_id;</textarea>
-        <label></label><div><button class="small-btn primary">Save action</button> <button class="small-btn" style="margin-left: 6px;">Test with sample data…</button></div>
+        <label></label><div><button class="small-btn primary">Save action</button> <button class="small-btn" style="margin-left: 6px;" onclick="state.testPanelOpen = !state.testPanelOpen; render();">${state.testPanelOpen ? 'Hide test panel' : 'Test with sample data…'}</button></div>
       </div>
     </div>
 
-    <!-- "Test with sample data" panel — wireframe representation -->
+    ${state.testPanelOpen ? `<!-- "Test with sample data" panel — toggled open via the form button -->
     <div style="margin-top:18px; border:1.5px dashed #4f46e5; background:#eef2ff; border-radius:4px; padding:14px;">
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
         <h4 style="margin:0; font-size:11px; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">Test with sample data · dry-run + execute against an isolated test DB</h4>
-        <a class="li-link" style="font-size:11px;">Collapse</a>
+        <a class="li-link" style="font-size:11px;" onclick="state.testPanelOpen=false; render();">Collapse</a>
       </div>
       <p style="font-size:12px; color:#4b5563; margin:0 0 12px; line-height:1.5;">
         Verify the action does what you expect before saving. The dry run shows the exact SQL/HTTP the platform would issue, the rows it'd touch, and the before/after diff. An "execute" run hits a sandbox copy of the connector (never production data). Both leave an entry in the Audit tab.
@@ -1557,7 +1559,7 @@ function tabActions() {
           </div>
         </div>
       </div>
-    </div>`;
+    </div>` : ''}`;
 }
 
 function tabReviewers() {
@@ -1860,7 +1862,7 @@ function screenReview() {
   <span class="k">reviewer_signoffs:</span> <span class="v">1</span>
   <span class="k">rollback_window_days:</span> <span class="v">7</span></div>
    <p style="margin-top: 20px;">
-     <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.launchedTab='home'; render();">Launch instance →</button>
+     <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.adminTab='overview'; render();">Launch instance →</button>
      <button class="btn" style="margin-left: 8px;">Download config (.yaml)</button>
      <button class="btn" style="margin-left: 8px;">Edit a step</button>
    </p>`;
