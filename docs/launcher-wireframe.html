@@ -1181,7 +1181,19 @@ function renderAdminView() {
     audit:     tabAudit,
   }[state.adminTab]();
 
+  const isEmpty = state.packKind === 'empty';
+  const previewNote = isEmpty
+    ? 'all tabs render the build-mode authoring experience (Custom · Blank-slate launch)'
+    : 'all tabs render the live Shipping-pack admin view (16 classes · 11 scenarios · 8 actions)';
+
   return `
+    <div style="border: 1.5px dashed #fbbf24; background: #fffbeb; padding: 8px 12px; margin: 14px 24px 0;
+                border-radius: 4px; display: flex; align-items: center; gap: 10px; font-size: 11px;">
+      <span style="color: #92400e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">⚙ Wireframe preview state</span>
+      <button class="small-btn ${state.packKind==='populated'?'primary':''}" style="font-size:11px;" onclick="state.packKind='populated'; render();">Populated · Shipping pack</button>
+      <button class="small-btn ${state.packKind==='empty'?'primary':''}" style="font-size:11px;" onclick="state.packKind='empty'; render();">Empty · Custom blank slate</button>
+      <span style="color:#92400e; margin-left:auto; font-style:italic;">${previewNote}</span>
+    </div>
     <div class="li-tabs">${tabBar}</div>
     <div class="li-body">${tabContent}</div>`;
 }
