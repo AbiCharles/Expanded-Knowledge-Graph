@@ -186,6 +186,8 @@ const state = {
   packKind: 'populated',    // preview toggle: 'populated' (Shipping pack, busy state) | 'empty' (Custom blank slate)
   expandedStages: {1: true, 2: true, 3: true, 4: true}, // stage cards expanded/collapsed in the Scenarios build form
   testPanelOpen: false,     // "Test with sample data…" dashed panel in the Write actions build form
+  editingRow: null,         // unique id of the row currently in inline-edit mode (null = none)
+  extraInlineFacts: [],     // rows the user appended via "+ Add inline fact" in Stage 1
   reviewerTab: 'inbox',     // 'inbox' (pending decisions) | 'reviewed' (decided by me, undo window)
   reviewerActiveCase: 'C-3f7a2b', // selected case in the Inbox tab
   reviewerActiveReviewed: 'C-2a3b5d', // selected case in the Reviewed-by-me tab
@@ -1318,8 +1320,9 @@ function tabScenarios() {
               <div>● role &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span style="color:#1E2761;">"approve volume discount"</span></div>
               <div>● reviewer_role &nbsp; <span style="color:#1E2761;">finance-reviewers</span></div>
               <div>● policy_guardrail <span style="color:#1E2761;">POL-AP-PRICING-2026</span></div>
+              ${state.extraInlineFacts.map((f, i) => `<div>● <input value="new_fact_${i+1}" style="border:1px solid #d1d5db; padding:2px 6px; font-size:11px; font-family:'SF Mono', monospace; width:140px;"> <input value="${f}" style="border:1px solid #d1d5db; padding:2px 6px; font-size:11px; font-family:'SF Mono', monospace; width:200px;"> <a class="li-link" style="font-size:10px;" onclick="state.extraInlineFacts.splice(${i}, 1); render();">remove</a></div>`).join('')}
             </div>
-            <a class="li-link" style="margin-top:6px; display:inline-block; font-size:11px;">+ Add inline fact</a>
+            <a class="li-link" style="margin-top:6px; display:inline-block; font-size:11px;" onclick="state.extraInlineFacts.push('your value here'); render();">+ Add inline fact</a>
           </div>` : ''}
         </div>
 
@@ -1339,18 +1342,8 @@ function tabScenarios() {
             <table class="admin-table" style="margin-top:8px;">
               <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
               <tbody>
-                <tr>
-                  <td><b>tcs_core.Product</b></td>
-                  <td style="font-family:'SF Mono', monospace; font-size:11px;">supplier_id = :supplier_id</td>
-                  <td>~3 SKU rows</td>
-                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                </tr>
-                <tr>
-                  <td><b>supply_chain.SanctionsProximity</b></td>
-                  <td style="font-family:'SF Mono', monospace; font-size:11px;">supplier_id = :supplier_id</td>
-                  <td>graph walk · max 3 hops</td>
-                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                </tr>
+                ${editableQueryRow('stage2-q1', 'tcs_core.Product', 'supplier_id = :supplier_id', '~3 SKU rows')}
+                ${editableQueryRow('stage2-q2', 'supply_chain.SanctionsProximity', 'supplier_id = :supplier_id', 'graph walk · max 3 hops')}
                 <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
               </tbody>
             </table>
@@ -1373,18 +1366,8 @@ function tabScenarios() {
             <table class="admin-table" style="margin-top:8px;">
               <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
               <tbody>
-                <tr>
-                  <td><b>tcs_core.PriorOverride</b></td>
-                  <td style="font-family:'SF Mono', monospace; font-size:11px;">scenario_id = :this_scenario</td>
-                  <td>3 most-recent similar decisions</td>
-                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                </tr>
-                <tr>
-                  <td><b>tcs_core.PolicyExcerpt</b></td>
-                  <td style="font-family:'SF Mono', monospace; font-size:11px;">semantic search on prompt</td>
-                  <td>top 2 SOP paragraphs</td>
-                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                </tr>
+                ${editableQueryRow('stage3-q1', 'tcs_core.PriorOverride', 'scenario_id = :this_scenario', '3 most-recent similar decisions')}
+                ${editableQueryRow('stage3-q2', 'tcs_core.PolicyExcerpt', 'semantic search on prompt', 'top 2 SOP paragraphs')}
                 <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
               </tbody>
             </table>
@@ -1411,9 +1394,9 @@ function tabScenarios() {
               <table class="admin-table">
                 <thead style="background:#fafafa;"><tr><th style="width:80px;">Decision</th><th>Message template</th><th></th></tr></thead>
                 <tbody>
-                  <tr><td><span class="pill green" style="font-size:9px;">Approve</span></td><td><i>"Volume discount approved. Pricing rule applied for {customer_id}."</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
-                  <tr><td><span class="pill red" style="font-size:9px;">Reject</span></td><td><i>"Rejected. Reason: {rationale}"</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
-                  <tr><td><span class="pill amber" style="font-size:9px;">RFI</span></td><td><i>"More info needed: {rationale}. Follow up in {follow_up}."</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
+                  ${editableMessageRow('stage4-msg-approve', 'green', 'Approve', '"Volume discount approved. Pricing rule applied for {customer_id}."')}
+                  ${editableMessageRow('stage4-msg-reject',  'red',   'Reject',  '"Rejected. Reason: {rationale}"')}
+                  ${editableMessageRow('stage4-msg-rfi',     'amber', 'RFI',     '"More info needed: {rationale}. Follow up in {follow_up}."')}
                 </tbody>
               </table>
             </div>
@@ -1435,23 +1418,8 @@ function tabScenarios() {
               <table class="admin-table">
                 <thead style="background:#fafafa;"><tr><th style="width:80px;">Decision</th><th>Quick-pick reasons (one per line)</th><th></th></tr></thead>
                 <tbody>
-                  <tr>
-                    <td><span class="pill red" style="font-size:9px;">Reject</span></td>
-                    <td style="font-size:11px;">
-                      • Discount exceeds tier-1 envelope.<br>
-                      • Customer not eligible for volume pricing.<br>
-                      • Margin impact too high.
-                    </td>
-                    <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                  </tr>
-                  <tr>
-                    <td><span class="pill amber" style="font-size:9px;">RFI</span></td>
-                    <td style="font-size:11px;">
-                      • Need updated 12-month volume forecast.<br>
-                      • Need customer LTV confirmation from sales.
-                    </td>
-                    <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
-                  </tr>
+                  ${editableReasonsRow('stage4-reasons-reject', 'red',   'Reject', '• Discount exceeds tier-1 envelope.\n• Customer not eligible for volume pricing.\n• Margin impact too high.')}
+                  ${editableReasonsRow('stage4-reasons-rfi',    'amber', 'RFI',    '• Need updated 12-month volume forecast.\n• Need customer LTV confirmation from sales.')}
                 </tbody>
               </table>
             </div>
@@ -1562,6 +1530,86 @@ function tabActions() {
     </div>` : ''}`;
 }
 
+// Helpers for inline-editable rows on the empty-state (Custom Blank-slate)
+// authoring pages. Each helper returns one <tr>. If state.editingRow === id,
+// the row is rendered with inputs + Save/Cancel; otherwise it shows static
+// content + an Edit button.
+function _saveCancel(id) {
+  return `<button class="small-btn primary" style="font-size:10px;" onclick="state.editingRow=null; render();">Save</button>
+          <button class="small-btn" style="font-size:10px;" onclick="state.editingRow=null; render();">Cancel</button>`;
+}
+function _editBtn(id) {
+  return `<button class="small-btn" style="font-size:10px;" onclick="state.editingRow='${id}'; render();">Edit</button>`;
+}
+
+function editableQueryRow(id, ontology, filter, returns) {
+  if (state.editingRow === id) {
+    return `<tr style="background:#eef2ff;">
+      <td><input value="${ontology}" style="font-size:11px; padding:3px 6px; border:1px solid #d1d5db; border-radius:3px; width:100%; font-family:inherit; font-weight:600;"></td>
+      <td><input value="${filter}" style="font-size:11px; padding:3px 6px; border:1px solid #d1d5db; border-radius:3px; width:100%; font-family:'SF Mono', monospace;"></td>
+      <td><input value="${returns}" style="font-size:11px; padding:3px 6px; border:1px solid #d1d5db; border-radius:3px; width:100%; font-family:inherit;"></td>
+      <td>${_saveCancel(id)}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td><b>${ontology}</b></td>
+    <td style="font-family:'SF Mono', monospace; font-size:11px;">${filter}</td>
+    <td>${returns}</td>
+    <td>${_editBtn(id)}</td>
+  </tr>`;
+}
+
+function editableMessageRow(id, pillCls, decision, message) {
+  if (state.editingRow === id) {
+    return `<tr style="background:#eef2ff;">
+      <td><span class="pill ${pillCls}" style="font-size:9px;">${decision}</span></td>
+      <td><textarea style="width:100%; min-height:50px; font-size:11px; padding:4px 8px; border:1px solid #d1d5db; border-radius:3px; font-family:inherit;">${message}</textarea></td>
+      <td>${_saveCancel(id)}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td><span class="pill ${pillCls}" style="font-size:9px;">${decision}</span></td>
+    <td><i>${message}</i></td>
+    <td>${_editBtn(id)}</td>
+  </tr>`;
+}
+
+function editableReasonsRow(id, pillCls, decision, reasons) {
+  if (state.editingRow === id) {
+    return `<tr style="background:#eef2ff;">
+      <td><span class="pill ${pillCls}" style="font-size:9px;">${decision}</span></td>
+      <td><textarea style="width:100%; min-height:80px; font-size:11px; padding:4px 8px; border:1px solid #d1d5db; border-radius:3px; font-family:inherit;">${reasons}</textarea></td>
+      <td>${_saveCancel(id)}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td><span class="pill ${pillCls}" style="font-size:9px;">${decision}</span></td>
+    <td style="font-size:11px;">${reasons.split('\n').join('<br>')}</td>
+    <td>${_editBtn(id)}</td>
+  </tr>`;
+}
+
+function editableGroupRow(id, groupName, members, notify) {
+  if (state.editingRow === id) {
+    return `<tr style="background:#eef2ff;">
+      <td><b>${groupName}</b> <span class="muted" style="font-size:10px;">(name is IDP-managed)</span></td>
+      <td><span class="muted" style="font-size:11px;">Entra ID · acme.onmicrosoft.com</span></td>
+      <td>${members}</td>
+      <td><input value="${notify}" style="font-size:11px; padding:3px 6px; border:1px solid #d1d5db; border-radius:3px; width:100%; font-family:inherit;"></td>
+      <td><span class="pill green">Synced</span></td>
+      <td>${_saveCancel(id)}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td><b>${groupName}</b></td>
+    <td>Entra ID · acme.onmicrosoft.com</td>
+    <td>${members}</td>
+    <td>${notify}</td>
+    <td><span class="pill green">Synced</span></td>
+    <td><button class="small-btn" onclick="state.editingRow='${id}'; render();">Edit</button></td>
+  </tr>`;
+}
+
 function tabReviewers() {
   if (state.packKind === 'populated') return tabReviewersPopulated();
   return `<div class="li-section-head"><h3>Reviewers &amp; go-live</h3><div class="muted">Manage reviewer groups · map scenarios to them · verify your readiness checklist.</div></div>
@@ -1575,9 +1623,9 @@ function tabReviewers() {
     <table class="admin-table" style="margin-bottom: 22px;">
       <thead><tr><th>Group name</th><th>Source</th><th>Members</th><th>Notify via</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        <tr><td><b>finance-reviewers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>4</td><td>Teams · #finance-approvals</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>pricing-leads</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>2</td><td>Teams · #pricing-leads</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>compliance-officers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>3</td><td>Email + Teams</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
+        ${editableGroupRow('group-finance',     'finance-reviewers',  4, 'Teams · #finance-approvals')}
+        ${editableGroupRow('group-pricing',     'pricing-leads',      2, 'Teams · #pricing-leads')}
+        ${editableGroupRow('group-compliance',  'compliance-officers', 3, 'Email + Teams')}
       </tbody>
     </table>
 
