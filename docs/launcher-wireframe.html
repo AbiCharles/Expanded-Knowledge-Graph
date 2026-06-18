@@ -204,7 +204,17 @@ function screenWelcome() {
      <div class="step-card"><div class="n">5</div><div class="l">Compliance</div></div>
      <div class="step-card"><div class="n">6</div><div class="l">Learned-rule<br>gate</div></div>
    </div>
-   <p class="footer-tip">Estimated time: ~10 min · Output: a versioned config you can git-commit; no immediate prod changes.</p>`;
+   <p class="footer-tip">Estimated time: ~10 min · Output: a versioned config you can git-commit; no immediate prod changes.</p>
+
+   <div style="margin-top: 22px; padding: 14px 18px; background: #eef2ff; border: 1.5px dashed #4f46e5; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; gap: 18px;">
+     <div>
+       <div style="font-size: 13px; font-weight: 600; color: #1E2761;">In a hurry? Use all defaults</div>
+       <div style="font-size: 12px; color: #4b5563; margin-top: 4px; line-height: 1.5;">
+         Skip the 6 questions and accept the sensible defaults: <b>Shipping pack · US East · Production tier · GDPR compliance · Standard learned-rule gate · all connectors except enterprise systems</b>. You can still review the generated config before launching anything.
+       </div>
+     </div>
+     <button class="btn primary" style="white-space: nowrap; font-size: 13px; padding: 10px 18px;" onclick="state.cur = 7; render();">Skip to Review →</button>
+   </div>`;
 }
 
 function screenDomainPack() {
@@ -1284,7 +1294,7 @@ function tabScenarios() {
       </div>
       <div style="margin-top: 14px;">
         <div style="display:flex; justify-content:space-between; align-items:baseline; margin: 0 0 8px;">
-          <h4 style="margin: 0; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Stages · 3 default stages added</h4>
+          <h4 style="margin: 0; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Stages · 4 default stages added</h4>
           <span style="font-size:11px; color:#6b7280;">edit, remove, or add more</span>
         </div>
 
@@ -1379,10 +1389,81 @@ function tabScenarios() {
           </div>
         </div>
 
+        <!-- Stage 4 of 4 — default: outcome / what happens after the decision -->
+        <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
+          <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
+            <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">4</span>
+            <div style="flex:1;">
+              <div style="font-size:13px; font-weight:600; color:#1E2761;">outcome <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "What happens next"</span></div>
+              <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · what fires after the decision · closing messages + executor binding + canned reasons</div>
+            </div>
+            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+          </div>
+          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+            <div><b>Purpose:</b> Define what happens when the reviewer (or the platform) decides. Closing message text, the executor action that runs on Approve, and the canned rationale options reviewers can pick from all live here.</div>
+
+            <!-- Closing messages -->
+            <div style="margin-top: 10px;">
+              <div style="font-size:11px; font-weight:600; color:#1E2761; margin-bottom:4px;">Closing messages · what the operator sees per decision</div>
+              <table class="admin-table">
+                <thead style="background:#fafafa;"><tr><th style="width:80px;">Decision</th><th>Message template</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="pill green" style="font-size:9px;">Approve</span></td><td><i>"Volume discount approved. Pricing rule applied for {customer_id}."</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
+                  <tr><td><span class="pill red" style="font-size:9px;">Reject</span></td><td><i>"Rejected. Reason: {rationale}"</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
+                  <tr><td><span class="pill amber" style="font-size:9px;">RFI</span></td><td><i>"More info needed: {rationale}. Follow up in {follow_up}."</i></td><td><button class="small-btn" style="font-size:10px;">Edit</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Executor binding -->
+            <div style="margin-top: 12px;">
+              <div style="font-size:11px; font-weight:600; color:#1E2761; margin-bottom:4px;">Executor · the write action that fires on Approve</div>
+              <div style="padding:10px 12px; background:#fafafa; border-radius:3px; font-family:'SF Mono', monospace; font-size:11px; color:#374151;">
+                <div>write_action: <span style="color:#1E2761; font-weight:600;">grant_bulk_discount</span> <span style="color:#6b7280;">(define in the Write actions tab)</span></div>
+                <div>arguments: customer_id, discount_pct, expires</div>
+                <div>reversibility: <span class="pill amber" style="font-size:9px;">Compensatable</span> <span style="color:#6b7280;">(inherited from the action)</span></div>
+              </div>
+              <div class="muted" style="font-size:11px; margin-top:4px; font-style: italic;">Leave empty for read-only scenarios (lookups + traces) — they have no write action.</div>
+            </div>
+
+            <!-- Canned reasons -->
+            <div style="margin-top: 12px;">
+              <div style="font-size:11px; font-weight:600; color:#1E2761; margin-bottom:4px;">Canned rationale options · quick-pick reasons for reviewers</div>
+              <table class="admin-table">
+                <thead style="background:#fafafa;"><tr><th style="width:80px;">Decision</th><th>Quick-pick reasons (one per line)</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="pill red" style="font-size:9px;">Reject</span></td>
+                    <td style="font-size:11px;">
+                      • Discount exceeds tier-1 envelope.<br>
+                      • Customer not eligible for volume pricing.<br>
+                      • Margin impact too high.
+                    </td>
+                    <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="pill amber" style="font-size:9px;">RFI</span></td>
+                    <td style="font-size:11px;">
+                      • Need updated 12-month volume forecast.<br>
+                      • Need customer LTV confirmation from sales.
+                    </td>
+                    <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <div style="margin-top:10px; padding:10px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 4px 4px 0;">
           <button class="small-btn" style="font-size:11px;">+ Add another stage</button>
-          <span style="margin-left:10px; font-size:11px; color:#4338ca;">
-            <b>Most scenarios have these 3 stages.</b> Add a 4th when you need a distinct evidence-gathering pass — e.g. a separate <code>external_api_check</code> stage that calls a partner system.
+          <span style="margin-left:10px; font-size:11px; color:#4338ca; line-height:1.5;">
+            <b>Most scenarios have all 4 stages.</b> When you can drop one:
+            <br>· <b>No stage 4 outcome</b> → read-only scenarios (status lookup, trace) — nothing changes after the decision, so there's no executor or closing message to author.
+            <br>· <b>No stage 3 review</b> → fully autonomous scenarios within a tight guardrail — no human picks rationale, so canned reasons aren't needed.
+            <br>· <b>No stage 2 proposal</b> → simple acknowledge-and-close flows that rely entirely on stage 1's policy facts.
+            <br>Adding a <b>5th stage</b> makes sense when you need a distinct evidence pass — e.g. a separate <code>external_api_check</code> against a partner system.
           </span>
         </div>
       </div>
@@ -1420,6 +1501,62 @@ function tabActions() {
  WHERE customer_id = :customer_id;</textarea>
         <label></label><div><button class="small-btn primary">Save action</button> <button class="small-btn" style="margin-left: 6px;">Test with sample data…</button></div>
       </div>
+    </div>
+
+    <!-- "Test with sample data" panel — wireframe representation -->
+    <div style="margin-top:18px; border:1.5px dashed #4f46e5; background:#eef2ff; border-radius:4px; padding:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+        <h4 style="margin:0; font-size:11px; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">Test with sample data · dry-run + execute against an isolated test DB</h4>
+        <a class="li-link" style="font-size:11px;">Collapse</a>
+      </div>
+      <p style="font-size:12px; color:#4b5563; margin:0 0 12px; line-height:1.5;">
+        Verify the action does what you expect before saving. The dry run shows the exact SQL/HTTP the platform would issue, the rows it'd touch, and the before/after diff. An "execute" run hits a sandbox copy of the connector (never production data). Both leave an entry in the Audit tab.
+      </p>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <!-- LEFT: sample input -->
+        <div style="background:#fff; border:1px solid #d1d5db; border-radius:4px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; color:#1E2761; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em;">Sample parameter values</div>
+          <div class="field-grid" style="grid-template-columns: 130px 1fr;">
+            <label>customer_id</label><input value="C-DEMO-0001">
+            <label>discount_pct</label><input value="15" type="number">
+            <label>expires</label><input value="2026-12-31" type="date">
+          </div>
+          <div style="margin-top:10px; font-size:11px;">
+            <div style="font-weight:600; color:#1E2761; margin-bottom:4px;">Run mode</div>
+            <label style="display:block; font-weight:normal; font-size:12px;"><input type="radio" name="rmode" checked> Dry run · show the SQL + diff without executing</label>
+            <label style="display:block; font-weight:normal; font-size:12px;"><input type="radio" name="rmode"> Execute against test DB · sandbox copy of <code>postgres_pricing</code></label>
+          </div>
+          <div style="margin-top:10px;"><button class="small-btn primary" style="font-size:12px; padding:6px 16px;">Run test →</button> <button class="small-btn" style="margin-left:6px;">Reset</button></div>
+        </div>
+
+        <!-- RIGHT: last result -->
+        <div style="background:#fff; border:2px solid #16a34a; border-radius:4px; padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="color:#15803d; font-weight:700; font-size:12px;">✓ Last test passed</span>
+            <span style="color:#6b7280; font-size:10px;">12s ago · dry-run mode</span>
+          </div>
+          <div style="font-family:'SF Mono', monospace; font-size:11px; color:#374151; background:#f9fafb; padding:10px; border-radius:3px; line-height:1.55;">
+            <div style="color:#6b7280;"># Resolved SQL</div>
+            <div>UPDATE customer_pricing</div>
+            <div>&nbsp;&nbsp;&nbsp;SET discount_pct = 15,</div>
+            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;expires = '2026-12-31'</div>
+            <div>&nbsp;WHERE customer_id = 'C-DEMO-0001';</div>
+          </div>
+          <div style="margin-top:8px; font-size:11px;">
+            <div style="display:grid; grid-template-columns: 130px 1fr; gap:4px; padding:4px 0;">
+              <span style="color:#6b7280;">Rows affected</span><span><b>1</b></span>
+              <span style="color:#6b7280;">Before</span><span style="font-family:'SF Mono', monospace;">discount_pct=0, expires=NULL</span>
+              <span style="color:#6b7280;">After</span><span style="font-family:'SF Mono', monospace; color:#15803d;">discount_pct=15, expires=2026-12-31</span>
+              <span style="color:#6b7280;">Duration</span><span>47 ms</span>
+              <span style="color:#6b7280;">Compensation</span><span class="pill amber" style="font-size:9px;">Available</span>
+            </div>
+          </div>
+          <div style="margin-top:10px; padding-top:8px; border-top:1px solid #e5e7eb; font-size:11px; color:#6b7280;">
+            Want to execute for real? Save the action first, then run it through a test scenario in the Scenarios tab.
+          </div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1439,9 +1576,55 @@ function tabReviewers() {
         <tr><td><b>finance-reviewers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>4</td><td>Teams · #finance-approvals</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
         <tr><td><b>pricing-leads</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>2</td><td>Teams · #pricing-leads</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
         <tr><td><b>compliance-officers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>3</td><td>Email + Teams</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
-        <tr style="background:#fffbeb;"><td colspan="6" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add reviewer group (must already exist in your IDP)</td></tr>
       </tbody>
     </table>
+
+    <!-- Add reviewer group inline form -->
+    <div style="margin-bottom:22px; border:1.5px dashed #4f46e5; background:#eef2ff; border-radius:4px; padding:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+        <h4 style="margin:0; font-size:11px; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">+ Add a reviewer group</h4>
+        <a class="li-link" style="font-size:11px;">Collapse</a>
+      </div>
+      <p style="font-size:12px; color:#4b5563; margin:0 0 12px; line-height:1.5;">
+        Sync an existing group from your enterprise IDP. The group must already exist there — you can't create new groups from this UI (that's your IT admin's job in Entra ID / Okta / SAML).
+      </p>
+
+      <div class="field-grid" style="grid-template-columns: 160px 1fr;">
+        <label>Source IDP</label>
+        <select><option>Entra ID · acme.onmicrosoft.com</option><option>Okta · acme.okta.com</option><option>SAML (custom)</option></select>
+
+        <label>Group name</label>
+        <div style="display:flex; gap:6px;">
+          <input value="logistics-planners" style="flex:1;">
+          <button class="small-btn" style="font-size:11px;">Lookup in IDP →</button>
+        </div>
+
+        <label style="align-self:start;">Lookup result</label>
+        <div style="background:#dcfce7; border:1px solid #16a34a; padding:8px 12px; border-radius:4px; font-size:12px; color:#15803d;">
+          ✓ Found <b>logistics-planners</b> in Entra ID · 5 members · last sync 2 min ago
+        </div>
+
+        <label style="align-self:start;">Notify via</label>
+        <div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">
+          <label style="font-weight:normal;"><input type="radio" name="notif" checked> Teams channel <input value="#logistics-planning" style="margin-left:8px; padding:4px 8px; border:1px solid #d1d5db; border-radius:3px; font-size:11px; width:180px;"></label>
+          <label style="font-weight:normal;"><input type="radio" name="notif"> Email distribution list <input placeholder="dist-list@acme.com" style="margin-left:8px; padding:4px 8px; border:1px solid #d1d5db; border-radius:3px; font-size:11px; width:180px;"></label>
+          <label style="font-weight:normal;"><input type="radio" name="notif"> Webhook URL <input placeholder="https://..." style="margin-left:8px; padding:4px 8px; border:1px solid #d1d5db; border-radius:3px; font-size:11px; width:180px;"></label>
+        </div>
+
+        <label style="align-self:start;">Escalation</label>
+        <div style="font-size:12px; line-height:1.8; color:#374151;">
+          <label style="font-weight:normal;"><input type="checkbox" checked> Escalate if no response in <input type="number" value="24" style="width:50px; padding:3px 6px; border:1px solid #d1d5db; border-radius:3px; font-size:11px;"> hours →</label>
+          <select style="margin-left:6px;"><option>(no escalation group)</option><option>cfo-office</option><option>operations-leads</option><option>compliance-officers</option></select>
+        </div>
+
+        <label></label>
+        <div style="display:flex; gap:8px;">
+          <button class="small-btn primary" style="font-size:12px; padding:6px 16px;">Add group →</button>
+          <button class="small-btn" style="font-size:12px;">Cancel</button>
+          <span style="margin-left:auto; font-size:11px; color:#6b7280; font-style:italic;">Saving creates an audit event · group becomes available for scenario mapping immediately.</span>
+        </div>
+      </div>
+    </div>
 
     <h4 style="margin: 0 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Map scenarios to reviewer groups</h4>
     <p style="font-size:12px; color: #4b5563; margin: 0 0 10px;">Each HITL scenario routes its cases to one group. Escalation rules fire if no one responds within a window.</p>
