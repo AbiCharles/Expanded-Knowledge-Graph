@@ -1,0 +1,1732 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowledge Fabric · Launcher wireframe</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Calibri, "Helvetica Neue", Arial, sans-serif; margin: 0; background: #f3f4f6; color: #1f2937; }
+  .frame { max-width: 1100px; margin: 24px auto; background: #fff;
+           border: 2px solid #1E2761; min-height: 760px; position: relative; }
+  .topbar { background: #1E2761; color: #fff; padding: 14px 24px;
+            display: flex; justify-content: space-between; align-items: center; }
+  .topbar .brand { font-weight: 700; font-size: 14px; letter-spacing: 0.05em; }
+  .topbar .step { font-size: 12px; opacity: 0.85; }
+  .progress { display: flex; gap: 4px; padding: 8px 24px;
+              background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+  .pdot { flex: 1; height: 4px; background: #d1d5db; border-radius: 2px; }
+  .pdot.done { background: #6366f1; }
+  .pdot.active { background: #1E2761; }
+  .body { padding: 32px 40px 110px; min-height: 600px; position: relative; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+             color: #4f46e5; text-transform: uppercase; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 28px; color: #1E2761;
+       margin: 4px 0 8px; }
+  .lede { font-size: 13px; color: #4b5563; max-width: 780px; line-height: 1.6; }
+  .nav { position: absolute; bottom: 28px; left: 40px; right: 40px;
+         display: flex; justify-content: space-between; }
+  .btn { padding: 8px 18px; border: 1px solid #1E2761; background: #fff;
+         color: #1E2761; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: #1E2761; color: #fff; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  .card { border: 2px dashed #d1d5db; border-radius: 6px; padding: 14px; cursor: pointer;
+          transition: all 100ms; }
+  .card:hover { border-color: #9ca3af; }
+  .card.selected { border-style: solid; border-color: #4f46e5; background: #eef2ff; }
+  .card.custom { background: linear-gradient(180deg, #fff 0%, #fefce8 100%); }
+  .card.custom h3 { color: #92400e; }
+  .card h3 { font-size: 13px; color: #1E2761; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .count { font-size: 11px; color: #6b7280; }
+  .card ul { margin: 8px 0 0; padding-left: 16px; font-size: 11px; color: #4b5563; line-height: 1.45; }
+  .form-row { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; max-width: 620px; }
+  .form-row label { font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase; letter-spacing: 0.06em; }
+  .form-row input, .form-row select {
+    padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: inherit;
+  }
+  .radio-group { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .radio-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+               border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; }
+  .radio-row.selected { border-color: #4f46e5; background: #eef2ff; }
+  .radio-row .marker { width: 14px; height: 14px; border: 2px solid #6b7280; border-radius: 50%;
+                       flex-shrink: 0; margin-top: 2px; position: relative; }
+  .radio-row.selected .marker { border-color: #4f46e5; }
+  .radio-row.selected .marker::after { content: ""; position: absolute; top: 2px; left: 2px;
+                                       width: 6px; height: 6px; background: #4f46e5; border-radius: 50%; }
+  .radio-row .title { font-size: 13px; font-weight: 600; color: #1f2937; }
+  .radio-row .desc { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .ladder { display: flex; gap: 4px; }
+  .ladder-cell { flex: 1; padding: 8px 6px; border: 1px solid #d1d5db; border-radius: 4px;
+                 text-align: center; cursor: pointer; font-size: 11px; line-height: 1.3; }
+  .ladder-cell.selected { border-color: #4f46e5; background: #eef2ff; color: #4f46e5; font-weight: 600; }
+  .ladder-cell.disabled { opacity: 0.4; cursor: not-allowed; }
+  .scenario-row { padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+  .scenario-row-top { display: grid; grid-template-columns: 1fr 280px; gap: 14px; align-items: center; }
+  .scenario-name { font-size: 13px; color: #1f2937; font-weight: 500; }
+  .scenario-meta { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .grad-line { font-size: 11px; color: #6b7280; margin-top: 6px; padding-left: 0; }
+  .grad-line a { color: #4f46e5; cursor: pointer; text-decoration: underline; }
+  .grad-panel { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;
+                padding: 12px 14px; margin-top: 8px; }
+  .grad-panel h4 { font-size: 11px; font-weight: 700; color: #1E2761;
+                   margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .grad-field { display: grid; grid-template-columns: 200px 1fr; gap: 10px; align-items: center;
+                font-size: 12px; padding: 5px 0; }
+  .grad-field label { color: #4b5563; }
+  .grad-field input[type="number"] { width: 70px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 3px; }
+  .grad-field input[type="checkbox"] { margin-right: 4px; }
+  .grad-actions { margin-top: 10px; display: flex; gap: 8px; }
+  .grad-actions button { font-size: 11px; padding: 4px 12px; border-radius: 3px; border: 1px solid #1E2761;
+                         background: #fff; color: #1E2761; cursor: pointer; }
+  .grad-actions button.primary { background: #1E2761; color: #fff; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+          font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .pill.green { background: #dcfce7; color: #166534; }
+  .pill.amber { background: #fef3c7; color: #92400e; }
+  .pill.red { background: #fee2e2; color: #991b1b; }
+  .yaml { background: #1f2937; color: #f9fafb; padding: 16px 18px;
+          font-family: "SF Mono", Menlo, monospace; font-size: 11px; line-height: 1.55;
+          border-radius: 4px; max-height: 380px; overflow: auto; white-space: pre; }
+  .yaml .k { color: #fbbf24; } .yaml .v { color: #93c5fd; } .yaml .c { color: #6b7280; }
+  .steps-overview { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+                    margin-top: 28px; }
+  .step-card { padding: 14px 8px; text-align: center; border: 1px solid #e5e7eb;
+               border-radius: 4px; }
+  .step-card .n { font-family: Georgia; font-size: 22px; color: #1E2761; font-weight: bold; }
+  .step-card .l { font-size: 11px; color: #4b5563; margin-top: 4px; line-height: 1.3; }
+  .footer-tip { margin-top: 20px; font-size: 12px; color: #6b7280; line-height: 1.5; }
+  .info-box { margin-top: 16px; padding: 12px 16px; background: #eef2ff; border-left: 3px solid #4f46e5;
+              font-size: 12px; color: #4338ca; line-height: 1.5; border-radius: 0 4px 4px 0; }
+  .crumb { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
+  .crumb a { color: #4f46e5; text-decoration: underline; cursor: pointer; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
+  /* --- post-launch admin-UI preview chrome --- */
+  .preview-banner { background: #fef3c7; border: 1px solid #fbbf24; padding: 10px 14px;
+                    border-radius: 4px; font-size: 11px; color: #92400e; margin-bottom: 18px;
+                    display: flex; align-items: center; gap: 10px; }
+  .preview-banner .icon { background: #92400e; color: #fff; width: 18px; height: 18px;
+                          border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                          font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .preview-steps-dots { display: flex; gap: 6px; align-items: center; margin: 10px 0 18px; font-size: 11px; color: #6b7280; }
+  .preview-steps-dots .pdotn { width: 22px; height: 22px; border-radius: 50%; background: #e5e7eb; color: #6b7280;
+                               display: flex; align-items: center; justify-content: center; font-weight: 600; }
+  .preview-steps-dots .pdotn.done { background: #6366f1; color: #fff; }
+  .preview-steps-dots .pdotn.active { background: #1E2761; color: #fff; }
+  .preview-steps-dots .pline { flex: 0 0 16px; height: 1px; background: #d1d5db; }
+  .preview-nav { margin-top: 22px; display: flex; gap: 8px; }
+  .admin-pane { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+  .admin-pane-header { background: #1f2937; color: #fff; padding: 10px 14px;
+                       display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .admin-pane-header .breadcrumb { opacity: 0.7; font-size: 11px; }
+  .admin-pane-body { padding: 16px 18px; }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .admin-table th, .admin-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+  .admin-table thead th { background: #f9fafb; font-weight: 600; color: #374151; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .admin-table tbody tr:hover { background: #fafafa; }
+  .field-grid { display: grid; grid-template-columns: 160px 1fr; gap: 10px 14px; align-items: center; font-size: 12px; }
+  .field-grid label { color: #4b5563; font-weight: 500; }
+  .field-grid input, .field-grid select, .field-grid textarea {
+    padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 3px; font-size: 12px; font-family: inherit;
+  }
+  .field-grid textarea { font-family: "SF Mono", Menlo, monospace; font-size: 11px; min-height: 60px; }
+  .check-row { font-size: 12px; padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+  .check-row .badge { width: 14px; height: 14px; border-radius: 50%; display: inline-flex; align-items: center;
+                      justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .check-row .badge.ok { background: #10b981; }
+  .check-row .badge.warn { background: #f59e0b; }
+  .small-btn { font-size: 11px; padding: 3px 9px; border: 1px solid #1E2761; background: #fff;
+               color: #1E2761; border-radius: 3px; cursor: pointer; }
+  .small-btn.primary { background: #1E2761; color: #fff; }
+  /* --- launched instance view --- */
+  .li-topbar { background: #1E2761; color: #fff; padding: 12px 24px; font-size: 13px;
+               display: flex; justify-content: space-between; align-items: center; }
+  .li-tabs { display: flex; gap: 0; background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0 12px; }
+  .li-tab { padding: 11px 16px; font-size: 12px; color: #6b7280; cursor: pointer; font-weight: 500;
+            border-bottom: 2px solid transparent; }
+  .li-tab:hover { color: #1E2761; }
+  .li-tab.active { color: #1E2761; border-bottom-color: #1E2761; background: #fff; }
+  .li-body { padding: 26px 32px 26px; min-height: 540px; background: #fff; }
+  .li-footer { padding: 10px 24px; background: #f9fafb; border-top: 1px solid #e5e7eb;
+               display: flex; justify-content: space-between; align-items: center; }
+  .li-banner { background: #fef3c7; border: 1px solid #fbbf24; padding: 12px 16px;
+               border-radius: 4px; font-size: 12px; color: #92400e; line-height: 1.5; margin-bottom: 22px; }
+  .li-checklist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 30px; }
+  .li-checklist .check-row { padding: 10px 14px; background: #f9fafb; border-radius: 4px; font-size: 13px; }
+  .li-link { color: #4f46e5; text-decoration: underline; cursor: pointer; font-size: 12px; }
+  .li-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+  .li-meta-card { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
+  .li-meta-label { font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase;
+                   letter-spacing: 0.06em; margin-bottom: 6px; }
+  .li-meta-value { font-size: 12px; color: #1f2937; margin-top: 2px; }
+  .li-section-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+  .li-section-head h3 { font-family: Georgia, serif; font-size: 20px; color: #1E2761; margin: 0; }
+  .muted { color: #6b7280; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="topbar">
+    <div class="brand">TCS · KNOWLEDGE FABRIC · INSTANCE LAUNCHER</div>
+    <div class="step" id="stepLabel">Welcome</div>
+  </div>
+  <div class="progress" id="progress"></div>
+  <div class="body" id="content"></div>
+</div>
+
+<script>
+// ----- per-screen state -----
+const state = {
+  cur: 0,
+  customMode: false,        // step 1: are we in the Custom sub-flow?
+  customBase: 'shipping',   // which radio is picked: 'blank' | 'shipping' | 'finance' | 'legal'
+  expandedGrad: null,       // step 3: which scenario's graduation panel is open?
+  launched: false,          // user clicked Launch on the Review screen → show the running instance
+  launchedView: 'operator', // 'operator' | 'reviewer' | 'admin' — top-level mode in the launched instance
+  adminTab: 'overview',     // when launchedView==='admin': 'overview' | 'ontology' | 'scenarios' | 'actions' | 'reviewers' | 'audit'
+  packKind: 'populated',    // preview toggle: 'populated' (Shipping pack, busy state) | 'empty' (Custom blank slate)
+  reviewerTab: 'inbox',     // 'inbox' (pending decisions) | 'reviewed' (decided by me, undo window)
+  reviewerActiveCase: 'C-3f7a2b', // selected case in the Inbox tab
+  reviewerActiveReviewed: 'C-2a3b5d', // selected case in the Reviewed-by-me tab
+  reviewerToast: null,      // {decision, caseId} shown briefly after a decision (or 'undo' kind)
+  reviewerModal: null,      // null | 'reject' | 'rfi'
+};
+
+// ----- screen renderers -----
+function screenWelcome() {
+  return `<div class="eyebrow">Welcome</div>
+   <h1>Launch a new Knowledge Fabric instance</h1>
+   <p class="lede">6 quick questions. We'll generate a versioned <code>instance.yaml</code> you can git-commit and review with your team before anything goes live.</p>
+   <div class="steps-overview">
+     <div class="step-card"><div class="n">1</div><div class="l">Domain<br>pack</div></div>
+     <div class="step-card"><div class="n">2</div><div class="l">Basics<br>+ region</div></div>
+     <div class="step-card"><div class="n">3</div><div class="l">Decision<br>ladder</div></div>
+     <div class="step-card"><div class="n">4</div><div class="l">Connectors</div></div>
+     <div class="step-card"><div class="n">5</div><div class="l">Compliance</div></div>
+     <div class="step-card"><div class="n">6</div><div class="l">Learned-rule<br>gate</div></div>
+   </div>
+   <p class="footer-tip">Estimated time: ~10 min · Output: a versioned config you can git-commit; no immediate prod changes.</p>`;
+}
+
+function screenDomainPack() {
+  if (state.customMode) return screenCustomPack();
+  return `<div class="eyebrow">Step 1 of 6</div>
+   <h1>Pick a domain pack</h1>
+   <p class="lede">Each pack bundles an ontology, ~5–15 starter scenarios, a default review UI, and recommended policies. Pick the closest fit — you can fork and customize after launch.</p>
+   <div class="cards">
+     <div class="card selected"><h3>Shipping</h3><div class="count">11 scenarios · 16 ontology classes</div><ul><li>Supplier onboarding</li><li>Mode-switch / re-tender</li><li>Demurrage dispute</li><li>+ 8 more</li></ul></div>
+     <div class="card"><h3>Legal</h3><div class="count">6 scenarios · 12 classes</div><ul><li>Contract clause review</li><li>NDA triage</li><li>Discovery prioritization</li><li>+ 3 more</li></ul></div>
+     <div class="card"><h3>Healthcare</h3><div class="count">8 scenarios · 14 classes</div><ul><li>Prior-auth review</li><li>Care-plan adherence</li><li>Coding audit</li><li>+ 5 more</li></ul></div>
+     <div class="card"><h3>Finance ops</h3><div class="count">7 scenarios · 10 classes</div><ul><li>Invoice exception</li><li>Expense audit</li><li>Reconciliation</li><li>+ 4 more</li></ul></div>
+     <div class="card"><h3>HR</h3><div class="count">5 scenarios · 8 classes</div><ul><li>Hiring decision</li><li>Promotion review</li><li>Offboard checklist</li><li>+ 2 more</li></ul></div>
+     <div class="card custom" onclick="state.customMode=true; render();"><h3>Custom →</h3><div class="count">Build your own</div><ul><li>Name your pack</li><li>Fork an existing pack or start blank</li><li>Choose visibility</li><li><b>Click to configure</b></li></ul></div>
+   </div>`;
+}
+
+function screenCustomPack() {
+  const baseOpts = [
+    { id: 'blank',    title: 'Blank slate',        desc: 'Empty ontology, no starter scenarios. Most flexible; longest authoring time post-launch.' },
+    { id: 'shipping', title: 'Fork: Shipping',     desc: 'Inherits 16 ontology classes + 11 starter scenarios. Edit / remove / add freely after launch.' },
+    { id: 'finance',  title: 'Fork: Finance ops',  desc: 'Inherits 10 ontology classes + 7 scenarios.' },
+    { id: 'legal',    title: 'Fork: Legal',        desc: 'Inherits 12 ontology classes + 6 scenarios.' },
+  ];
+  const baseRadios = baseOpts.map(o => `
+    <div class="radio-row${state.customBase===o.id?' selected':''}" onclick="state.customBase='${o.id}'; render();">
+      <div class="marker"></div>
+      <div><div class="title">${o.title}</div><div class="desc">${o.desc}</div></div>
+    </div>`).join('');
+
+  const bottomBox = state.customBase === 'blank'
+    ? `<div class="info-box">
+         <b>Blank slate — the launched instance opens in build mode.</b> After you finish the launcher, the new instance opens with an empty ontology and no scenarios. A domain expert continues the build there: define classes, draft scenarios, configure write actions, then go live. <i>Reach the Review screen to launch the instance and see what that looks like.</i>
+       </div>`
+    : `<div class="info-box">
+         You picked a fork. After launch, your pack starts with the forked pack's ontology + scenarios — your domain expert customises in the admin UI from there. Changes stay private to this instance.
+       </div>`;
+
+  return `<div class="eyebrow">Step 1 of 6 · Custom pack</div>
+   <div class="crumb"><a onclick="state.customMode=false; state.customBase='shipping'; render();">← Back to pack picker</a></div>
+   <h1>Build a custom domain pack</h1>
+   <p class="lede">Set up the basics here. The ontology classes, scenarios, and write actions are authored in the admin UI after launch (so a domain expert can drive that, not the launcher).</p>
+
+   <div class="form-row" style="max-width: 500px;">
+     <label>Pack name</label>
+     <input value="acme-pricing-ops">
+     <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0;">Used in audit logs, version history, and as a key in the config file.</p>
+   </div>
+
+   <div style="margin-top: 22px;">
+     <label style="font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase; letter-spacing: 0.06em;">Base on existing pack</label>
+     <div class="radio-group">${baseRadios}</div>
+   </div>
+
+   <div style="margin-top: 22px;">
+     <label style="font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase; letter-spacing: 0.06em;">Visibility</label>
+     <div class="radio-group">
+       <div class="radio-row selected"><div class="marker"></div><div><div class="title">Private to this instance</div><div class="desc">Only this customer can see / use this pack. Audit changes stay tenant-local.</div></div></div>
+       <div class="radio-row"><div class="marker"></div><div><div class="title">Shared (other tenants can fork)</div><div class="desc">Pack appears in the picker for future instances on the platform. Useful for internal templates.</div></div></div>
+     </div>
+   </div>
+
+   ${bottomBox}`;
+}
+
+// ============================================================
+// LAUNCHED INSTANCE — rendered when state.launched === true
+// Two views: Operator (default — looks like the live KF app)
+//            Admin    (build/config — ontology/scenarios/actions/reviewers/audit)
+// ============================================================
+function renderLaunchedInstance() {
+  const body =
+    state.launchedView === 'admin' ? renderAdminView() :
+    state.launchedView === 'reviewer' ? renderReviewerMode() :
+    renderOperatorConsole();
+
+  const view = state.launchedView;
+  const pendingCount = state.packKind === 'populated' ? 7 : 0;
+  // Three-way mode switcher. Whichever button matches state.launchedView is filled.
+  const modeBtn = (id, label, badge) => {
+    const active = view === id;
+    const bg = active ? '#4f46e5' : 'transparent';
+    const border = active ? '#6366f1' : '#475569';
+    return `<button onclick="state.launchedView='${id}'; if('${id}'==='admin') state.adminTab='overview'; render();"
+                    style="background:${bg}; color:#fff; font-size:12px; font-family:inherit; padding:6px 14px;
+                           border:1px solid ${border}; border-radius:4px; cursor:pointer; display:flex; gap:6px; align-items:center;">
+      ${label}${badge ? `<span style="background:${active?'#ffffff33':'#dc2626'}; color:#fff; padding:1px 6px; border-radius:999px; font-size:10px; font-weight:700;">${badge}</span>` : ''}
+    </button>`;
+  };
+
+  const footerNote =
+    view === 'operator' ? 'Operator console — submit cases, monitor your own.' :
+    view === 'reviewer' ? `Reviewer mode — ${pendingCount} case(s) awaiting your decision.` :
+    'Admin / build area — only admins reach this view.';
+
+  return `
+    <div class="li-topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <b>TCS · KNOWLEDGE FABRIC</b>
+        <span style="opacity:0.5;">/</span>
+        <span style="opacity:0.85;">hemlock-shipping-prod</span>
+        <span class="pill" style="background:#dcfce7; color:#166534; font-size:9px;">LIVE</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="display:flex; gap:4px;">
+          ${modeBtn('operator', 'Operator', null)}
+          ${modeBtn('reviewer', 'Reviewer', pendingCount > 0 ? pendingCount : null)}
+          ${modeBtn('admin', 'Admin / Build', null)}
+        </div>
+        <div style="font-size: 11px; opacity: 0.8; margin-left:10px;">abigail.charles@tcs.com</div>
+      </div>
+    </div>
+    ${body}
+    <div class="li-footer">
+      <a onclick="state.launched=false; render();" style="color:#6b7280; font-size:11px; text-decoration:underline; cursor:pointer;">← Back to launcher (demo only)</a>
+      <span style="font-size:11px; color:#6b7280;">Instance opened 14s ago · ${footerNote}</span>
+    </div>
+    ${state.reviewerToast ? renderToast() : ''}
+    ${state.reviewerModal ? renderRationaleModal() : ''}`;
+}
+
+function renderOperatorConsole() {
+  const isEmpty = state.packKind === 'empty';
+  const ctxLine = isEmpty
+    ? `<b>Live demo · TCS Knowledge Fabric</b> &nbsp;&middot;&nbsp; acme-pricing-ops &nbsp;&middot;&nbsp; Custom pack (blank slate) · build in progress`
+    : `<b>Live demo · TCS Knowledge Fabric</b> &nbsp;&middot;&nbsp; Hemlock Manufacturing &nbsp;&middot;&nbsp; Shipping pack v4`;
+
+  // Wireframe-level toggle. Visually a dashed-border meta control so it's
+  // clearly NOT a feature of the real app — it's the preview switcher.
+  const previewToggle = `
+    <div style="border: 1.5px dashed #fbbf24; background: #fffbeb; padding: 8px 12px; margin: 14px 24px 0;
+                border-radius: 4px; display: flex; align-items: center; gap: 10px; font-size: 11px;">
+      <span style="color: #92400e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">⚙ Wireframe preview state</span>
+      <button class="small-btn ${state.packKind==='populated'?'primary':''}" style="font-size:11px;" onclick="state.packKind='populated'; render();">Populated · Shipping pack</button>
+      <button class="small-btn ${state.packKind==='empty'?'primary':''}" style="font-size:11px;" onclick="state.packKind='empty'; render();">Empty · Custom blank slate</button>
+      <span style="color:#92400e; margin-left:auto; font-style:italic;">${isEmpty ? 'no scenarios yet — typical state right after a Custom · Blank-slate launch' : 'busy state — typical of a pre-built pack in production use'}</span>
+    </div>`;
+
+  const body = isEmpty ? renderOperatorEmpty() : renderOperatorPopulated();
+
+  return `
+    <div style="background:#f9fafb; border-bottom:1px solid #e5e7eb; padding:8px 24px; display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#6b7280;">
+      <span>${ctxLine}</span>
+      <span style="padding:3px 10px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px; color:#4f46e5; font-weight:600;">Operator</span>
+    </div>
+    ${previewToggle}
+    ${body}`;
+}
+
+function renderOperatorPopulated() {
+  // The current operator's own cases (filter REVIEWER_INBOX + REVIEWED_BY_ME by `by`).
+  const myUser = 'operator.gmehta';
+  const myPending = REVIEWER_INBOX.filter(c => c.by === myUser).length;
+  const myApproved24h = REVIEWED_BY_ME.filter(c => c.by === myUser && c.decision === 'approve').length;
+  const myRejected24h = REVIEWED_BY_ME.filter(c => c.by === myUser && c.decision === 'reject').length;
+  const myRfi24h      = REVIEWED_BY_ME.filter(c => c.by === myUser && c.decision === 'rfi').length;
+
+  return `
+    <div class="li-body" style="display:grid; grid-template-columns: 260px 1fr; gap: 18px; padding: 18px 24px;">
+      <!-- LEFT: scenario chip list (matches the live app's left rail) -->
+      <div>
+        <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">Available scenarios</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${chip('SC-PP-008', 'Supplier onboarding — multi-source risk review', 'HITL')}
+          ${chip('SC-LN-002', 'Mode-switch ocean → air on critical lane', 'HITL')}
+          ${chip('SC-LN-PORT-DISRUPTION-020', 'Port disruption — recommend reroute', 'HITL')}
+          ${chip('SC-LN-DEMURRAGE-AUTO-025', 'Auto-dispute small demurrage charges', 'AUTO')}
+          ${chip('SC-LN-STATUS-009', 'Shipment status lookup', 'AUTO')}
+          <span class="muted" style="font-size:10px; padding:4px 0;">+ 6 more (11 total in this pack)</span>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin: 18px 0 8px;">
+          <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">My recent cases</div>
+          ${myPending > 0 ? `<span style="font-size:10px; color:#92400e; font-weight:700;">${myPending} awaiting</span>` : ''}
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px; font-size:11px;">
+          ${recentCase('C-3f7a2b', 'SC-PP-008', 'review', 'amber')}
+          ${recentCase('C-0c8b4e', 'SC-LN-002', 'complete · approved', 'green')}
+          ${recentCase('C-91d05a', 'SC-LN-DEMURRAGE-AUTO-025', 'auto-executed', 'green')}
+          ${recentCase('C-4e2b91', 'SC-PP-008', 'complete · rejected', 'red')}
+        </div>
+      </div>
+
+      <!-- RIGHT: query input + queue summary + active case detail (mirrors the live app) -->
+      <div>
+        <!-- Operator's "your queue" status strip -->
+        <div style="background: linear-gradient(to right, #eef2ff, #fafafa); border-left:3px solid #4f46e5; padding:10px 14px; border-radius:0 4px 4px 0; margin-bottom:12px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+          <div>
+            <div style="font-size:10px; font-weight:700; color:#4f46e5; text-transform:uppercase; letter-spacing:0.05em;">Your queue · operator.gmehta</div>
+            <div style="font-size:13px; color:#374151; margin-top:2px;">
+              <b style="color:#92400e;">${myPending}</b> awaiting review
+              · <b style="color:#16a34a;">${myApproved24h}</b> approved
+              · <b style="color:#dc2626;">${myRejected24h}</b> rejected
+              · <b style="color:#92400e;">${myRfi24h}</b> sent back for info
+              <span class="muted" style="font-size:11px;">(last 24h)</span>
+            </div>
+          </div>
+          <a class="li-link" style="font-size:11px; margin-left:auto;">View all my cases →</a>
+        </div>
+
+        <!-- Operator query / prompt window -->
+        <div style="margin-bottom:14px; padding:14px; background:#fff; border:1px solid #e5e7eb; border-radius:6px;">
+          <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">
+            New query · describe what you need or pick a chip on the left
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" placeholder="e.g. onboard Hemlock Precision Castings as tier-1 supplier"
+                   style="flex:1; padding:10px 12px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; font-family:inherit;">
+            <button class="small-btn primary" style="padding:9px 18px; font-size:13px; font-weight:600;">Submit →</button>
+          </div>
+          <div style="display:flex; gap:6px; margin-top:8px; align-items:center; font-size:11px; color:#6b7280;">
+            <span>Recent:</span>
+            <a class="li-link" style="font-size:11px;">"switch S-700412 from ocean to air"</a>
+            <span>·</span>
+            <a class="li-link" style="font-size:11px;">"carrier scorecard for MSC"</a>
+            <span>·</span>
+            <a class="li-link" style="font-size:11px;">"trace S-700288"</a>
+            <span style="margin-left:auto;">Press <code style="background:#e5e7eb; padding:1px 5px; font-size:10px;">⌘ + Enter</code> to submit</span>
+          </div>
+        </div>
+
+        <div style="font-size:11px; color:#6b7280; margin-bottom:2px;">CASE · C-3f7a2b · started 4 min ago</div>
+        <h2 style="font-family: Georgia, serif; font-size:22px; margin:0 0 4px; color:#1E2761;">
+          Onboard Hemlock Precision Castings
+          <span class="pill" style="background:#fef3c7; color:#92400e; margin-left:8px; font-size:10px;">AWAITING REVIEW</span>
+        </h2>
+        <div class="muted" style="font-size:12px; margin-bottom:14px;">Scenario <b>SC-PP-008</b> · v4 · Reviewer: <b>Procurement Lead</b> · Ran against pack version v4 · <a class="li-link">Case spec →</a></div>
+
+        <!-- envelope eyebrow (same wording as the live app) -->
+        <div style="background:#f9fafb; padding:10px 14px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-weight:600; font-size:12px; color:#1E2761;">What the agent gathered</div>
+          <div style="font-size:11px; color:#6b7280;"><b>3</b> stages · <b>13</b> facts</div>
+        </div>
+
+        <!-- promoted-pattern advisory banner (Phase 3b — keeps the language we agreed on) -->
+        <div style="border-left:4px solid #4f46e5; background:linear-gradient(to right, #eef2ff, #fafafa); padding:10px 14px; margin-bottom:10px; border-radius:0 4px 4px 0;">
+          <div style="font-size:10px; font-weight:700; color:#4f46e5; text-transform:uppercase; letter-spacing:0.05em;">Compounding loop · 1 learned rule matched</div>
+          <div style="font-size:12px; color:#374151; margin-top:4px;">
+            <span class="pill red" style="margin-right:6px;">REJECT</span>
+            <b>SanctionsProximity</b> &middot; matched 1 fact on this case &middot; in 8 of 8 recent cases reviewers rejected when this driver was flagged.
+          </div>
+        </div>
+
+        <!-- stage blocks — compact representation of the live UI -->
+        ${stageBlock('Stage 1 · Policy & scope', 2, 'binder=intake')}
+        ${stageBlock('Stage 2 · Agent gathered', 8, 'binder=proposal · 6 ontology queries · 1 fact-pattern matched')}
+        ${stageBlock('Stage 3 · For your decision', 3, 'binder=review · 2 prior cases retrieved')}
+
+        <!-- decision row (always disabled in operator mode — actions live in Reviewer mode) -->
+        <div style="margin-top:14px; padding:14px; border:1px solid #e5e7eb; border-radius:6px; background:#fff;">
+          <div style="font-size:11px; color:#6b7280; margin-bottom:6px;">REVIEWER ACTIONS · only available in Reviewer mode</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="small-btn" disabled style="opacity:0.4;">Approve</button>
+            <button class="small-btn" disabled style="opacity:0.4;">Reject</button>
+            <button class="small-btn" disabled style="opacity:0.4;">Request more info</button>
+            <span style="margin-left:auto; font-size:11px; color:#4f46e5;">
+              <a class="li-link" onclick="state.launchedView='reviewer'; render();">Switch to Reviewer mode to act on this case →</a>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function chip(id, title, mode) {
+  const pillCls = mode === 'AUTO' ? 'green' : 'amber';
+  return `<div style="padding:8px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:4px; cursor:pointer; font-size:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+      <span style="font-weight:600; color:#1E2761; font-family:'SF Mono', monospace; font-size:10px;">${id}</span>
+      <span class="pill ${pillCls}" style="font-size:9px;">${mode}</span>
+    </div>
+    <div style="color:#374151; margin-top:3px; font-size:11px; line-height:1.35;">${title}</div>
+  </div>`;
+}
+
+function recentCase(id, scenarioId, status, pillClr) {
+  return `<div style="padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:4px; display:flex; flex-direction:column; gap:2px; cursor:pointer;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-family:'SF Mono', monospace; font-size:10px; color:#1E2761;">${id}</span>
+      <span class="pill ${pillClr}" style="font-size:9px;">${status}</span>
+    </div>
+    <div class="muted" style="font-size:10px;">${scenarioId}</div>
+  </div>`;
+}
+
+function stageBlock(title, factCount, meta) {
+  return `<div style="border:1px solid #e5e7eb; border-radius:4px; padding:10px 14px; margin-bottom:6px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-weight:600; font-size:12px; color:#374151;">▸ ${title} <span class="muted">(${factCount})</span></span>
+      <span class="muted" style="font-size:10px;">${meta}</span>
+    </div>
+  </div>`;
+}
+
+// ============================================================
+// REVIEWER MODE — top-level mode, peer to Operator + Admin
+// Inbox on left, focused case on right, decisions inline.
+// ============================================================
+// Mutable so Undo can move a row from REVIEWED_BY_ME back into REVIEWER_INBOX.
+let REVIEWER_INBOX = [
+  { id: 'C-3f7a2b', scenario: 'SC-PP-008',                title: 'Onboard Hemlock Precision Castings',  age: '4 min',  sla: '2h',   slaPill: 'amber',  by: 'operator.gmehta' },
+  { id: 'C-9c41ee', scenario: 'SC-LN-002',                title: 'Mode-switch S-700412 ocean → air',     age: '18 min', sla: '4h',   slaPill: 'green',  by: 'operator.pgupta' },
+  { id: 'C-12fa3b', scenario: 'SC-LN-PORT-DISRUPTION-020',title: 'Hamburg congestion — reroute 12 ships',age: '1 h',    sla: '4h',   slaPill: 'amber',  by: 'operator.dchakraborty' },
+  { id: 'C-7ef891', scenario: 'SC-LN-SLA-RISK-022',       title: 'Customer-A SLA risk — expedite?',      age: '1 h 22 min', sla: 'overdue', slaPill: 'red',  by: 'operator.gmehta' },
+  { id: 'C-3b4c11', scenario: 'SC-PP-008',                title: 'Onboard Apex Industries',              age: '2 h',    sla: '24h',  slaPill: 'green',  by: 'operator.amorales' },
+  { id: 'C-4e2b91', scenario: 'SC-LN-TENDER-021',         title: 'Re-tender BK-7032 to new carrier',     age: '3 h',    sla: '24h',  slaPill: 'green',  by: 'operator.gmehta' },
+  { id: 'C-1a8d52', scenario: 'SC-LN-DEMURRAGE-DISPUTE-024',title: 'Dispute demurrage charge D-2247',    age: '4 h',    sla: '48h',  slaPill: 'green',  by: 'operator.pgupta' },
+];
+
+// Cases this reviewer has already decided on. minutesAgo drives the 5-min undo window.
+let REVIEWED_BY_ME = [
+  { id: 'C-2a3b5d', scenario: 'SC-PP-008',                title: 'Onboard Apex Industries',                  decision: 'approve', minutesAgo: 2,   rationale: 'Carrier-alliance concentration acceptable; tier-1 reliability 0.94.', by: 'operator.amorales' },
+  { id: 'C-6e9f12', scenario: 'SC-LN-TENDER-021',         title: 'Re-tender BK-7032 to Lufthansa Cargo',     decision: 'reject',  minutesAgo: 4,   rationale: 'LHCA has no contracted rate on this lane — wait for rate-card refresh.', by: 'operator.gmehta' },
+  { id: 'C-0c8b4e', scenario: 'SC-LN-002',                title: 'Mode-switch S-700412 ocean → air',         decision: 'approve', minutesAgo: 22,  rationale: 'Cost uplift acceptable; recovery time aligns with customer SLA.', by: 'operator.pgupta' },
+  { id: 'C-4e2b91', scenario: 'SC-PP-008',                title: 'Onboard XYZ Components Ltd',               decision: 'reject',  minutesAgo: 47,  rationale: 'Sanctions proximity too close — 3-hop OFAC SDN indirect ownership.', by: 'operator.gmehta' },
+  { id: 'C-8d2c01', scenario: 'SC-LN-SLA-RISK-022',       title: 'Expedite Customer-A shipment S-8821',      decision: 'approve', minutesAgo: 75,  rationale: 'Customer satisfaction priority; cost within tolerance.', by: 'operator.dchakraborty' },
+  { id: 'C-1f2b7e', scenario: 'SC-LN-PORT-DISRUPTION-020',title: 'Reroute around Singapore port congestion', decision: 'approve', minutesAgo: 130, rationale: 'Reroute via Klang adds 2 days, saves $18k vs waiting.', by: 'operator.dchakraborty' },
+  { id: 'C-9c5d10', scenario: 'SC-LN-DEMURRAGE-DISPUTE-024',title: 'Dispute demurrage charge D-2245',        decision: 'rfi',     minutesAgo: 155, rationale: 'Need port operations log to confirm gate-out time.', by: 'operator.pgupta' },
+  { id: 'C-5a4e09', scenario: 'SC-LN-002',                title: 'Mode-switch S-700288 — alternate routing', decision: 'reject',  minutesAgo: 240, rationale: 'Recovery days insufficient; switch to backup carrier instead.', by: 'operator.gmehta' },
+];
+
+const UNDO_WINDOW_MINUTES = 5;
+function decisionPillCls(d) { return d === 'approve' ? 'green' : d === 'reject' ? 'red' : 'amber'; }
+function decisionLabel(d)   { return d === 'approve' ? '✓ Approved' : d === 'reject' ? '✗ Rejected' : '? More info'; }
+function ageLabel(m)        { return m < 60 ? `${m} min ago` : `${Math.floor(m/60)} h ${m%60} min ago`; }
+
+function renderReviewerMode() {
+  if (state.packKind === 'empty') return renderReviewerEmpty();
+
+  const tabBar = `
+    <div style="display:flex; gap:0; padding:0 24px; border-bottom:1px solid #e5e7eb; background:#f9fafb;">
+      <div class="li-tab${state.reviewerTab==='inbox'?' active':''}" onclick="state.reviewerTab='inbox'; render();">
+        Inbox <span style="margin-left:4px; padding:1px 7px; background:${state.reviewerTab==='inbox'?'#1E2761':'#dc2626'}; color:#fff; border-radius:999px; font-size:10px; font-weight:700;">${REVIEWER_INBOX.length}</span>
+      </div>
+      <div class="li-tab${state.reviewerTab==='reviewed'?' active':''}" onclick="state.reviewerTab='reviewed'; render();">
+        Reviewed by me <span style="margin-left:4px; padding:1px 7px; background:${state.reviewerTab==='reviewed'?'#1E2761':'#6b7280'}; color:#fff; border-radius:999px; font-size:10px; font-weight:700;">${REVIEWED_BY_ME.length}</span>
+      </div>
+    </div>`;
+
+  const body = state.reviewerTab === 'reviewed' ? renderReviewedByMe() : renderReviewerInbox();
+
+  return `
+    <div style="background:#f9fafb; border-bottom:1px solid #e5e7eb; padding:8px 24px; display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#6b7280;">
+      <span><b>Live demo · TCS Knowledge Fabric</b> &nbsp;&middot;&nbsp; Hemlock Manufacturing &nbsp;&middot;&nbsp; Reviewer queue</span>
+      <span style="padding:3px 10px; background:#fef3c7; border:1px solid #fbbf24; border-radius:999px; color:#92400e; font-weight:600;">Reviewer · procurement.lead.amorales</span>
+    </div>
+
+    <div style="border: 1.5px dashed #fbbf24; background: #fffbeb; padding: 8px 12px; margin: 14px 24px 0;
+                border-radius: 4px; display: flex; align-items: center; gap: 10px; font-size: 11px;">
+      <span style="color: #92400e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">⚙ Wireframe preview state</span>
+      <button class="small-btn ${state.packKind==='populated'?'primary':''}" style="font-size:11px;" onclick="state.packKind='populated'; render();">Populated</button>
+      <button class="small-btn ${state.packKind==='empty'?'primary':''}" style="font-size:11px;" onclick="state.packKind='empty'; render();">Empty · blank slate</button>
+    </div>
+
+    ${tabBar}
+    ${body}`;
+}
+
+function renderReviewerInbox() {
+  if (!REVIEWER_INBOX.find(c => c.id === state.reviewerActiveCase)) {
+    state.reviewerActiveCase = REVIEWER_INBOX[0].id;
+  }
+  const active = REVIEWER_INBOX.find(c => c.id === state.reviewerActiveCase) || REVIEWER_INBOX[0];
+
+  return `
+    <div class="li-body" style="display:grid; grid-template-columns: 320px 1fr; gap: 14px; padding: 14px 24px;">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+          <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">${REVIEWER_INBOX.length} cases awaiting</div>
+          <div style="font-size:11px; color:#6b7280;">Sort: SLA ▾</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${REVIEWER_INBOX.map(c => inboxCard(c, c.id === active.id)).join('')}
+        </div>
+        <div style="margin-top:12px; padding:10px; background:#f9fafb; border-radius:4px; font-size:11px; color:#6b7280; line-height:1.5;">
+          <b>Tip:</b> Press <code style="background:#e5e7eb; padding:1px 5px; font-size:10px;">J/K</code> to move through the queue. After a decision, the next case auto-loads in 1s.
+        </div>
+      </div>
+      <div>${reviewerCaseDetail(active)}</div>
+    </div>`;
+}
+
+function renderReviewedByMe() {
+  if (REVIEWED_BY_ME.length === 0) {
+    return `<div class="li-body" style="padding: 60px 40px; text-align:center;">
+      <div style="font-family:Georgia, serif; font-size:72px; color:#1E2761; opacity:0.2;">∅</div>
+      <h2 style="font-family:Georgia, serif; font-size:22px; color:#1E2761; margin: 14px 0 6px;">You haven't decided any cases yet</h2>
+      <p class="muted" style="font-size:13px; max-width:480px; margin:0 auto;">Once you approve, reject, or send a case back, it'll show up here with a 5-minute undo window.</p>
+    </div>`;
+  }
+
+  if (!REVIEWED_BY_ME.find(c => c.id === state.reviewerActiveReviewed)) {
+    state.reviewerActiveReviewed = REVIEWED_BY_ME[0].id;
+  }
+  const active = REVIEWED_BY_ME.find(c => c.id === state.reviewerActiveReviewed);
+  const undoableCount = REVIEWED_BY_ME.filter(c => c.minutesAgo < UNDO_WINDOW_MINUTES).length;
+
+  return `
+    <div class="li-body" style="display:grid; grid-template-columns: 360px 1fr; gap: 14px; padding: 14px 24px;">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+          <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em;">${REVIEWED_BY_ME.length} cases decided · last 24 h</div>
+          <div style="font-size:11px; color:#6b7280;">Sort: Newest ▾</div>
+        </div>
+
+        ${undoableCount > 0 ? `<div style="padding:8px 10px; background:#eef2ff; border-left:3px solid #4f46e5; margin-bottom:8px; font-size:11px; color:#4338ca; border-radius:0 4px 4px 0;">
+          <b>${undoableCount}</b> recent decision${undoableCount === 1 ? '' : 's'} can still be undone (within the last ${UNDO_WINDOW_MINUTES} minutes).
+        </div>` : ''}
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          ${REVIEWED_BY_ME.map(c => reviewedCard(c, c.id === active.id)).join('')}
+        </div>
+
+        <div style="margin-top:12px; padding:10px; background:#f9fafb; border-radius:4px; font-size:11px; color:#6b7280; line-height:1.5;">
+          <b>Undo window:</b> a decision can be reverted within ${UNDO_WINDOW_MINUTES} minutes. After that, an undo becomes a new "rationale-reversal" audit event — visible in the Admin · Audit tab.
+        </div>
+      </div>
+
+      <div>${reviewedCaseDetail(active)}</div>
+    </div>`;
+}
+
+function reviewedCard(c, isActive) {
+  const cardBg = isActive ? '#eef2ff' : '#fff';
+  const cardBorder = isActive ? '#4f46e5' : '#e5e7eb';
+  const undoable = c.minutesAgo < UNDO_WINDOW_MINUTES;
+  const remaining = UNDO_WINDOW_MINUTES - c.minutesAgo;
+  return `<div style="padding:10px 12px; background:${cardBg}; border:1.5px solid ${cardBorder}; border-radius:4px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"
+              onclick="state.reviewerActiveReviewed='${c.id}'; render();">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+      <span style="font-family:'SF Mono', monospace; font-size:10px; color:#1E2761;">${c.id}</span>
+      <span class="pill ${decisionPillCls(c.decision)}" style="font-size:9px;">${decisionLabel(c.decision)}</span>
+    </div>
+    <div style="font-size:11px; font-weight:600; color:#1f2937; line-height:1.35;">${c.title}</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+      <div style="font-size:10px; color:#6b7280;">${c.scenario} · ${ageLabel(c.minutesAgo)}</div>
+      ${undoable
+        ? `<button class="small-btn" style="font-size:10px; padding:2px 8px; border-color:#dc2626; color:#dc2626;"
+                  onclick="event.stopPropagation(); undoDecision('${c.id}');">↺ Undo · ${remaining} min left</button>`
+        : ''}
+    </div>
+  </div>`;
+}
+
+function reviewedCaseDetail(c) {
+  const undoable = c.minutesAgo < UNDO_WINDOW_MINUTES;
+  return `
+    <div style="font-size:11px; color:#6b7280; margin-bottom:2px;">CASE · ${c.id} · ${c.by} submitted · decided ${ageLabel(c.minutesAgo)}</div>
+    <h2 style="font-family: Georgia, serif; font-size:22px; margin:0 0 4px; color:#1E2761;">
+      ${c.title}
+      <span class="pill ${decisionPillCls(c.decision)}" style="margin-left:8px; font-size:10px;">${decisionLabel(c.decision)}</span>
+    </h2>
+    <div class="muted" style="font-size:12px; margin-bottom:14px;">
+      Scenario <b>${c.scenario}</b> · v4 · Decided by <b>procurement.lead.amorales</b> · <a class="li-link">Case spec →</a> · <a class="li-link">Audit entry →</a>
+    </div>
+
+    <!-- decision summary banner -->
+    <div style="padding:14px 18px; background:${c.decision==='approve' ? '#dcfce7' : c.decision==='reject' ? '#fee2e2' : '#fef3c7'};
+                border-left:4px solid ${c.decision==='approve' ? '#16a34a' : c.decision==='reject' ? '#dc2626' : '#f59e0b'};
+                border-radius:0 4px 4px 0; margin-bottom:16px;">
+      <div style="font-size:10px; font-weight:700; color:${c.decision==='approve' ? '#15803d' : c.decision==='reject' ? '#991b1b' : '#92400e'}; text-transform:uppercase; letter-spacing:0.05em;">
+        Your decision · ${ageLabel(c.minutesAgo)}
+      </div>
+      <div style="font-size:13px; color:#374151; margin-top:6px; line-height:1.5;">${c.rationale}</div>
+      ${undoable
+        ? `<div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+            <button class="small-btn" style="background:#dc2626; color:#fff; border-color:#dc2626; font-size:11px;"
+                    onclick="undoDecision('${c.id}');">↺ Undo decision (${UNDO_WINDOW_MINUTES - c.minutesAgo} min left)</button>
+            <span style="font-size:11px; color:#92400e;">Undoing returns the case to your Inbox and emits an audit event.</span>
+          </div>`
+        : `<div style="margin-top:8px; font-size:11px; color:#6b7280;"><i>Undo window closed (${ageLabel(c.minutesAgo - UNDO_WINDOW_MINUTES)} past the 5-min limit). A reversal would now require a "rationale-reversal" admin action.</i></div>`}
+    </div>
+
+    <!-- evidence the reviewer saw -->
+    <div style="background:#f9fafb; padding:10px 14px; border-radius:4px; margin-bottom:10px;">
+      <div style="font-size:10px; color:#6b7280; font-weight:600; margin-bottom:3px;">OPERATOR'S PROMPT</div>
+      <div style="font-size:13px; color:#374151; font-style:italic;">"${operatorPromptFor(c.id)}"</div>
+    </div>
+
+    <div style="background:#f9fafb; padding:10px 14px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-weight:600; font-size:12px; color:#1E2761;">What the agent gathered</div>
+      <div style="font-size:11px; color:#6b7280;"><b>3</b> stages · <b>11</b> facts</div>
+    </div>
+
+    ${stageBlock('Stage 1 · Policy & scope', 2, 'binder=intake')}
+    ${stageBlock('Stage 2 · Agent gathered', 6, 'binder=proposal · 5 ontology queries')}
+    ${stageBlock('Stage 3 · For your decision', 3, 'binder=review · 2 prior cases retrieved')}
+
+    <!-- load-bearing facts the reviewer flagged -->
+    <div style="margin-top:14px; padding:12px 14px; border:1px solid #e5e7eb; background:#fafafa; border-radius:4px;">
+      <div style="font-size:11px; font-weight:600; color:#1E2761; margin-bottom:6px;">Facts you flagged as load-bearing</div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${loadBearingChip('SanctionsProximity · SUP-001-PROX', true)}
+        ${c.decision === 'reject' ? loadBearingChip('CarrierExposure · SUP-001-CARRIER', true) : ''}
+      </div>
+    </div>`;
+}
+
+function operatorPromptFor(id) {
+  // Tiny lookup so each reviewed-case detail shows a plausible prompt.
+  return ({
+    'C-2a3b5d': 'Please onboard Apex Industries as a tier-1 supplier for Q3 production.',
+    'C-6e9f12': 'Re-tender booking BK-7032 to Lufthansa Cargo on the CN-DE air corridor.',
+    'C-0c8b4e': 'Switch shipment S-700412 from ocean to air to recover the schedule.',
+    'C-4e2b91': 'Onboard XYZ Components Ltd into the encryption-modules supplier pool.',
+    'C-8d2c01': 'Expedite shipment S-8821 for Customer A — SLA at risk.',
+    'C-1f2b7e': 'Reroute around Singapore port congestion — affects 12 in-transit shipments.',
+    'C-9c5d10': 'Dispute demurrage charge D-2245 — $420 over 3 days.',
+    'C-5a4e09': 'Switch shipment S-700288 to alternate routing for week-of-22 delivery.',
+  })[id] || '—';
+}
+
+function undoDecision(caseId) {
+  const idx = REVIEWED_BY_ME.findIndex(c => c.id === caseId);
+  if (idx === -1) return;
+  const c = REVIEWED_BY_ME[idx];
+  if (c.minutesAgo >= UNDO_WINDOW_MINUTES) return; // safety
+  REVIEWED_BY_ME.splice(idx, 1);
+  // Put it back at the top of the inbox.
+  REVIEWER_INBOX.unshift({
+    id: c.id, scenario: c.scenario, title: c.title,
+    age: 'just now', sla: '24h', slaPill: 'amber', by: c.by,
+  });
+  state.reviewerActiveReviewed = REVIEWED_BY_ME[0] ? REVIEWED_BY_ME[0].id : null;
+  state.reviewerToast = { decision: 'undo', caseId: c.id };
+  render();
+}
+
+function inboxCard(c, isActive) {
+  const cardBg = isActive ? '#eef2ff' : '#fff';
+  const cardBorder = isActive ? '#4f46e5' : '#e5e7eb';
+  const slaLabel = c.slaPill === 'red' ? `SLA ${c.sla}` : `SLA ${c.sla}`;
+  return `<div style="padding:10px 12px; background:${cardBg}; border:1.5px solid ${cardBorder}; border-radius:4px; cursor:pointer; display:flex; flex-direction:column; gap:4px;"
+              onclick="state.reviewerActiveCase='${c.id}'; render();">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+      <span style="font-family:'SF Mono', monospace; font-size:10px; color:#1E2761;">${c.id}</span>
+      <span class="pill ${c.slaPill}" style="font-size:9px;">${slaLabel}</span>
+    </div>
+    <div style="font-size:11px; font-weight:600; color:#1f2937; line-height:1.35;">${c.title}</div>
+    <div style="font-size:10px; color:#6b7280;">${c.scenario} · ${c.by} · ${c.age} ago</div>
+  </div>`;
+}
+
+function reviewerCaseDetail(c) {
+  return `
+    <div style="font-size:11px; color:#6b7280; margin-bottom:2px;">CASE · ${c.id} · ${c.by} submitted ${c.age} ago</div>
+    <h2 style="font-family: Georgia, serif; font-size:22px; margin:0 0 4px; color:#1E2761;">
+      ${c.title}
+      <span class="pill amber" style="margin-left:8px; font-size:10px;">AWAITING REVIEW</span>
+      <span class="pill ${c.slaPill}" style="margin-left:4px; font-size:10px;">SLA ${c.sla}</span>
+    </h2>
+    <div class="muted" style="font-size:12px; margin-bottom:14px;">
+      Scenario <b>${c.scenario}</b> · v4 · Reviewer: <b>Procurement Lead</b> · <a class="li-link">Case spec →</a>
+    </div>
+
+    <!-- operator's prompt (the input that triggered the case) -->
+    <div style="background:#f9fafb; padding:10px 14px; border-radius:4px; margin-bottom:10px;">
+      <div style="font-size:10px; color:#6b7280; font-weight:600; margin-bottom:3px;">OPERATOR'S PROMPT</div>
+      <div style="font-size:13px; color:#374151; font-style:italic;">"Please onboard Hemlock Precision Castings as a tier-1 supplier for the AERO-2026 program."</div>
+    </div>
+
+    <!-- envelope eyebrow (same wording as the live app) -->
+    <div style="background:#f9fafb; padding:10px 14px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-weight:600; font-size:12px; color:#1E2761;">What the agent gathered</div>
+      <div style="font-size:11px; color:#6b7280;"><b>3</b> stages · <b>13</b> facts</div>
+    </div>
+
+    <!-- promoted-pattern advisory banner (Phase 3b) -->
+    <div style="border-left:4px solid #4f46e5; background:linear-gradient(to right, #eef2ff, #fafafa); padding:10px 14px; margin-bottom:10px; border-radius:0 4px 4px 0;">
+      <div style="font-size:10px; font-weight:700; color:#4f46e5; text-transform:uppercase; letter-spacing:0.05em;">Compounding loop · 1 learned rule matched</div>
+      <div style="font-size:12px; color:#374151; margin-top:4px;">
+        <span class="pill red" style="margin-right:6px;">REJECT</span>
+        <b>SanctionsProximity</b> &middot; matched 1 fact on this case &middot; in 8 of 8 recent cases reviewers rejected when this driver was flagged.
+      </div>
+    </div>
+
+    <!-- stage blocks (compact) -->
+    ${stageBlock('Stage 1 · Policy & scope', 2, 'binder=intake')}
+    ${stageBlock('Stage 2 · Agent gathered', 8, 'binder=proposal · 6 ontology queries · 1 fact-pattern matched')}
+    ${stageBlock('Stage 3 · For your decision', 3, 'binder=review · 2 prior cases retrieved')}
+
+    <!-- load-bearing fact picker (Phase 2) -->
+    <div style="margin-top:14px; padding:12px 14px; border:1px solid #e5e7eb; background:#fafafa; border-radius:4px;">
+      <div style="font-size:11px; font-weight:600; color:#1E2761; margin-bottom:6px;">
+        Which facts were load-bearing in your decision? <span class="muted" style="font-weight:normal;">· optional · pick up to 3</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${loadBearingChip('SanctionsProximity · SUP-001-PROX', true)}
+        ${loadBearingChip('CarrierExposure · SUP-001-CARRIER', true)}
+        ${loadBearingChip('PriorOverride · C-PP-007-001', false)}
+        ${loadBearingChip('Product · P-HC-4421', false)}
+        ${loadBearingChip('Supplier · SUP-001', false)}
+        ${loadBearingChip('+ 8 more facts', false, true)}
+      </div>
+    </div>
+
+    <!-- decision row (ACTIVE in reviewer mode) -->
+    <div style="margin-top:14px; padding:14px; border:2px solid #fbbf24; border-radius:6px; background:#fffbeb;">
+      <div style="font-size:11px; color:#92400e; font-weight:600; margin-bottom:6px;">YOUR DECISION · acting as procurement.lead.amorales</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="small-btn" style="background:#10b981; color:#fff; border-color:#10b981; padding:6px 16px; font-weight:600;"
+                onclick="state.reviewerToast={decision:'approve', caseId:'${c.id}'}; render();">✓ Approve</button>
+        <button class="small-btn" style="background:#dc2626; color:#fff; border-color:#dc2626; padding:6px 16px; font-weight:600;"
+                onclick="state.reviewerModal='reject'; render();">✗ Reject</button>
+        <button class="small-btn" style="background:#f59e0b; color:#fff; border-color:#f59e0b; padding:6px 16px; font-weight:600;"
+                onclick="state.reviewerModal='rfi'; render();">? Request more info</button>
+        <span style="margin-left:auto; font-size:11px; color:#92400e;">Decision lands on the audit trail with your identity + load-bearing facts.</span>
+      </div>
+    </div>`;
+}
+
+function loadBearingChip(label, picked, faded) {
+  const opacity = faded ? '0.5' : '1';
+  return `<span style="padding:5px 10px; border-radius:999px; font-size:11px; cursor:pointer;
+                  background:${picked ? '#fef3c7' : '#fff'}; border:1.5px ${picked ? 'solid #fbbf24' : 'dashed #d1d5db'};
+                  color:${picked ? '#92400e' : '#6b7280'}; font-weight:${picked ? '600' : '500'}; opacity:${opacity};">${picked ? '✓ ' : '+ '}${label}</span>`;
+}
+
+function renderReviewerEmpty() {
+  return `
+    <div style="background:#f9fafb; border-bottom:1px solid #e5e7eb; padding:8px 24px; display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#6b7280;">
+      <span><b>Live demo · TCS Knowledge Fabric</b> &nbsp;&middot;&nbsp; acme-pricing-ops &nbsp;&middot;&nbsp; Reviewer queue · 0 awaiting</span>
+      <span style="padding:3px 10px; background:#fef3c7; border:1px solid #fbbf24; border-radius:999px; color:#92400e; font-weight:600;">Reviewer · acme.finance.lead</span>
+    </div>
+
+    <div style="border: 1.5px dashed #fbbf24; background: #fffbeb; padding: 8px 12px; margin: 14px 24px 0;
+                border-radius: 4px; display: flex; align-items: center; gap: 10px; font-size: 11px;">
+      <span style="color: #92400e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">⚙ Wireframe preview state</span>
+      <button class="small-btn ${state.packKind==='populated'?'primary':''}" style="font-size:11px;" onclick="state.packKind='populated'; render();">Populated · 7 cases awaiting</button>
+      <button class="small-btn ${state.packKind==='empty'?'primary':''}" style="font-size:11px;" onclick="state.packKind='empty'; render();">Empty · 0 cases (blank slate)</button>
+    </div>
+
+    <div class="li-body" style="padding: 60px 40px; text-align:center;">
+      <div style="font-family:Georgia, serif; font-size:72px; color:#1E2761; opacity:0.2;">∅</div>
+      <h2 style="font-family:Georgia, serif; font-size:22px; color:#1E2761; margin: 14px 0 6px;">No cases awaiting your decision</h2>
+      <p class="muted" style="font-size:13px; max-width: 480px; margin: 0 auto;">
+        This is what reviewers see when the pack has no scenarios yet (Custom · Blank-slate launches) — or when nothing happens to be queued for them right now.
+      </p>
+      <p style="font-size:12px; color:#4f46e5; margin-top: 24px;">
+        <a class="li-link" onclick="state.launchedView='admin'; state.adminTab='scenarios'; render();">Add scenarios in Admin to start producing cases →</a>
+      </p>
+    </div>`;
+}
+
+function renderToast() {
+  const t = state.reviewerToast;
+  const isUndo = t.decision === 'undo';
+  const labelMap = { approve: 'Approved', reject: 'Rejected', rfi: 'Sent back for more info', undo: 'Decision undone' };
+  const bgMap    = { approve: '#10b981',   reject: '#dc2626',   rfi: '#f59e0b',                 undo: '#4f46e5' };
+  const iconMap  = { approve: '✓',         reject: '✗',         rfi: '?',                       undo: '↺' };
+
+  // Auto-advance only for forward decisions (not for undo).
+  if (!isUndo) {
+    setTimeout(() => {
+      if (!state.reviewerToast || state.reviewerToast.decision === 'undo') return;
+      const idx = REVIEWER_INBOX.findIndex(c => c.id === t.caseId);
+      const next = REVIEWER_INBOX[idx === -1 ? 0 : (idx + 1) % REVIEWER_INBOX.length];
+      state.reviewerActiveCase = next.id;
+      state.reviewerToast = null;
+      render();
+    }, 2200);
+  } else {
+    // Undo toast clears after 3 seconds; no auto-advance.
+    setTimeout(() => {
+      if (state.reviewerToast && state.reviewerToast.decision === 'undo') {
+        state.reviewerToast = null;
+        render();
+      }
+    }, 3000);
+  }
+
+  const sub = isUndo
+    ? 'Returned to your Inbox · audit event \"decision.undo\" recorded'
+    : 'Stamped against scenario v4 · landing on audit trail · next case loading in 1s';
+
+  return `<div style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#fff;
+              border:1px solid #e5e7eb; border-radius:8px; padding:14px 18px; min-width:380px; max-width:520px;
+              box-shadow:0 10px 30px rgba(0,0,0,0.15); z-index:9999; display:flex; align-items:center; gap:14px;">
+    <div style="width:30px; height:30px; border-radius:50%; background:${bgMap[t.decision]}; color:#fff;
+                display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700;">${iconMap[t.decision]}</div>
+    <div style="flex:1;">
+      <div style="font-size:13px; font-weight:600; color:#1f2937;">${labelMap[t.decision]} · ${t.caseId}</div>
+      <div style="font-size:11px; color:#6b7280; margin-top:2px;">${sub}</div>
+    </div>
+    <button class="small-btn" onclick="state.reviewerToast=null; render();" style="font-size:11px;">${isUndo ? 'Dismiss' : 'Stay (Esc)'}</button>
+  </div>`;
+}
+
+function renderRationaleModal() {
+  const kind = state.reviewerModal; // 'reject' | 'rfi'
+  const isReject = kind === 'reject';
+  const title = isReject ? 'Reject — provide a rationale' : 'Request more info';
+  const accentBg = isReject ? '#dc2626' : '#f59e0b';
+  const reasons = isReject
+    ? ['Sanctions proximity too close — 3-hop OFAC SDN indirect ownership.', 'Carrier-alliance concentration: all preferred carriers in one alliance.', 'Reliability score below tier-1 threshold for this category.']
+    : ['Need beneficial-ownership disclosure for Apex Holdings International.', 'Clarify ESG audit date — last documented audit > 12 months old.', 'Request second-source feasibility for primary SKU.'];
+
+  return `<div onclick="if(event.target===this){state.reviewerModal=null; render();}"
+              style="position:fixed; inset:0; background:rgba(31,41,55,0.6); z-index:9000;
+                     display:flex; align-items:center; justify-content:center;">
+    <div onclick="event.stopPropagation();" style="background:#fff; width:600px; max-width:90vw; border-radius:8px; overflow:hidden;
+                box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+      <div style="background:${accentBg}; color:#fff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:10px; opacity:0.85; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">Reviewer rationale required</div>
+          <div style="font-size:16px; font-weight:600; font-family:Georgia, serif;">${title}</div>
+        </div>
+        <a onclick="state.reviewerModal=null; render();" style="color:#fff; cursor:pointer; font-size:18px;">×</a>
+      </div>
+      <div style="padding:18px;">
+        <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Quick-pick reasons</div>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:14px;">
+          ${reasons.map(r => `<button class="small-btn" style="text-align:left; padding:8px 12px; font-weight:normal; font-size:12px; line-height:1.4;">${r}</button>`).join('')}
+        </div>
+        <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Reason</div>
+        <textarea style="width:100%; min-height:80px; padding:8px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit; font-size:12px;" placeholder="Type or edit your rationale…">${reasons[0]}</textarea>
+        ${isReject ? '' : `<div style="margin-top:12px; font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Follow-up reminder</div>
+        <div style="display:flex; gap:6px;">${['No follow-up','24 hours','3 days','1 week'].map((l,i)=>`<button class="small-btn${i===2?' primary':''}" style="font-size:11px;">${l}</button>`).join('')}</div>`}
+      </div>
+      <div style="padding:14px 18px; background:#f9fafb; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="small-btn" onclick="state.reviewerModal=null; render();">← Back to review</button>
+        <button class="small-btn" style="background:${accentBg}; color:#fff; border-color:${accentBg}; font-weight:600; padding:6px 18px;"
+                onclick="state.reviewerToast={decision:'${kind}', caseId:state.reviewerActiveCase}; state.reviewerModal=null; render();">
+          ${isReject ? 'Submit rejection' : 'Send back'}
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOperatorEmpty() {
+  return `
+    <div class="li-body" style="display:grid; grid-template-columns: 260px 1fr; gap: 18px; padding: 18px 24px;">
+      <!-- LEFT: empty rail with build-mode CTAs -->
+      <div>
+        <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">Available scenarios</div>
+        <div style="border:1.5px dashed #d1d5db; border-radius:4px; padding:18px 14px; text-align:center; background:#fafafa;">
+          <div style="font-size: 28px; font-family: Georgia, serif; color: #1E2761;">0</div>
+          <div class="muted" style="font-size:11px; margin-top:4px;">No scenarios yet</div>
+          <a onclick="state.launchedView='admin'; state.adminTab='scenarios'; render();" class="li-link" style="display:inline-block; margin-top:8px; font-size:11px;">Add scenarios in Admin →</a>
+        </div>
+
+        <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin: 18px 0 8px;">My recent cases</div>
+        <div style="border:1.5px dashed #d1d5db; border-radius:4px; padding:14px; text-align:center; background:#fafafa;">
+          <div class="muted" style="font-size:11px;">No cases yet.<br>Once you add scenarios, operator prompts will land here.</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: build progress + onboarding hero -->
+      <div>
+        <div style="background:#fef3c7; border:1px solid #fbbf24; padding:14px 18px; border-radius:6px; margin-bottom:18px;">
+          <div style="font-size:10px; font-weight:700; color:#92400e; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Build mode</div>
+          <div style="font-size:14px; font-weight:600; color:#92400e;">No scenarios yet. Operator users will see this empty state until you finish building.</div>
+          <div style="font-size:12px; color:#92400e; margin-top:6px;">Five things to finish before you can run cases. Estimated time: ~45 minutes with a domain expert.</div>
+        </div>
+
+        <h2 style="font-family: Georgia, serif; font-size:20px; margin:0 0 12px; color:#1E2761;">Finish building <code style="font-size:14px; color:#1E2761;">acme-pricing-ops</code></h2>
+
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${emptyChecklist('1', 'Define ontology classes',  '0 of 3+ recommended classes',  'ontology')}
+          ${emptyChecklist('2', 'Draft scenarios',          '0 scenarios',                  'scenarios')}
+          ${emptyChecklist('3', 'Configure write actions',  '0 actions',                    'actions')}
+          ${emptyChecklist('4', 'Map reviewers to scenarios','0 mappings',                  'reviewers')}
+          ${emptyChecklist('5', 'Run test cases &amp; go live','Disabled until 1–4 complete','reviewers')}
+        </div>
+
+        <div style="margin-top:20px; padding:14px; background:#f9fafb; border-left:3px solid #4f46e5; border-radius:0 4px 4px 0; font-size:12px; color:#4338ca; line-height:1.55;">
+          <b>This is what every operator + reviewer sees</b> until the pack has content. Once you save a scenario in Admin, the rail on the left starts filling in and the prompt input below becomes active.
+        </div>
+
+        <div style="margin-top:18px; padding:14px; border:1px dashed #d1d5db; border-radius:6px; background:#fafafa;">
+          <div style="font-size:11px; color:#6b7280; margin-bottom:8px;">PROMPT · disabled until scenarios exist</div>
+          <input disabled style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:4px; background:#fff; color:#9ca3af; font-size:13px; font-family:inherit;" placeholder="What do you need? — add scenarios in Admin to enable">
+        </div>
+      </div>
+    </div>`;
+}
+
+function emptyChecklist(n, title, status, adminTab) {
+  return `<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f9fafb; border-radius:4px; cursor:pointer;"
+                onclick="state.launchedView='admin'; state.adminTab='${adminTab}'; render();">
+    <span class="badge warn" style="width:22px; height:22px; font-size:11px;">${n}</span>
+    <div style="flex:1;">
+      <div style="font-size:13px; color:#1f2937; font-weight:500;">${title}</div>
+      <div class="muted" style="font-size:11px;">${status}</div>
+    </div>
+    <span class="li-link" style="font-size:11px;">Open in Admin →</span>
+  </div>`;
+}
+
+// ============================================================
+// Populated admin tabs — Shipping pack v4 already loaded
+// ============================================================
+function tabHomePopulated() {
+  return `
+    <div style="background:#dcfce7; border:1px solid #16a34a; padding:14px 18px; border-radius:6px; margin-bottom:22px;">
+      <div style="font-size:10px; font-weight:700; color:#15803d; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Pack is LIVE</div>
+      <div style="font-size:14px; font-weight:600; color:#15803d;">Shipping pack v4 is loaded · all readiness checks passed · operators can submit cases</div>
+      <div style="font-size:12px; color:#15803d; margin-top:4px;">Last edit: 2 hours ago by abigail.charles@tcs.com — bumped SC-PP-008 reviewer group</div>
+    </div>
+
+    <div class="li-meta" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="li-meta-card"><div class="li-meta-label">Ontology classes</div><div class="li-meta-value" style="font-family:Georgia, serif; font-size:24px; color:#1E2761;"><b>16</b></div><div class="li-meta-value muted" style="font-size:11px;">all bound to a data source</div></div>
+      <div class="li-meta-card"><div class="li-meta-label">Scenarios</div><div class="li-meta-value" style="font-family:Georgia, serif; font-size:24px; color:#1E2761;"><b>11</b></div><div class="li-meta-value muted" style="font-size:11px;">6 HITL · 5 autonomous</div></div>
+      <div class="li-meta-card"><div class="li-meta-label">Write actions</div><div class="li-meta-value" style="font-family:Georgia, serif; font-size:24px; color:#1E2761;"><b>8</b></div><div class="li-meta-value muted" style="font-size:11px;">all reversibility-classed</div></div>
+      <div class="li-meta-card"><div class="li-meta-label">Reviewer mappings</div><div class="li-meta-value" style="font-family:Georgia, serif; font-size:24px; color:#1E2761;"><b>11 / 11</b></div><div class="li-meta-value muted" style="font-size:11px;">every HITL has a group</div></div>
+    </div>
+
+    <h4 style="margin: 28px 0 10px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Recent operator activity (last hour)</h4>
+    <table class="admin-table">
+      <thead><tr><th style="width:120px;">When</th><th>Case</th><th>Scenario</th><th>Status</th><th>Operator</th></tr></thead>
+      <tbody>
+        <tr><td>4 min ago</td><td>C-3f7a2b</td><td>SC-PP-008 Supplier onboarding</td><td><span class="pill amber">Awaiting review</span></td><td>operator.gmehta</td></tr>
+        <tr><td>22 min ago</td><td>C-0c8b4e</td><td>SC-LN-002 Mode-switch</td><td><span class="pill green">Approved · executed</span></td><td>operator.pgupta</td></tr>
+        <tr><td>34 min ago</td><td>C-91d05a</td><td>SC-LN-DEMURRAGE-AUTO-025</td><td><span class="pill green">Auto-executed</span></td><td>system</td></tr>
+        <tr><td>47 min ago</td><td>C-4e2b91</td><td>SC-PP-008 Supplier onboarding</td><td><span class="pill red">Rejected</span></td><td>operator.gmehta</td></tr>
+        <tr><td>1 h ago</td><td>C-7a1e0d</td><td>SC-LN-STATUS-009 Status lookup</td><td><span class="pill green">Auto-resolved</span></td><td>operator.dchakraborty</td></tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top: 22px; display:flex; gap:8px;">
+      <button class="small-btn primary">Bump pack to v5</button>
+      <button class="small-btn">Export pack as YAML</button>
+      <button class="small-btn">View instance config</button>
+    </div>`;
+}
+
+function tabOntologyPopulated() {
+  return `<div class="li-section-head"><h3>Ontology</h3><div class="muted">16 classes loaded from Shipping pack v4 · all bound · search / filter / edit any.</div></div>
+    <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
+      <input style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; width:260px;" placeholder="Filter classes…">
+      <span class="muted" style="font-size:11px; margin-left:auto;">16 classes · 47 attributes · 12 relations</span>
+    </div>
+    <table class="admin-table">
+      <thead><tr><th>Class</th><th>Attributes</th><th>Bound to source</th><th>Used by</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>Supplier</b></td><td>supplier_id (id), name, country, tier, reliability_score</td><td>neo4j_default, products_csv</td><td>SC-PP-008 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SanctionsProximity</b></td><td>entity_id (id), hop_distance, program, risk_tier</td><td>neo4j_default</td><td>SC-PP-008 +2 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>Carrier</b></td><td>carrier_id (id), scac, alliance, reliability</td><td>carriers_csv</td><td>SC-LN-002 +4 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>Lane</b></td><td>lane_id (id), origin, destination, mode</td><td>lanes_csv</td><td>SC-LN-002 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>Port</b></td><td>port_code (id), name, operational_state</td><td>ports_csv</td><td>SC-LN-PORT-DISRUPTION-020</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>Shipment</b></td><td>shipment_id (id), booking_id, origin, destination, status</td><td>shipments_csv, logistics_sqlite</td><td>SC-LN-* (8 scenarios)</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>FreightRate</b></td><td>rate_id (id), lane_id, carrier_id, container_type, cost_usd</td><td>freight_rates_csv</td><td>SC-LN-002 +1 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>DemurrageCharge</b></td><td>charge_id (id), shipment_id, amount_usd, days_overage</td><td>logistics_sqlite</td><td>SC-LN-DEMURRAGE-*</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>PriorOverride</b></td><td>case_id (id), scenario_id, outcome, rationale</td><td>governance_sqlite</td><td>All HITL scenarios</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>PolicyExcerpt</b></td><td>id, text, title</td><td>policy_corpus (vector)</td><td>SC-PP-008 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td colspan="5" style="text-align:center; color:#6b7280; font-size:11px;">+ 6 more · <a class="li-link">show all 16</a></td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 18px;"><button class="small-btn primary">+ Add class</button> <button class="small-btn" style="margin-left:6px;">Import classes from another pack…</button></div>`;
+}
+
+function tabScenariosPopulated() {
+  return `<div class="li-section-head"><h3>Scenarios</h3><div class="muted">11 scenarios from Shipping pack v4 · all active.</div></div>
+    <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
+      <input style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; width:260px;" placeholder="Filter scenarios…">
+      <span class="muted" style="font-size:11px; margin-left:auto;">11 scenarios · 6 HITL · 5 autonomous</span>
+    </div>
+    <table class="admin-table">
+      <thead><tr><th>Scenario id</th><th>Title</th><th>Mode</th><th>Status</th><th>Cases (30d)</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>SC-PP-008</b></td><td>Supplier onboarding — multi-source risk review</td><td>HITL</td><td><span class="pill green">Live</span></td><td>23</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-002</b></td><td>Mode-switch ocean → air on critical lane</td><td>HITL</td><td><span class="pill green">Live</span></td><td>11</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>Port disruption — recommend reroute</td><td>HITL</td><td><span class="pill green">Live</span></td><td>4</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>Customer SLA risk — expedite or accept penalty</td><td>HITL</td><td><span class="pill green">Live</span></td><td>17</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TENDER-021</b></td><td>Re-tender a booking to a new carrier</td><td>HITL</td><td><span class="pill green">Live</span></td><td>9</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>Dispute a demurrage charge</td><td>HITL</td><td><span class="pill green">Live</span></td><td>6</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-AUTO-025</b></td><td>Auto-dispute small demurrage charges</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>52</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-ETA-PUSH-023</b></td><td>Push updated ETA to customer system</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>184</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-STATUS-009</b></td><td>Shipment status lookup</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>431</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TRACE-018</b></td><td>Shipment trace — full event history</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>89</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-CARRIER-SCORECARD-019</b></td><td>Carrier overview (scorecard + recent shipments)</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>27</td><td><button class="small-btn">Edit</button></td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 18px;"><button class="small-btn primary">+ Draft new scenario</button> <button class="small-btn" style="margin-left:6px;">Import from another pack…</button></div>`;
+}
+
+function tabActionsPopulated() {
+  return `<div class="li-section-head"><h3>Write actions</h3><div class="muted">8 actions defined · every one declares a reversibility class.</div></div>
+    <table class="admin-table">
+      <thead><tr><th>Action id</th><th>Target</th><th>Reversibility</th><th>Used by</th><th>Last fired</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>retender_booking</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-002, SC-LN-TENDER-021</td><td>22 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>waive_demurrage</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-DEMURRAGE-AUTO-025, SC-LN-DEMURRAGE-DISPUTE-024</td><td>34 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>push_eta</b></td><td>HTTP · customer webhook</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-ETA-PUSH-023</td><td>2 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>recommend_reroute</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-PORT-DISRUPTION-020</td><td>4 h ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>supplier_onboarding_review</b></td><td>governance_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-PP-008</td><td>4 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>expedite_shipment</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-SLA-RISK-022</td><td>1 h ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>log_status_query</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-STATUS-009, SC-LN-TRACE-018</td><td>just now</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>log_carrier_view</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-CARRIER-SCORECARD-019</td><td>14 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 18px;"><button class="small-btn primary">+ Add action</button></div>`;
+}
+
+function tabReviewersPopulated() {
+  return `<div class="li-section-head"><h3>Reviewers &amp; go-live</h3><div class="muted">All 6 HITL scenarios are mapped · this instance is live.</div></div>
+
+    <h4 style="margin: 18px 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Scenario → reviewer group mappings</h4>
+    <table class="admin-table" style="margin-bottom: 22px;">
+      <thead><tr><th>Scenario</th><th>Mode</th><th>Reviewer group</th><th>Escalation</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>SC-PP-008</b> Supplier onboarding</td><td>HITL</td><td>Hemlock-Procurement-Reviewers</td><td>after 48h → procurement-leads</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-002</b> Mode-switch</td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 4h → on-call-planner</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TENDER-021</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 24h → procurement-leads</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>HITL</td><td>Hemlock-Finance-Reviewers</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
+      </tbody>
+    </table>
+
+    <h4 style="margin: 0 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Go-live checklist</h4>
+    <div class="check-row"><span class="badge ok">✓</span> All 16 ontology classes bound to a data source</div>
+    <div class="check-row"><span class="badge ok">✓</span> All 11 scenarios have at least one stage</div>
+    <div class="check-row"><span class="badge ok">✓</span> All 8 write actions declare a reversibility class</div>
+    <div class="check-row"><span class="badge ok">✓</span> All 6 HITL scenarios have a reviewer group</div>
+    <div class="check-row"><span class="badge ok">✓</span> Test cases run (12 test cases passed · last run 4 h ago)</div>
+
+    <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+      <div style="font-size: 12px; color: #15803d;"><b>Status: LIVE.</b> Operators submitting cases since 2026-05-22. Last go-live event: 2026-05-22 09:14 UTC.</div>
+      <div>
+        <button class="small-btn" style="margin-right: 6px;">Pause instance</button>
+        <button class="small-btn" style="border-color:#b91c1c; color:#b91c1c;">Take offline</button>
+      </div>
+    </div>`;
+}
+
+function tabAuditPopulated() {
+  return `<div class="li-section-head"><h3>Audit trail</h3><div class="muted">Append-only · streams to SIEM per GDPR template · last 30 days, 487 events.</div></div>
+
+    <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
+      <input style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:12px; width:240px;" placeholder="Filter by actor / action…">
+      <select style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:12px;"><option>All actions</option><option>config changes only</option><option>operator decisions only</option><option>autonomous executions only</option><option>learned-rule promotions only</option></select>
+      <span class="muted" style="font-size:11px; margin-left:auto;">Streaming to: customer SIEM (Splunk) · live</span>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th style="width:140px;">When</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td>4 min ago</td><td>operator.gmehta</td><td>case.submitted</td><td>C-3f7a2b · SC-PP-008 · "onboard Hemlock Precision Castings"</td></tr>
+        <tr><td>22 min ago</td><td>reviewer.pmanager</td><td><b>decision.approve</b></td><td>C-0c8b4e · SC-LN-002 · rationale: "cost uplift acceptable; recovery time aligns w/ SLA"</td></tr>
+        <tr><td>22 min ago</td><td>system</td><td>action.retender_booking</td><td>shipment S-700412 · ocean → air · carrier MSC → LHCA</td></tr>
+        <tr><td>34 min ago</td><td>system</td><td>action.waive_demurrage</td><td>charge D-2210 · $312 · within auto-envelope (≤$500 + 2 prior wins)</td></tr>
+        <tr><td>47 min ago</td><td>reviewer.pmanager</td><td><b>decision.reject</b></td><td>C-4e2b91 · SC-PP-008 · rationale: "sanctions proximity too close (3-hop OFAC SDN)"</td></tr>
+        <tr><td>47 min ago</td><td>reviewer.pmanager</td><td>highlights.flag</td><td>C-4e2b91 · load-bearing facts: SanctionsProximity (SUP-001-PROX), CarrierExposure</td></tr>
+        <tr><td>1 h ago</td><td>system</td><td>case.auto_resolved</td><td>C-7a1e0d · SC-LN-STATUS-009 · no action — read-only lookup</td></tr>
+        <tr><td>2 h ago</td><td>abigail.charles@tcs.com</td><td><b>scenario.edit</b></td><td>SC-PP-008 v4 → v5 · changed reviewer group from procurement-reviewers to Hemlock-Procurement-Reviewers</td></tr>
+        <tr><td>4 h ago</td><td>abigail.charles@tcs.com</td><td><b>learned_rule.promote</b></td><td>SC-PP-008 · SanctionsProximity → reject · evaluation passed: 9/10 historical match · 100% share of reject decisions</td></tr>
+        <tr><td>1 d ago</td><td>system</td><td>instance.config_export</td><td>YAML dumped to customer Git: hemlock/kf-config@v17</td></tr>
+        <tr><td colspan="4" style="text-align:center; color:#6b7280; font-size:11px;">… 477 more entries · <a class="li-link">show all</a> · <a class="li-link">export filtered CSV</a></td></tr>
+      </tbody>
+    </table>`;
+}
+
+function renderAdminView() {
+  const TABS = [
+    ['overview',  'Build overview'],
+    ['ontology',  'Ontology'],
+    ['scenarios', 'Scenarios'],
+    ['actions',   'Write actions'],
+    ['reviewers', 'Reviewers & go-live'],
+    ['audit',     'Audit'],
+  ];
+  const tabBar = TABS.map(([id, label]) =>
+    `<div class="li-tab${state.adminTab===id?' active':''}" onclick="state.adminTab='${id}'; render();">${label}</div>`
+  ).join('');
+
+  const tabContent = {
+    overview:  tabHome,
+    ontology:  tabOntology,
+    scenarios: tabScenarios,
+    actions:   tabActions,
+    reviewers: tabReviewers,
+    audit:     tabAudit,
+  }[state.adminTab]();
+
+  return `
+    <div class="li-tabs">${tabBar}</div>
+    <div class="li-body">${tabContent}</div>`;
+}
+
+function tabHome() {
+  if (state.packKind === 'populated') return tabHomePopulated();
+  return `
+    <div class="li-banner">
+      <div><b>Welcome to acme-pricing-ops.</b> Your instance is running. Because you launched with a <b>Custom · Blank slate</b> pack, you'll continue building from here. Five things to finish before going live:</div>
+    </div>
+
+    <div class="li-checklist">
+      <div class="check-row"><span class="badge warn">1</span> <b>Define your ontology classes.</b> Currently: <span class="muted">0 classes</span> · <a class="li-link" onclick="state.launchedTab='ontology'; render();">Open ontology →</a></div>
+      <div class="check-row"><span class="badge warn">2</span> <b>Draft scenarios.</b> Currently: <span class="muted">0 scenarios</span> · <a class="li-link" onclick="state.launchedTab='scenarios'; render();">Open scenarios →</a></div>
+      <div class="check-row"><span class="badge warn">3</span> <b>Configure write actions.</b> Currently: <span class="muted">0 actions</span> · <a class="li-link" onclick="state.launchedTab='actions'; render();">Open write actions →</a></div>
+      <div class="check-row"><span class="badge warn">4</span> <b>Map reviewers to scenarios.</b> Currently: <span class="muted">no scenarios to map yet</span> · <a class="li-link" onclick="state.launchedTab='reviewers'; render();">Open reviewers →</a></div>
+      <div class="check-row"><span class="badge warn">5</span> <b>Run test cases + go live.</b> Currently: <span class="muted">0 test cases run</span> · <a class="li-link" onclick="state.launchedTab='reviewers'; render();">Open go-live →</a></div>
+    </div>
+
+    <div class="li-meta">
+      <div class="li-meta-card">
+        <div class="li-meta-label">Instance config</div>
+        <div class="li-meta-value">Region <b>us-east</b> · Scale <b>production</b></div>
+        <div class="li-meta-value">Compliance <b>GDPR</b> · Promotion gate <b>standard</b></div>
+        <a class="li-link" style="font-size:11px;">View full instance.yaml →</a>
+      </div>
+      <div class="li-meta-card">
+        <div class="li-meta-label">Connectors enabled</div>
+        <div class="li-meta-value">CSV · SQLite · Postgres · Neo4j · vector store</div>
+        <a class="li-link" style="font-size:11px;">Edit connectors →</a>
+      </div>
+      <div class="li-meta-card">
+        <div class="li-meta-label">Identity</div>
+        <div class="li-meta-value">Inherited from platform (Entra ID)</div>
+        <div class="li-meta-value muted" style="font-size:11px;">No per-instance changes needed</div>
+      </div>
+    </div>
+  `;
+}
+
+function tabOntology() {
+  if (state.packKind === 'populated') return tabOntologyPopulated();
+  return `<div class="li-section-head"><h3>Ontology</h3><div class="muted">Currently 0 classes · Bind to data sources as you go.</div></div>
+    <table class="admin-table" style="margin-bottom: 16px;">
+      <thead><tr><th>Class</th><th>Attributes</th><th>Bound to source</th><th></th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="text-align:center; padding: 28px 12px; color: #6b7280; font-style: italic;">No classes yet. Start by adding the concepts your scenarios will reference.</td></tr>
+      </tbody>
+    </table>
+
+    <div style="border: 1px dashed #d1d5db; border-radius: 4px; padding: 14px; background: #fafafa;">
+      <h4 style="margin: 0 0 10px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Add a class</h4>
+      <div class="field-grid">
+        <label>Class name</label><input value="ApprovalRequest">
+        <label>Attributes</label>
+        <div style="font-family: 'SF Mono', monospace; font-size: 11px; color: #374151;">
+          request_id : id  ·  submitted_by : string  ·  amount : number  ·  status : enum&lt;pending,approved,rejected&gt;
+          <a class="li-link" style="margin-left: 8px;">+ Add attribute</a>
+        </div>
+        <label>Identifier</label><div style="font-size: 12px;">request_id</div>
+        <label>Bind to source</label><select><option>postgres_pricing</option><option>(no binding yet)</option></select>
+        <label></label><div><button class="small-btn primary">Save class</button> <button class="small-btn" style="margin-left: 6px;">Save &amp; add another</button></div>
+      </div>
+    </div>`;
+}
+
+function tabScenarios() {
+  if (state.packKind === 'populated') return tabScenariosPopulated();
+  return `<div class="li-section-head"><h3>Scenarios</h3><div class="muted">Currently 0 scenarios · A scenario needs at least 1 ontology class.</div></div>
+    <table class="admin-table" style="margin-bottom: 16px;">
+      <thead><tr><th>Scenario id</th><th>Title</th><th>Mode</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="text-align:center; padding: 28px 12px; color: #6b7280; font-style: italic;">No scenarios yet. Draft your first one below.</td></tr>
+      </tbody>
+    </table>
+
+    <div style="border: 1px dashed #d1d5db; border-radius: 4px; padding: 14px; background: #fafafa;">
+      <h4 style="margin: 0 0 10px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Draft a scenario</h4>
+      <div class="field-grid" style="grid-template-columns: 160px 1fr 160px 1fr;">
+        <label>Scenario id</label><input value="SC-AP-001">
+        <label>Title</label><input value="Bulk discount approval">
+        <label>Domain</label><input value="pricing-ops">
+        <label>Mode</label><select><option>HITL (reviewer required)</option><option>Autonomous (within guardrail)</option></select>
+      </div>
+      <div class="field-grid" style="margin-top: 10px;">
+        <label>Match keywords</label><input value="bulk discount, volume pricing, tier override">
+        <label>Reviewer group</label><select><option>finance-reviewers</option><option>pricing-leads</option><option>compliance-officers</option><option disabled>──── synced from Entra ID ────</option><option>+ Add another group…</option></select>
+      </div>
+      <div style="margin-top: 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin: 0 0 8px;">
+          <h4 style="margin: 0; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Stages · 3 default stages added</h4>
+          <span style="font-size:11px; color:#6b7280;">edit, remove, or add more</span>
+        </div>
+
+        <!-- Stage 1 of 3 — default: agent_intake / policy & scope -->
+        <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
+          <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
+            <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">1</span>
+            <div style="flex:1;">
+              <div style="font-size:13px; font-weight:600; color:#1E2761;">agent_intake <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "Policy &amp; scope"</span></div>
+              <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · inline facts only · no ontology queries</div>
+            </div>
+            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+          </div>
+          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+            <div><b>Purpose:</b> Tell the agent (and downstream stages) what it's doing + who's responsible. Reviewer sees these as the "Policy &amp; scope" envelope cards.</div>
+            <div style="margin-top:8px; padding:8px 12px; background:#fafafa; border-radius:3px; font-family:'SF Mono', monospace; font-size:11px; color:#374151;">
+              <div>● actor &nbsp; &nbsp; &nbsp; &nbsp; <span style="color:#1E2761;">agent-pricing-12</span></div>
+              <div>● role &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span style="color:#1E2761;">"approve volume discount"</span></div>
+              <div>● reviewer_role &nbsp; <span style="color:#1E2761;">finance-reviewers</span></div>
+              <div>● policy_guardrail <span style="color:#1E2761;">POL-AP-PRICING-2026</span></div>
+            </div>
+            <a class="li-link" style="margin-top:6px; display:inline-block; font-size:11px;">+ Add inline fact</a>
+          </div>
+        </div>
+
+        <!-- Stage 2 of 3 — default: proposal / agent gathered -->
+        <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
+          <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
+            <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">2</span>
+            <div style="flex:1;">
+              <div style="font-size:13px; font-weight:600; color:#1E2761;">proposal <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "Agent gathered"</span></div>
+              <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · the bulk of evidence · pulled from ontology classes you defined</div>
+            </div>
+            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+          </div>
+          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+            <div><b>Purpose:</b> Run live ontology queries to gather the facts the reviewer needs to see. Each row below produces fact cards in the operator + reviewer UI.</div>
+            <table class="admin-table" style="margin-top:8px;">
+              <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><b>tcs_core.Product</b></td>
+                  <td style="font-family:'SF Mono', monospace; font-size:11px;">supplier_id = :supplier_id</td>
+                  <td>~3 SKU rows</td>
+                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><b>supply_chain.SanctionsProximity</b></td>
+                  <td style="font-family:'SF Mono', monospace; font-size:11px;">supplier_id = :supplier_id</td>
+                  <td>graph walk · max 3 hops</td>
+                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                </tr>
+                <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Stage 3 of 3 — default: review / for your decision -->
+        <div style="border:1px solid #e5e7eb; border-radius:4px; background:#fff; margin-bottom:8px;">
+          <div style="padding:10px 12px; background:#f9fafb; display:flex; align-items:center; gap:10px; border-bottom:1px solid #e5e7eb;">
+            <span style="background:#1E2761; color:#fff; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">3</span>
+            <div style="flex:1;">
+              <div style="font-size:13px; font-weight:600; color:#1E2761;">review <span style="font-weight:normal; color:#6b7280; font-size:11px;">· renamed in the UI as "For your decision"</span></div>
+              <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · prior cases + policy excerpts · anchors the reviewer's call</div>
+            </div>
+            <button class="small-btn" style="font-size:11px;">Edit ▾</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+          </div>
+          <div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
+            <div><b>Purpose:</b> Show the reviewer "what similar decisions looked like" + the SOP text that applies. Frames their call.</div>
+            <table class="admin-table" style="margin-top:8px;">
+              <thead style="background:#fafafa;"><tr><th>Ontology query</th><th>Filter</th><th>Returns (typical)</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><b>tcs_core.PriorOverride</b></td>
+                  <td style="font-family:'SF Mono', monospace; font-size:11px;">scenario_id = :this_scenario</td>
+                  <td>3 most-recent similar decisions</td>
+                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                </tr>
+                <tr>
+                  <td><b>tcs_core.PolicyExcerpt</b></td>
+                  <td style="font-family:'SF Mono', monospace; font-size:11px;">semantic search on prompt</td>
+                  <td>top 2 SOP paragraphs</td>
+                  <td><button class="small-btn" style="font-size:10px;">Edit</button></td>
+                </tr>
+                <tr style="background:#fffbeb;"><td colspan="4" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add ontology query</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:10px; padding:10px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 4px 4px 0;">
+          <button class="small-btn" style="font-size:11px;">+ Add another stage</button>
+          <span style="margin-left:10px; font-size:11px; color:#4338ca;">
+            <b>Most scenarios have these 3 stages.</b> Add a 4th when you need a distinct evidence-gathering pass — e.g. a separate <code>external_api_check</code> stage that calls a partner system.
+          </span>
+        </div>
+      </div>
+      <div style="margin-top: 14px;"><button class="small-btn primary">Save scenario</button> <button class="small-btn" style="margin-left: 6px;">Test with sample prompt…</button></div>
+    </div>`;
+}
+
+function tabActions() {
+  if (state.packKind === 'populated') return tabActionsPopulated();
+  return `<div class="li-section-head"><h3>Write actions</h3><div class="muted">Every action MUST declare a reversibility class — the platform refuses to mark an irreversible action as Auto-act.</div></div>
+    <table class="admin-table" style="margin-bottom: 16px;">
+      <thead><tr><th>Action id</th><th>Target</th><th>Reversibility</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="text-align:center; padding: 28px 12px; color: #6b7280; font-style: italic;">No write actions yet. Add one for each thing the agent should be able to do.</td></tr>
+      </tbody>
+    </table>
+
+    <div style="border: 1px dashed #d1d5db; border-radius: 4px; padding: 14px; background: #fafafa;">
+      <h4 style="margin: 0 0 10px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Add an action</h4>
+      <div class="field-grid">
+        <label>Action id</label><input value="grant_bulk_discount">
+        <label>Target connector</label><select><option>postgres_pricing</option><option>HTTP webhook…</option></select>
+        <label>Reversibility class</label>
+        <div>
+          <label style="font-weight: normal; font-size: 12px;"><input type="radio" name="rev"> Idempotent &nbsp; &nbsp;</label>
+          <label style="font-weight: normal; font-size: 12px;"><input type="radio" name="rev" checked> Compensatable &nbsp; &nbsp;</label>
+          <label style="font-weight: normal; font-size: 12px;"><input type="radio" name="rev"> Irreversible</label>
+        </div>
+        <label>Parameters</label>
+        <div style="font-family: 'SF Mono', monospace; font-size: 11px; color: #374151;">
+          customer_id : ApprovalRequest.submitted_by  ·  discount_pct : number  ·  expires : date
+        </div>
+        <label>Executor</label><textarea>UPDATE customer_pricing
+   SET discount_pct = :discount_pct, expires = :expires
+ WHERE customer_id = :customer_id;</textarea>
+        <label></label><div><button class="small-btn primary">Save action</button> <button class="small-btn" style="margin-left: 6px;">Test with sample data…</button></div>
+      </div>
+    </div>`;
+}
+
+function tabReviewers() {
+  if (state.packKind === 'populated') return tabReviewersPopulated();
+  return `<div class="li-section-head"><h3>Reviewers &amp; go-live</h3><div class="muted">Manage reviewer groups · map scenarios to them · verify your readiness checklist.</div></div>
+
+    <div class="info-box" style="margin: 18px 0 14px;">
+      <b>A reviewer group is a named pointer to people in your enterprise IDP</b> (Entra ID, Okta, SAML). The Knowledge Fabric doesn't manage users itself — it just references group names. Add or remove people in your IDP, and the change flows here automatically. The audit trail captures the individual reviewer who actually decided, but the routing only knows about the group.
+    </div>
+
+    <h4 style="margin: 0 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Available reviewer groups · 3 defaults synced from your IDP</h4>
+    <p style="font-size:12px; color: #4b5563; margin: 0 0 10px;">These were auto-discovered from your Entra ID tenant at launch. Add more by syncing additional groups; remove ones you don't intend to use.</p>
+    <table class="admin-table" style="margin-bottom: 22px;">
+      <thead><tr><th>Group name</th><th>Source</th><th>Members</th><th>Notify via</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><b>finance-reviewers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>4</td><td>Teams · #finance-approvals</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>pricing-leads</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>2</td><td>Teams · #pricing-leads</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>compliance-officers</b></td><td>Entra ID · acme.onmicrosoft.com</td><td>3</td><td>Email + Teams</td><td><span class="pill green">Synced</span></td><td><button class="small-btn">Edit</button></td></tr>
+        <tr style="background:#fffbeb;"><td colspan="6" style="text-align:center; padding:6px; color:#92400e; font-size:11px;">+ Add reviewer group (must already exist in your IDP)</td></tr>
+      </tbody>
+    </table>
+
+    <h4 style="margin: 0 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Map scenarios to reviewer groups</h4>
+    <p style="font-size:12px; color: #4b5563; margin: 0 0 10px;">Each HITL scenario routes its cases to one group. Escalation rules fire if no one responds within a window.</p>
+    <table class="admin-table" style="margin-bottom: 22px;">
+      <thead><tr><th>Scenario</th><th>Mode</th><th>Reviewer group</th><th>Escalation</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="text-align:center; padding: 28px 12px; color: #6b7280; font-style: italic;">No scenarios drafted yet — come back here after you've drafted scenarios on the Scenarios tab. Each one will appear here ready to be mapped to one of the 3 groups above.</td></tr>
+      </tbody>
+    </table>
+
+    <h4 style="margin: 0 0 8px; font-size: 11px; color: #1E2761; text-transform: uppercase; letter-spacing: 0.05em;">Go-live checklist</h4>
+    <div class="check-row"><span class="badge warn">!</span> Ontology has 0 classes — add at least one</div>
+    <div class="check-row"><span class="badge warn">!</span> No scenarios drafted — draft at least one</div>
+    <div class="check-row"><span class="badge warn">!</span> No write actions defined</div>
+    <div class="check-row"><span class="badge ok">✓</span> 3 reviewer groups available (need to be mapped to scenarios once drafted)</div>
+    <div class="check-row"><span class="badge warn">!</span> No test cases run yet — recommended before going live</div>
+
+    <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
+      <div style="font-size: 12px; color: #b91c1c;"><b>4 of 5 checks pending.</b> Go live is disabled until ontology + scenarios + actions exist (groups are ready).</div>
+      <div>
+        <button class="small-btn" style="margin-right: 6px;">Save as draft</button>
+        <button class="small-btn" disabled style="opacity:0.4; cursor:not-allowed;">Go live →</button>
+      </div>
+    </div>`;
+}
+
+function tabAudit() {
+  if (state.packKind === 'populated') return tabAuditPopulated();
+  return `<div class="li-section-head"><h3>Audit trail</h3><div class="muted">Every config change to this instance is recorded. Append-only.</div></div>
+
+    <table class="admin-table">
+      <thead><tr><th style="width:140px;">When</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td>14s ago</td><td>abigail.charles@tcs.com</td><td><b>instance.launch</b></td><td>Custom pack · base=blank · region=us-east · compliance=gdpr</td></tr>
+        <tr><td>14s ago</td><td>system</td><td>connectors.enable</td><td>csv, sqlite, postgres, neo4j, vector_store</td></tr>
+        <tr><td>14s ago</td><td>system</td><td>compliance.template.applied</td><td>gdpr · 7 policies attached</td></tr>
+        <tr><td>14s ago</td><td>system</td><td>learned_rules.gate.set</td><td>standard · replay=10 · match≥70%</td></tr>
+        <tr><td>14s ago</td><td>system</td><td>instance.created</td><td>acme-pricing-ops · version v1 · status=build_mode</td></tr>
+      </tbody>
+    </table>
+
+    <p class="muted" style="font-size:11px; margin-top: 14px;">Audit entries flow into the customer's SIEM (configured by the compliance template). Streaming &amp; retention are also set by the template.</p>`;
+}
+
+function screenBasics() {
+  return `<div class="eyebrow">Step 2 of 6</div>
+   <h1>Instance basics</h1>
+   <p class="lede">Name and region tell us where the instance runs and how it's identified. The region drives data residency for cases, decisions, and the audit log.</p>
+   <div class="form-row"><label>Instance name</label><input value="hemlock-shipping-prod"></div>
+   <div class="form-row"><label>Customer organisation</label><input value="Hemlock Manufacturing"></div>
+   <div class="form-row"><label>Region (data residency)</label><select><option>US East (Ashburn)</option><option>EU West (Dublin)</option><option>APAC South (Singapore)</option></select></div>
+   <div class="form-row"><label>Deployment shape</label><select><option>Dedicated single-tenant (recommended)</option><option>Shared multi-tenant</option><option>On-prem / air-gapped</option></select></div>
+   <div class="form-row"><label>Scale tier</label><select><option>Demo (5 users · 100 cases/day)</option><option selected>Production (500 users · 10k cases/day)</option><option>Enterprise (10k users · 100k cases/day)</option></select></div>`;
+}
+
+function screenDecisionLadder() {
+  // Sample scenarios pulled from the chosen pack (Shipping).
+  const scenarios = [
+    { id: 'SC-PP-008', name: 'Supplier onboarding',                  action: 'supplier_onboarding_review', rev: 'amber', revLabel: 'Compensatable', ladder: 'propose', autoBlocked: false, defaultGrad: { approvals: 5, admin: true, nofm: false, local: true, siem: false } },
+    { id: 'SC-LN-002', name: 'Mode-switch ocean → air',              action: 'retender_booking',           rev: 'red',   revLabel: 'Irreversible',  ladder: 'propose', autoBlocked: true },
+    { id: 'SC-LN-DEMURRAGE-AUTO-025', name: 'Demurrage auto-dispute', action: 'waive_demurrage',           rev: 'green', revLabel: 'Compensatable', ladder: 'auto-act', autoBlocked: false, defaultGrad: { approvals: 3, admin: true, nofm: false, local: true, siem: true } },
+    { id: 'SC-LN-ETA-PUSH-023', name: 'ETA push to customer',         action: 'push_eta',                   rev: 'green', revLabel: 'Idempotent',    ladder: 'auto-act', autoBlocked: false },
+  ];
+
+  const rows = scenarios.map(s => {
+    const cells = ['observe','propose','auto-act'].map(state => {
+      const disabled = (state === 'auto-act' && s.autoBlocked) ? ' disabled' : '';
+      const sel = (s.ladder === state && !disabled) ? ' selected' : '';
+      const label = (state === 'auto-act' && s.autoBlocked) ? 'Blocked<br>(irreversible)'
+                  : (state === 'auto-act' && s.id === 'SC-LN-DEMURRAGE-AUTO-025') ? 'Auto-act<br>≤ $500 + prior win'
+                  : state[0].toUpperCase() + state.slice(1);
+      return `<div class="ladder-cell${sel}${disabled}">${label}</div>`;
+    }).join('');
+
+    const showGrad = state.expandedGrad === s.id;
+    let gradPanel = '';
+    if (showGrad && s.defaultGrad) {
+      const g = s.defaultGrad;
+      gradPanel = `
+        <div class="grad-panel">
+          <h4>Graduation rule · ${s.id}</h4>
+          <p style="font-size: 11px; color: #6b7280; margin: 0 0 10px;">
+            Conditions under which an admin can lift this scenario from Propose to Auto-act. Recorded as an audit event when the lift happens.
+          </p>
+          <div class="grad-field"><label>Successful HITL approvals required</label><input type="number" value="${g.approvals}"></div>
+          <div class="grad-field"><label>Sign-off model</label>
+            <div>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.admin?'checked':''}> Admin must approve the lift</label><br>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.nofm?'checked':''}> N-of-M reviewers must agree (N=2)</label>
+            </div>
+          </div>
+          <div class="grad-field"><label>Audit destination</label>
+            <div>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.local?'checked':''}> Local audit log</label><br>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.siem?'checked':''}> Stream to enterprise SIEM</label>
+            </div>
+          </div>
+          <div class="grad-actions">
+            <button class="primary" onclick="state.expandedGrad=null; render();">Save</button>
+            <button onclick="state.expandedGrad=null; render();">Cancel</button>
+            <button onclick="state.expandedGrad=null; render();" style="margin-left: auto; border-color: #b91c1c; color: #b91c1c;">Reset to platform default</button>
+          </div>
+        </div>`;
+    }
+
+    const editLink = s.defaultGrad
+      ? `<div class="grad-line">Graduation rule: <b>${s.defaultGrad.approvals} HITL approvals</b> + ${s.defaultGrad.admin ? 'admin sign-off' : 'reviewer sign-off'}. <a onclick="state.expandedGrad='${state.expandedGrad === s.id ? '' : s.id}'; render();">${showGrad ? 'Close' : 'Edit ▾'}</a></div>`
+      : `<div class="grad-line"><i>No graduation needed — already at ${s.ladder === 'auto-act' ? 'Auto-act' : s.ladder}.</i></div>`;
+
+    return `
+      <div class="scenario-row">
+        <div class="scenario-row-top">
+          <div>
+            <div class="scenario-name">${s.name} (${s.id})</div>
+            <div class="scenario-meta">Action: <code>${s.action}</code> · <span class="pill ${s.rev}">${s.revLabel}</span></div>
+          </div>
+          <div class="ladder">${cells}</div>
+        </div>
+        ${editLink}
+        ${gradPanel}
+      </div>`;
+  }).join('');
+
+  return `<div class="eyebrow">Step 3 of 6</div>
+   <h1>Decision policy — the autonomy ladder</h1>
+   <p class="lede">For each scenario, set the default autonomy state. <b>Observe</b> = log-only, no action. <b>Propose</b> = HITL review required. <b>Auto-act</b> = execute without review. The Auto-act cell is disabled when the action is irreversible.</p>
+   <div style="margin-top: 14px;">${rows}</div>
+   <p class="footer-tip">Graduation rules live <i>inline</i> on each scenario — click <a style="color:#4f46e5;">Edit ▾</a> to configure approvals + sign-off + audit. Click <a style="color:#4f46e5;">Edit ▾</a> on the first scenario to see the panel open.</p>`;
+}
+
+function screenConnectors() {
+  return `<div class="eyebrow">Step 4 of 6</div>
+   <h1>Connectors</h1>
+   <p class="lede">Which data-source kinds is the agent allowed to read from and write to? Each kind ships with a default reversibility class for any write actions. Enable only what you need.</p>
+   <div class="cards" style="grid-template-columns: repeat(2, 1fr);">
+     <div class="card selected"><h3>Spreadsheets (CSV / Excel)</h3><div class="count">Read-only</div><ul><li>Master data: products, carriers, lanes</li><li>Reversibility: N/A (read-only)</li></ul></div>
+     <div class="card selected"><h3>Operational SQLite / Postgres</h3><div class="count">Read + write</div><ul><li>Bookings, cases, decisions</li><li>Default reversibility: compensatable</li></ul></div>
+     <div class="card selected"><h3>Graph (Neo4j)</h3><div class="count">Read-only</div><ul><li>Supplier networks, sanctions walks</li><li>Connection: bolt+s:// (TLS)</li></ul></div>
+     <div class="card selected"><h3>Vector store (semantic search)</h3><div class="count">Read-only</div><ul><li>Policy / SOP corpus</li><li>Embeddings: OpenAI / Azure OpenAI</li></ul></div>
+     <div class="card"><h3>Enterprise systems</h3><div class="count">SAP · Salesforce · ServiceNow</div><ul><li>Default reversibility: irreversible</li><li>Requires admin approval to write</li></ul></div>
+     <div class="card"><h3>HTTP webhooks</h3><div class="count">Outbound notifications</div><ul><li>Slack · Teams · custom URLs</li><li>Per-tenant rate limits</li></ul></div>
+   </div>`;
+}
+
+function screenCompliance() {
+  return `<div class="eyebrow">Step 5 of 6</div>
+   <h1>Compliance + policy plane</h1>
+   <p class="lede">Pick a compliance template — flips audit retention, PII handling, immutability, and SIEM streaming together. Policies live <b>separate</b> from scenarios so customers can tighten governance without forking scenario YAML.</p>
+   <div class="cards">
+     <div class="card"><h3>None</h3><div class="count">Demos only</div><ul><li>30-day audit retention</li><li>No PII handling</li><li>Mutable cases</li></ul></div>
+     <div class="card"><h3>SOC 2</h3><div class="count">Baseline production</div><ul><li>1-year retention</li><li>PII masking in logs</li><li>SIEM export</li></ul></div>
+     <div class="card selected"><h3>GDPR</h3><div class="count">EU customers</div><ul><li>Right-to-erasure handler</li><li>PII tokenization</li><li>Data-residency lock</li></ul></div>
+     <div class="card"><h3>HIPAA</h3><div class="count">Healthcare</div><ul><li>7-year retention</li><li>BAA-required connectors only</li><li>Immutable decisions</li></ul></div>
+     <div class="card"><h3>FedRAMP</h3><div class="count">US Government</div><ul><li>Air-gap option</li><li>All actions logged</li><li>FIPS-compliant crypto</li></ul></div>
+     <div class="card"><h3>Custom</h3><div class="count">Pick à la carte</div><ul><li>Mix individual policies</li><li>(advanced — admin only)</li></ul></div>
+   </div>
+   <p class="footer-tip">Selected template auto-attaches a versioned policy bundle. Admins can view + override individual policies after launch.</p>`;
+}
+
+function screenLearnedRules() {
+  return `<div class="eyebrow">Step 6 of 6</div>
+   <h1>Evaluation gate for learned rules</h1>
+   <p class="lede">
+     Over time, the platform watches reviewers' decisions and notices patterns — e.g. "in 8 of 8 supplier-onboarding rejects, reviewers cited a sanctions-proximity issue." That recurring pattern can become a <b>learned rule</b>: an automatic hint shown on future similar cases.
+     <br><br>
+     <b>This step asks how strictly the platform should evaluate a learned rule before it goes live.</b> Stricter = fewer surprises but slower learning.
+   </p>
+   <div class="cards">
+     <div class="card"><h3>Loose</h3><div class="count">Demo / sandbox</div><ul><li>Admin click → rule goes live</li><li>No replay against past cases</li><li>No regression check</li><li>(matches today's default)</li></ul></div>
+     <div class="card selected"><h3>Standard</h3><div class="count">Recommended</div><ul><li>Replay against last 10 closed cases</li><li>≥ 70% of decisions would still match</li><li>Highlight any regressions before approval</li><li>Single admin sign-off</li></ul></div>
+     <div class="card"><h3>Strict</h3><div class="count">Regulated domains</div><ul><li>Replay against last 100 closed cases</li><li>≥ 90% would still match</li><li>2 reviewer signoffs (N-of-M)</li><li>Mandatory rollback window</li></ul></div>
+   </div>
+   <div class="info-box">
+     A <b>learned rule</b> is a "the reviewer almost always does X when Y is true" pattern that the platform proposes as a future-case hint. Admins still have to approve it. Demoting a learned rule is a one-click action with a full audit trail.
+   </div>
+   <p class="footer-tip">Tip: start at Standard. Lower to Loose only for internal sandbox tenants. Raise to Strict before any healthcare or trade-compliance workload.</p>`;
+}
+
+function screenReview() {
+  return `<div class="eyebrow">Almost done</div>
+   <h1>Review &amp; launch</h1>
+   <p class="lede">Here's the generated <code>instance.yaml</code>. Nothing has been deployed yet. Commit this to git, then run <code>./bin/kf-launch hemlock-shipping-prod</code> when ready.</p>
+   <div class="yaml"><span class="c"># Generated by KF Launcher · 2026-06-17 · review before commit
+# Identity is provided by the enterprise platform — not configured here.</span>
+<span class="k">instance:</span>
+  <span class="k">name:</span> <span class="v">hemlock-shipping-prod</span>
+  <span class="k">customer:</span> <span class="v">Hemlock Manufacturing</span>
+  <span class="k">region:</span> <span class="v">us-east</span>
+  <span class="k">deployment:</span> <span class="v">dedicated</span>
+  <span class="k">scale_tier:</span> <span class="v">production</span>
+
+<span class="k">domain_pack:</span>
+  <span class="k">id:</span> <span class="v">shipping</span>
+  <span class="k">version:</span> <span class="v">4</span>
+  <span class="k">overlay:</span> <span class="v">hemlock-private/v1</span>
+
+<span class="k">autonomy:</span>
+  <span class="k">default_state:</span> <span class="v">propose</span>
+  <span class="k">per_scenario:</span>
+    <span class="k">SC-PP-008:</span> <span class="v">propose</span>
+    <span class="k">SC-LN-002:</span> <span class="v">propose</span>     <span class="c"># auto-act blocked (irreversible action)</span>
+    <span class="k">SC-LN-DEMURRAGE-AUTO-025:</span> <span class="v">auto-act</span>
+    <span class="k">SC-LN-ETA-PUSH-023:</span> <span class="v">auto-act</span>
+
+<span class="k">graduation_rules:</span>             <span class="c"># conditions to lift Propose → Auto-act</span>
+  <span class="k">default:</span>
+    <span class="k">required_hitl_approvals:</span> <span class="v">5</span>
+    <span class="k">admin_sign_off:</span> <span class="v">true</span>
+    <span class="k">nofm_reviewers:</span> <span class="v">false</span>
+    <span class="k">audit:</span> <span class="v">[local]</span>
+  <span class="k">per_scenario:</span>                <span class="c"># inline overrides from the ladder screen</span>
+    <span class="k">SC-LN-DEMURRAGE-AUTO-025:</span>
+      <span class="k">required_hitl_approvals:</span> <span class="v">3</span>
+      <span class="k">audit:</span> <span class="v">[local, siem]</span>
+
+<span class="k">connectors:</span>
+  <span class="k">enabled:</span> <span class="v">[csv, sqlite, postgres, neo4j, vector_store]</span>
+  <span class="k">external_systems:</span> <span class="v">[]</span>   <span class="c"># SAP/Salesforce disabled</span>
+  <span class="k">reversibility_default:</span> <span class="v">compensatable</span>
+
+<span class="k">compliance:</span>
+  <span class="k">template:</span> <span class="v">gdpr</span>
+  <span class="k">policies:</span>
+    <span class="k">audit_retention_days:</span> <span class="v">365</span>
+    <span class="k">pii_handling:</span> <span class="v">tokenize</span>
+    <span class="k">decision_immutability:</span> <span class="v">true</span>
+    <span class="k">siem_export:</span> <span class="v">true</span>
+
+<span class="k">learned_rules:</span>
+  <span class="k">evaluation_gate:</span> <span class="v">standard</span>
+  <span class="k">replay_window:</span> <span class="v">10</span>
+  <span class="k">match_threshold_pct:</span> <span class="v">70</span>
+  <span class="k">reviewer_signoffs:</span> <span class="v">1</span>
+  <span class="k">rollback_window_days:</span> <span class="v">7</span></div>
+   <p style="margin-top: 20px;">
+     <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.launchedTab='home'; render();">Launch instance →</button>
+     <button class="btn" style="margin-left: 8px;">Download config (.yaml)</button>
+     <button class="btn" style="margin-left: 8px;">Edit a step</button>
+   </p>`;
+}
+
+// ----- screen orchestration -----
+const SCREEN_FNS = [
+  screenWelcome,         // 0
+  screenDomainPack,      // 1
+  screenBasics,          // 2
+  screenDecisionLadder,  // 3
+  screenConnectors,      // 4
+  screenCompliance,      // 5
+  screenLearnedRules,    // 6
+  screenReview,          // 7
+];
+const LABELS = ['Welcome','Step 1 · Domain pack','Step 2 · Basics','Step 3 · Decision ladder','Step 4 · Connectors','Step 5 · Compliance','Step 6 · Learned-rule gate','Review & launch'];
+
+function render() {
+  // After Launch: switch chrome entirely — no progress dots, no Back/Next.
+  if (state.launched) {
+    document.getElementById('progress').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'none';
+    document.getElementById('content').style.padding = '0';
+    document.getElementById('content').innerHTML = renderLaunchedInstance();
+    return;
+  }
+  // Pre-launch: restore launcher chrome (in case user clicked "Back to launcher").
+  document.getElementById('progress').style.display = 'flex';
+  document.querySelector('.topbar').style.display = 'flex';
+  document.getElementById('content').style.padding = '32px 40px 110px';
+
+  const prog = document.getElementById('progress');
+  prog.innerHTML = '';
+  for (let i = 0; i < SCREEN_FNS.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'pdot' + (i < state.cur ? ' done' : i === state.cur ? ' active' : '');
+    prog.appendChild(d);
+  }
+  document.getElementById('stepLabel').textContent = LABELS[state.cur];
+  document.getElementById('content').innerHTML = SCREEN_FNS[state.cur]() + `
+    <div class="nav">
+      <button class="btn" id="back" ${state.cur===0?'disabled':''}>← Back</button>
+      <button class="btn primary" id="next" ${state.cur===SCREEN_FNS.length-1?'disabled':''}>${state.cur===0?'Start →':'Next →'}</button>
+    </div>`;
+  document.getElementById('back').onclick = () => {
+    if (state.cur === 1 && state.customMode) { state.customMode = false; render(); return; }
+    if (state.cur > 0) { state.cur--; state.expandedGrad = null; render(); }
+  };
+  document.getElementById('next').onclick = () => {
+    if (state.cur < SCREEN_FNS.length - 1) { state.cur++; state.expandedGrad = null; render(); }
+  };
+}
+render();
+
+// Esc cancels the reviewer's auto-advance or closes the rationale modal.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (state.reviewerToast) { state.reviewerToast = null; render(); }
+  else if (state.reviewerModal) { state.reviewerModal = null; render(); }
+});
+</script>
+</body>
+</html>
