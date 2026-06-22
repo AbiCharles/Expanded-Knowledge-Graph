@@ -10,6 +10,10 @@ interface Props {
   onBaselineReplay?: (caseId: string) => void;
   onCompare?: (caseId: string) => void;
   baselineRunningForActive?: boolean;
+  // W8 — pass-through counters for the agent-orchestrator deep-link
+  // flow; bumped by App.tsx, propagated to GraphPanel via Envelope.
+  externalOpenNetworkSignal?: number;
+  externalOpenPathwaysSignal?: number;
 }
 
 const NODE_ORDER = ["agent", "propose", "review", "execute"] as const;
@@ -31,6 +35,8 @@ export function FlowStage({
   onBaselineReplay,
   onCompare,
   baselineRunningForActive,
+  externalOpenNetworkSignal,
+  externalOpenPathwaysSignal,
 }: Props) {
   const position = stagePosition(active);
   const isAuto = !!active?.scenario?.autonomous;
@@ -81,6 +87,8 @@ export function FlowStage({
         onBaselineReplay={onBaselineReplay}
         onCompare={onCompare}
         baselineRunningForActive={baselineRunningForActive}
+        externalOpenNetworkSignal={externalOpenNetworkSignal}
+        externalOpenPathwaysSignal={externalOpenPathwaysSignal}
       />
     </main>
   );

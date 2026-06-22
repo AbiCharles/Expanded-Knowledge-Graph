@@ -158,15 +158,17 @@ export default function App() {
       .finally(() => setPendingLaunch(null));
   }, [pendingLaunch, user, launchedOnce]);
 
+  // Counter signals plumbed down through FlowStage → Envelope →
+  // GraphPanel. When bumped, GraphPanel auto-opens its modal on the
+  // requested tab. Counters > window events because the value lives
+  // in React state — GraphPanel reads the latest value on every
+  // render, so even if it mounts AFTER the bump, the modal opens.
+  const [networkOpenCounter, setNetworkOpenCounter] = useState(0);
+  const [pathwaysOpenCounter, setPathwaysOpenCounter] = useState(0);
+
   // Fire the requested view once the active case has stage facts to
-  // render against. Two-step handoff to avoid a race with GraphPanel's
-  // event listener (which can only mount AFTER its anchor exists):
-  //   1. Stash the request on window.__kfPendingView the moment we have
-  //      a pendingView + a case with stages.
-  //   2. GraphPanel checks that window var when it mounts; if set, it
-  //      opens the modal at the right tab and clears the var.
-  // This way even if GraphPanel mounts AFTER the request lands, the
-  // request still fires the moment GraphPanel is ready.
+  // render against. Bumps the right counter; the signal propagates
+  // down to GraphPanel which opens its modal at the requested tab.
   useEffect(() => {
     if (!pendingView) return;
     if (!active || (active.stages?.length ?? 0) === 0) return;
@@ -175,16 +177,10 @@ export default function App() {
         const el = document.querySelector(".envelope");
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 200);
-    } else {
-      (window as any).__kfPendingView = pendingView;
-      // Also fire a window event so an already-mounted GraphPanel can
-      // react immediately (it polls the window var on mount AND listens
-      // for this event — belt-and-braces).
-      window.dispatchEvent(
-        new CustomEvent("open-knowledge-graph", {
-          detail: { tab: pendingView },
-        }),
-      );
+    } else if (pendingView === "pathways") {
+      setPathwaysOpenCounter((n) => n + 1);
+    } else if (pendingView === "graph") {
+      setNetworkOpenCounter((n) => n + 1);
     }
     setPendingView(null);
   }, [pendingView, active]);
@@ -508,6 +504,8 @@ export default function App() {
           baselineRunningForActive={
             !!(active && baselineRunning === active.case_id)
           }
+          externalOpenNetworkSignal={networkOpenCounter}
+          externalOpenPathwaysSignal={pathwaysOpenCounter}
         />
         <LineagePanel
           active={active}

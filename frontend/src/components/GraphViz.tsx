@@ -72,6 +72,7 @@ function useSupplierSubgraph(supplier_id: string | null, active: boolean) {
 export function GraphPanel({
   active,
   openPathwaysSignal,
+  openNetworkSignal,
 }: {
   active: CaseFull;
   // Counter prop — when its value changes, GraphPanel opens its modal
@@ -79,6 +80,11 @@ export function GraphPanel({
   // flow in CounterfactualCard to deep-link the reviewer straight into
   // the re-rendered pathways view.
   openPathwaysSignal?: number;
+  // W8 — when its value changes, GraphPanel opens its modal pre-selected
+  // to the Network tab. Used by the agent-orchestrator deep-link path
+  // (?launch=aeronova&view=graph) so the Alternate Outreach card lands
+  // the audience on the supplier topology.
+  openNetworkSignal?: number;
 }) {
   const anchor = useMemo(() => findGraphAnchor(active), [active]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,6 +98,11 @@ export function GraphPanel({
     setInitialViewMode("pathways");
     setModalOpen(true);
   }, [openPathwaysSignal]);
+  useEffect(() => {
+    if (!openNetworkSignal) return;
+    setInitialViewMode("network");
+    setModalOpen(true);
+  }, [openNetworkSignal]);
 
   // W8 — agent-orchestrator deep-link entry. Two ways to trigger:
   //   (a) window event "open-knowledge-graph" with detail.tab — for the

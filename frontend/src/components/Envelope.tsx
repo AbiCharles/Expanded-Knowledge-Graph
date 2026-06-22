@@ -19,6 +19,8 @@ export function Envelope({
   onBaselineReplay,
   onCompare,
   baselineRunningForActive,
+  externalOpenNetworkSignal,
+  externalOpenPathwaysSignal,
 }: {
   active: CaseFull | null;
   onRefresh?: () => void;
@@ -26,6 +28,14 @@ export function Envelope({
   onBaselineReplay?: (caseId: string) => void;
   onCompare?: (caseId: string) => void;
   baselineRunningForActive?: boolean;
+  // W8 deep-link signals. App.tsx bumps these counters when a
+  // ?launch=aeronova&view=… URL needs to open the knowledge graph
+  // at a specific tab. Combined with the existing Envelope-internal
+  // openPathwaysSignal so the same GraphPanel signal contract works
+  // for both internal triggers (CounterfactualCard OK button) and
+  // external triggers (agent-orchestrator deep-link).
+  externalOpenNetworkSignal?: number;
+  externalOpenPathwaysSignal?: number;
 }) {
   // W1 / Beat 3 — revision selector. Default to viewing the LATEST
   // revision so users see the freshest decision; users can toggle back
@@ -237,7 +247,11 @@ export function Envelope({
             <EvidenceMap active={effectiveActive} />
             <GraphPanel
               active={effectiveActive}
-              openPathwaysSignal={openPathwaysSignal}
+              openPathwaysSignal={
+                (openPathwaysSignal || 0) +
+                (externalOpenPathwaysSignal || 0)
+              }
+              openNetworkSignal={externalOpenNetworkSignal}
             />
           </>
         )}
