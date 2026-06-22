@@ -361,7 +361,18 @@ def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> No
     so the audit trail tells the truth and the case completion path
     continues.
     """
-    executor_cfg = scenario.get("_executor")
+    # W5 / Beat 2 — baseline replays may carry a `_baseline_executor`
+    # block that fires a DIFFERENT executor (or, more commonly, the same
+    # action with a different alternate supplier) so the comparison
+    # modal can lead with a concrete contrast: "harness picked Ironcrest,
+    # baseline picked Stillwater — same parent, lapsed qualification."
+    # Falls back to `_executor` when the baseline-specific block isn't
+    # defined, so scenarios that don't opt in still work unchanged.
+    executor_cfg = (
+        scenario.get("_baseline_executor")
+        if case.baseline and scenario.get("_baseline_executor")
+        else scenario.get("_executor")
+    )
     if not executor_cfg:
         return
     action_id = executor_cfg.get("action_id")

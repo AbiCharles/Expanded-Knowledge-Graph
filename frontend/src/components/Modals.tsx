@@ -480,13 +480,39 @@ export function CompareModal({
     return out;
   }, [baselineMode, baseline, harness]);
 
+  // W5 / Beat 2 — pull the actual write-action args each side fired so
+  // the comparison can lead with "harness picked Ironcrest, baseline
+  // picked Stillwater" rather than just listing fact counts. We look
+  // for the common Aeronova-shape args (alt_supplier_*) so the
+  // contrast renders for that scenario; falls back gracefully when
+  // those fields aren't present (other scenarios just show "approve
+  // ran against X args").
+  const actionPick = useMemo(() => {
+    if (!baselineMode) return null;
+    const pickFrom = (c: CaseFull) => {
+      const args = c.execution_result?.args ?? null;
+      if (!args) return null;
+      const altId = args["alt_supplier_id"];
+      const altName = args["alt_supplier_name"];
+      if (!altId && !altName) return null;
+      return {
+        altId: String(altId ?? ""),
+        altName: String(altName ?? ""),
+      };
+    };
+    const h = pickFrom(harness);
+    const b = pickFrom(baseline);
+    if (!h && !b) return null;
+    return { harness: h, baseline: b };
+  }, [baselineMode, harness, baseline]);
+
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="compare-modal">
         <div className="compare-header">
           <div className="compare-title">
             {baselineMode
-              ? "Baseline vs harness — what a supervisor would have missed"
+              ? "Baseline vs harness — same decision label, different supplier"
               : "Side-by-side replay comparison"}
           </div>
           <button className="compare-close" onClick={onClose}>
@@ -495,14 +521,52 @@ export function CompareModal({
         </div>
         {baselineMode && (
           <div className="compare-banner">
+            {actionPick && (
+              <div className="compare-action-pick-box">
+                <div className="compare-action-pick-eyebrow">
+                  Both runs ended at <strong>approve</strong> — but committed to different suppliers
+                </div>
+                <div className="compare-action-pick-grid">
+                  <div className="compare-action-pick-cell harness">
+                    <div className="compare-action-pick-label">Harness picked</div>
+                    <div className="compare-action-pick-value">
+                      {actionPick.harness?.altId ?? "—"}
+                      {actionPick.harness?.altName ? (
+                        <span className="compare-action-pick-name">
+                          {" · "}{actionPick.harness.altName}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="compare-action-pick-note">
+                      Qualified · JV partner of the failing supplier · reliability 0.91
+                    </div>
+                  </div>
+                  <div className="compare-action-pick-cell baseline">
+                    <div className="compare-action-pick-label">Baseline picked</div>
+                    <div className="compare-action-pick-value">
+                      {actionPick.baseline?.altId ?? "—"}
+                      {actionPick.baseline?.altName ? (
+                        <span className="compare-action-pick-name">
+                          {" · "}{actionPick.baseline.altName}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="compare-action-pick-note">
+                      ⚠ Same parent (Northgate Industrial Holdings) as the failing supplier
+                      · qualification lapsed 2026-04-15 · can't ship to flagship-program SKUs
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="compare-banner-text">
               <strong>
-                {harnessOnlyFacts.length} fact
+                {harnessOnlyFacts.length} review-stage fact
                 {harnessOnlyFacts.length === 1 ? "" : "s"}
               </strong>
-              {" "}surfaced by the harness that a supervisor without the
-              governed knowledge layer would not have seen
-              {harnessOnlyFacts.length > 0 ? " — listed below." : "."}
+              {" "}drove the harness toward the safer pick — facts a supervisor
+              without the governed knowledge layer would not have seen
+              {harnessOnlyFacts.length > 0 ? ":" : "."}
             </div>
             {harnessOnlyFacts.length > 0 && (
               <ul className="compare-banner-facts">

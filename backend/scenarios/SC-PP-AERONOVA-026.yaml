@@ -199,4 +199,20 @@ _executor:
     alt_supplier_id: SUP-023
     alt_supplier_name: Ironcrest Metalworks
     chosen_by: supply.assurance.lead.tlee
+# W5 / Beat 2 — what the baseline path actually fires. A supervisor
+# without the governed knowledge layer would see Stillwater (SUP-022)
+# listed first in the alternate-supplier walk (graph proximity puts
+# shared-parent siblings before JV partners) and approve it. Stillwater
+# is the trap: same parent (Northgate Industrial Holdings) as the
+# failing Northwind AND its quality certification lapsed 2026-04-15.
+# Same "approve" decision label as the harness; very different supplier
+# committed to.
+_baseline_executor:
+  action_id: requisition_alt_supplier
+  arguments:
+    failing_supplier_id: SUP-021
+    failing_supplier_name: Northwind Forge & Castings
+    alt_supplier_id: SUP-022
+    alt_supplier_name: Stillwater Alloys
+    chosen_by: supply.assurance.lead.tlee
 version: 1
