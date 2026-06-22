@@ -534,17 +534,12 @@ function ChatThread({
           {active.execution_result && active.decision_kind !== "no_op" && (
             <ExecutionResultCard active={active} />
           )}
-          {active.decision_kind &&
-            active.decision_kind !== "auto_execute" &&
-            active.decision_kind !== "no_op" && (
-              <DemoHelper
-                isReplay={!!active.replay_decision}
-                hasSibling={(active.sibling_case_ids || []).length > 0}
-                decision={active.decision_kind as DecisionKind}
-                onReplay={onReplay}
-                onCompare={onCompare}
-              />
-            )}
+          {/* The post-decision "see what happens with a different decision"
+              helper used to render here, but the CounterfactualCard inside
+              the Envelope offers the same replay + compare controls (plus
+              Run baseline, Simulate new evidence). Keep one home for these
+              levers so reviewers aren't shown the same buttons in two
+              different chrome styles. */}
         </>
       )}
 
@@ -569,7 +564,7 @@ function ActionPreviewCard({
   return (
     <div className="action-preview-card">
       <div className="action-preview-header">
-        <span className="action-preview-tag">If you approve, this is what runs</span>
+        <span className="action-preview-tag">If approved · runs</span>
         <span className="action-preview-id">{executor.action_id}</span>
       </div>
       <table className="action-preview-table">
@@ -583,8 +578,8 @@ function ActionPreviewCard({
         </tbody>
       </table>
       <div className="action-preview-footer">
-        These arguments are scenario-authored — the LLM never picks them.
-        The agent only dispatches the registered executor against the
+        Scenario-authored arguments — the LLM never picks them. The
+        agent only dispatches the registered executor against the
         target source.
       </div>
     </div>
@@ -736,56 +731,6 @@ function ChatBubble({
       <div style={{ maxWidth: "80%" }}>
         {bubble}
         {actions}
-      </div>
-    </div>
-  );
-}
-
-function DemoHelper({
-  isReplay,
-  hasSibling,
-  decision,
-  onReplay,
-  onCompare,
-}: {
-  isReplay: boolean;
-  hasSibling: boolean;
-  decision: DecisionKind;
-  onReplay: (d: DecisionKind) => void;
-  onCompare: () => void;
-}) {
-  const alternatives = (["approve", "reject", "request_more_info"] as DecisionKind[]).filter(
-    (d) => d !== decision
-  );
-  const labels: Record<DecisionKind, string> = {
-    approve: "Approve",
-    reject: "Reject",
-    request_more_info: "Need more info",
-  };
-  return (
-    <div className="chat-msg system demo-helper">
-      <div className="chat-bubble">
-        {isReplay && hasSibling ? (
-          <>
-            <div className="demo-helper-prompt">⇄ Compare with the original decision</div>
-            <div className="demo-helper-actions">
-              <button className="demo-helper-btn primary" onClick={onCompare}>
-                Open side-by-side comparison
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="demo-helper-prompt">↻ See what happens with a different decision</div>
-            <div className="demo-helper-actions">
-              {alternatives.slice(0, 2).map((d) => (
-                <button key={d} className="demo-helper-btn" onClick={() => onReplay(d)}>
-                  {labels[d]}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
       </div>
     </div>
   );

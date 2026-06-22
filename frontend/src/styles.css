@@ -840,6 +840,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 }
 .action-preview-table tbody th {
   text-align: left;
@@ -848,14 +849,20 @@ body {
   font-weight: 500;
   letter-spacing: 0;
   color: var(--ink-muted);
-  padding: 4px 6px 4px 0;
-  width: 35%;
+  padding: 6px 10px 6px 0;
+  width: 42%;
+  vertical-align: top;
+  word-break: break-word;
 }
 .action-preview-table tbody td {
   font-family: 'DM Mono', monospace;
-  padding: 4px 6px;
+  font-size: 12px;
+  padding: 6px 0;
   color: var(--ink);
   font-weight: 500;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .action-preview-table tbody tr + tr th,
 .action-preview-table tbody tr + tr td {
@@ -1975,6 +1982,29 @@ details[open] > .suggested-summary .suggested-chevron {
   color: #cbd5e1;
   border-color: #e2e8f0;
   cursor: not-allowed;
+}
+/* "Or check for any silent change" subsection — sits inside the
+   Simulate new evidence card but visually separated from the narrative
+   triggers so the operator sees it as a distinct production-mode path. */
+.counterfactual-subsection {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+}
+.counterfactual-subsection-label {
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.counterfactual-subsection-desc {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  margin: 0 0 8px;
 }
 .counterfactual-revision-status {
   margin-top: 6px;

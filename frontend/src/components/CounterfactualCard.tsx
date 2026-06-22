@@ -254,23 +254,31 @@ export function CounterfactualCard({
                 {revising === t.id ? "Re-versioning…" : t.label}
               </button>
             ))}
-            {supportsGenericRefresh && (
+          </div>
+          {supportsGenericRefresh && (
+            <div className="counterfactual-subsection">
+              <div className="counterfactual-subsection-label">
+                Or check for any silent change
+              </div>
+              <p className="counterfactual-subsection-desc">
+                Re-runs the case's proposal + review queries against the
+                live data sources, with no synthetic trigger injected.
+                If nothing material has changed since v1 sealed, no new
+                revision is created — useful for spot-checking that the
+                facts behind the decision are still current.
+              </p>
               <button
                 type="button"
                 className="counterfactual-btn counterfactual-btn-secondary"
                 onClick={() => handleRevise("generic_refresh")}
                 disabled={!!revising}
-                title={
-                  "Re-run the proposal + review queries against current data. " +
-                  "If nothing materially changed, no new revision is sealed."
-                }
               >
                 {revising === "generic_refresh"
                   ? "Refreshing…"
-                  : "Re-run with fresh data"}
+                  : "Re-run queries against current data"}
               </button>
-            )}
-          </div>
+            </div>
+          )}
           {revisionStatus && (
             <div className="counterfactual-revision-status">
               {revisionStatus}
@@ -296,9 +304,23 @@ export function CounterfactualCard({
           </span>
         </div>
         <p className="counterfactual-section-desc">
-          Open the comparison modal to read this case alongside its
-          siblings — facts, decisions, lineage. Auto-orders harness vs
-          baseline when a baseline sibling exists.
+          {siblingCount === 0 ? (
+            <>
+              Activates after you create a sibling case via <b>Run baseline</b>
+              {" "}or <b>Replay with a different decision</b> above. The modal
+              renders this case next to each sibling with the load-bearing
+              facts highlighted, so you can read what the harness saw that
+              the alternate run didn't.
+            </>
+          ) : (
+            <>
+              {siblingCount} sibling{siblingCount === 1 ? "" : "s"} ready
+              to compare. The modal renders this case next to each sibling
+              with the load-bearing facts highlighted — auto-orders harness
+              on the left vs baseline on the right when a baseline sibling
+              exists.
+            </>
+          )}
         </p>
         <div className="counterfactual-section-actions">
           <button
@@ -308,7 +330,7 @@ export function CounterfactualCard({
             disabled={siblingCount === 0}
             title={
               siblingCount === 0
-                ? "No siblings yet — run a baseline or replay first."
+                ? "No siblings yet — click Run baseline or one of the Replay buttons above."
                 : undefined
             }
           >
