@@ -33,11 +33,18 @@ executor:
       "body": "Supplier {supplier_id} · value ${po_value_usd} · reason: {release_reason}",
       "userId": 1
     }}
-  compensate:
-    kind: http_request
-    data_source: public_jsonplaceholder
-    method: DELETE
-    path_template: /posts/1
+reversibility_class: compensatable
+# Compensation: cancel the released PO before manufacturing picks it up.
+# Hits jsonplaceholder /posts/1 (always returns 200 OK on DELETE) so the
+# reversal succeeds without external state. Matches the shape of
+# requisition_alt_supplier (top-level `compensation:`, NOT nested under
+# `executor:` — the Pydantic HttpRequestExecutor rejects extra fields).
+compensation:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: DELETE
+  path_template: /posts/1
+  content_type: application/json
 match_keywords:
   - release po
   - release purchase order
