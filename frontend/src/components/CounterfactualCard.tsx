@@ -70,6 +70,19 @@ export function CounterfactualCard({
   const [supportsGenericRefresh, setSupportsGenericRefresh] = useState(false);
   const [revising, setRevising] = useState<string | null>(null);
   const [revisionStatus, setRevisionStatus] = useState<string | null>(null);
+  // Generic-refresh result — surfaces a prominent card with the diff
+  // outcome (facts checked, whether a new revision was sealed). The
+  // terse `revisionStatus` line is easy to miss; this card is what the
+  // operator sees when they click "Re-run queries against current data".
+  const [refreshResult, setRefreshResult] = useState<
+    | {
+        factsChecked: number;
+        materialChange: boolean;
+        revisionNo: number;
+        at: string;
+      }
+    | null
+  >(null);
   // Post-revision modal — surfaced as soon as a narrative trigger seals a
   // new revision. Carries the trigger label + new decision so the
   // reviewer knows what just landed. OK closes the modal AND deep-links
@@ -112,11 +125,21 @@ export function CounterfactualCard({
     if (!caseId || revising) return;
     setRevising(triggerId);
     setRevisionStatus(null);
+    if (triggerId === "generic_refresh") setRefreshResult(null);
     try {
       const res = await reviseCase(caseId, triggerId);
-      if (res.no_change) {
-        // Generic refresh in demo mode — terse status, no verbose
-        // production-mode explanation in the UI.
+      if (triggerId === "generic_refresh") {
+        // Surface the diff outcome as a prominent result card so the
+        // operator can SEE that the queries ran. The terse status line
+        // was easy to miss; this card stays until the next click.
+        setRefreshResult({
+          factsChecked: res.facts_checked ?? 0,
+          materialChange: !res.no_change,
+          revisionNo: res.revision_no,
+          at: new Date().toLocaleTimeString(),
+        });
+        if (!res.no_change) onRevised?.();
+      } else if (res.no_change) {
         setRevisionStatus("No new evidence — no revision sealed.");
       } else {
         setRevisionStatus(
@@ -125,21 +148,22 @@ export function CounterfactualCard({
           }`,
         );
         onRevised?.();
-        // Show the modal for narrative triggers only. generic_refresh is
-        // a demo-driving control with no story to tell.
-        if (triggerId !== "generic_refresh") {
-          const t = triggers.find((tr) => tr.id === triggerId);
-          setReversionAnnouncement({
-            triggerLabel: t?.label ?? res.trigger_label ?? "New evidence",
-            newDecision: res.new_decision ?? undefined,
-            revisionNo: res.revision_no,
-            explainer: t?.explainer,
-          });
-        }
+        const t = triggers.find((tr) => tr.id === triggerId);
+        setReversionAnnouncement({
+          triggerLabel: t?.label ?? res.trigger_label ?? "New evidence",
+          newDecision: res.new_decision ?? undefined,
+          revisionNo: res.revision_no,
+          explainer: t?.explainer,
+        });
       }
     } catch (e) {
       console.error("Revise failed:", e);
-      setRevisionStatus("Re-version failed — see console.");
+      if (triggerId === "generic_refresh") {
+        setRefreshResult(null);
+        setRevisionStatus("Re-run failed — see browser console.");
+      } else {
+        setRevisionStatus("Re-version failed — see console.");
+      }
     } finally {
       setRevising(null);
     }
@@ -277,6 +301,36 @@ export function CounterfactualCard({
                   ? "Refreshing…"
                   : "Re-run queries against current data"}
               </button>
+              {refreshResult && (
+                <div
+                  className={
+                    "counterfactual-refresh-result" +
+                    (refreshResult.materialChange
+                      ? " counterfactual-refresh-result-changed"
+                      : "")
+                  }
+                >
+                  <div className="counterfactual-refresh-result-head">
+                    {refreshResult.materialChange ? "⚡" : "✓"}
+                    {" "}
+                    {refreshResult.materialChange
+                      ? `v${refreshResult.revisionNo} sealed — facts changed`
+                      : "No material change · still at v" + refreshResult.revisionNo}
+                  </div>
+                  <div className="counterfactual-refresh-result-body">
+                    Re-ran the proposal + review queries.{" "}
+                    <strong>{refreshResult.factsChecked}</strong> fact
+                    {refreshResult.factsChecked === 1 ? "" : "s"} fetched and
+                    compared against v{refreshResult.revisionNo}.
+                    {refreshResult.materialChange
+                      ? " A new revision was sealed."
+                      : " The fact set is identical, so no new revision was sealed (audit trail records the check)."}
+                  </div>
+                  <div className="counterfactual-refresh-result-time">
+                    Checked at {refreshResult.at}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {revisionStatus && (
@@ -304,24 +358,24 @@ export function CounterfactualCard({
           </span>
         </div>
         <p className="counterfactual-section-desc">
-          {siblingCount === 0 ? (
-            <>
-              Activates after you create a sibling case via <b>Run baseline</b>
-              {" "}or <b>Replay with a different decision</b> above. The modal
-              renders this case next to each sibling with the load-bearing
-              facts highlighted, so you can read what the harness saw that
-              the alternate run didn't.
-            </>
-          ) : (
-            <>
-              {siblingCount} sibling{siblingCount === 1 ? "" : "s"} ready
-              to compare. The modal renders this case next to each sibling
-              with the load-bearing facts highlighted — auto-orders harness
-              on the left vs baseline on the right when a baseline sibling
-              exists.
-            </>
-          )}
+          Opens a two-column modal: this case on one side, an alternate
+          run on the other. Same stages, same facts laid out the same
+          way — facts that exist on one side but not the other are
+          highlighted so you can read at a glance what changed between
+          the runs.
         </p>
+        <ul className="counterfactual-compare-uses">
+          <li>
+            <strong>After Run baseline</strong> — modal opens automatically
+            once the baseline finishes; this button re-opens it later. Shows
+            what review-stage evidence the harness saw that a baseline
+            supervisor would have missed.
+          </li>
+          <li>
+            <strong>After Replay with a different decision</strong> — read
+            the two outcomes side-by-side without flipping between cases.
+          </li>
+        </ul>
         <div className="counterfactual-section-actions">
           <button
             type="button"
@@ -334,7 +388,9 @@ export function CounterfactualCard({
                 : undefined
             }
           >
-            Compare
+            {siblingCount === 0
+              ? "Compare (no siblings yet)"
+              : `Compare against ${siblingCount} sibling${siblingCount === 1 ? "" : "s"}`}
           </button>
         </div>
       </div>

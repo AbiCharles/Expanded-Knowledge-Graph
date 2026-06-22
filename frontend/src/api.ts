@@ -769,6 +769,10 @@ export interface ReviseResponse {
   new_decision?: string;
   no_change?: boolean;
   detail?: string;
+  // Generic-refresh path returns how many facts were re-checked across
+  // the proposal + review stages. Useful for surfacing concrete result
+  // text to the operator ("Re-ran 12 facts · no material change").
+  facts_checked?: number;
 }
 
 export async function reviseCase(

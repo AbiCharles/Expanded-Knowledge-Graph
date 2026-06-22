@@ -2006,6 +2006,63 @@ details[open] > .suggested-summary .suggested-chevron {
   color: var(--ink-muted);
   margin: 0 0 8px;
 }
+
+/* "Re-run queries" result card — surfaces concretely what happened
+   when the operator clicked the button. Green-tinted when nothing
+   changed (✓ no material change); amber-tinted when a new revision
+   was sealed (⚡ facts changed). */
+.counterfactual-refresh-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: rgba(22, 163, 74, 0.07);
+  border: 1px solid rgba(22, 163, 74, 0.30);
+  border-left: 3px solid #16a34a;
+}
+.counterfactual-refresh-result-changed {
+  background: rgba(180, 109, 0, 0.07);
+  border-color: rgba(180, 109, 0, 0.35);
+  border-left-color: #b46d00;
+}
+.counterfactual-refresh-result-head {
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #166534;
+  margin-bottom: 4px;
+}
+.counterfactual-refresh-result-changed .counterfactual-refresh-result-head {
+  color: #8a5400;
+}
+.counterfactual-refresh-result-body {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.counterfactual-refresh-result-time {
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+/* "Compare side-by-side" use cases — explains when the modal is
+   useful so the operator knows what to do with the button. */
+.counterfactual-compare-uses {
+  margin: 4px 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+.counterfactual-compare-uses li {
+  margin: 4px 0;
+}
+.counterfactual-compare-uses strong {
+  color: var(--ink);
+  font-weight: 600;
+}
 .counterfactual-revision-status {
   margin-top: 6px;
   padding: 6px 10px;
@@ -4770,13 +4827,18 @@ details[open] > .suggested-summary .suggested-chevron {
 .compare-modal {
   width: 90vw;
   max-width: 1200px;
-  max-height: 88vh;
+  max-height: 92vh;
   background: var(--paper);
   border-radius: 8px;
   box-shadow: var(--shadow-deep);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* The whole modal scrolls as a single window — header is sticky at
+     the top, banner and two columns scroll together below. Two
+     independently-scrolling columns made it impossible to keep the
+     harness and baseline aligned while reading. */
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: cardIn 320ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 .compare-header {
@@ -4785,6 +4847,11 @@ details[open] > .suggested-summary .suggested-chevron {
   background: var(--navy-deep);
   color: var(--paper);
   display: flex; align-items: center; justify-content: space-between;
+  /* Sticky so the title + close button stay reachable while the
+     reviewer scrolls through the harness + baseline columns below. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 /* W5 / Beat 2 — banner shown in baseline-vs-harness comparisons. Lists
    the facts the harness surfaced that the baseline didn't see (typically
@@ -4993,11 +5060,10 @@ details[open] > .suggested-summary .suggested-chevron {
 .compare-body {
   display: grid;
   grid-template-columns: 1fr 1px 1fr;
-  flex: 1;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 .compare-divider { background: var(--rule); }
-.compare-side { padding: 22px 24px; overflow-y: auto; }
+.compare-side { padding: 22px 24px; }
 .compare-side-eyebrow {
   font-family: 'DM Mono', monospace;
   font-size: 9px;
