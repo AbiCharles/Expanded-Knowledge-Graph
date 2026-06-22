@@ -689,18 +689,29 @@ function GraphModal({
   }, [hiddenDepPath, elements.length, layout]);
 
   // Double-click any colored pathway node to surface the downstream
-  // program exposure in the side legend. Registers on every cy attach
-  // and is no-op when viewMode isn't "pathways". Single-click still
-  // runs the existing fact-reveal handler — we don't shadow it.
+  // program exposure in the side legend. Uses a manual lastTap-timing
+  // detector (same pattern as attachEvidenceMapBehaviour) instead of
+  // cytoscape's dbltap event — the dbltap was being eaten by the
+  // pre-attached tap handlers in attachEvidenceMapBehaviour, so the
+  // listener never fired. Single-click still runs the existing
+  // fact-reveal handler — this is additive, not replacing.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
     if (viewMode !== "pathways") return;
     if (!decisionSupport) return;
     const allPrograms = decisionSupport.impacts ?? [];
+    const lastTap = { id: "", time: 0 };
     const handler = (evt: any) => {
       const target = evt.target;
       if (!target || typeof target.id !== "function") return;
+      const nodeIdNow = target.id();
+      const t = (window.performance || Date).now();
+      const isDouble =
+        lastTap.id === nodeIdNow && t - lastTap.time < 400;
+      lastTap.id = isDouble ? "" : nodeIdNow;
+      lastTap.time = isDouble ? 0 : t;
+      if (!isDouble) return;
       const cls: string[] = (target.classes() as string[]) || [];
       const isFailing = cls.includes("cy-pathway-failing");
       const isProposed = cls.includes("cy-proposed-path");
@@ -767,9 +778,9 @@ function GraphModal({
         programs: reachable.length > 0 ? reachable : allPrograms,
       });
     };
-    cy.on("dbltap", "node", handler);
+    cy.on("tap", "node", handler);
     return () => {
-      cy.removeListener("dbltap", "node", handler);
+      cy.removeListener("tap", "node", handler);
     };
   }, [viewMode, decisionSupport, elements.length, cyReadyTick]);
 
