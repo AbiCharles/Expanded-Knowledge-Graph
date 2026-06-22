@@ -29,8 +29,16 @@ primary_region = 'iad'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  # Pin to ONE machine. In-memory run state means a second machine
+  # would route SSE follow-ups to a process that doesn't know the
+  # run id. Demo-only constraint; production would put runs behind
+  # Redis so any machine can serve any follow-up.
+  min_machines_running = 1
   processes = ['app']
+
+[deploy]
+  max_unavailable = 1
+  strategy = 'immediate'
 
 [[vm]]
   cpu_kind = 'shared'
