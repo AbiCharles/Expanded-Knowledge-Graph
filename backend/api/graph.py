@@ -181,17 +181,25 @@ def supplier_subgraph(
     def _row_cell(cols: list[str], row: list, key: str) -> Any:
         return row[cols.index(key)] if key in cols else None
 
-    # 1) Corporate network (anchor included)
+    # 1) Corporate network. Only the case subject gets accent="anchor" —
+    # every other node coming back from this cypher (HoldingCompany on
+    # branch 2, buyer/PO/Product/Program on branch 3) shows up as `src`
+    # in some row but is NOT the failing supplier. Previously they all
+    # inherited the anchor accent, which made the whole graph render as
+    # deep teal "failing-supplier" nodes. The frontend per-type styles
+    # will colour them by ontology type when accent is empty.
     net = source.run_cypher(_NETWORK_CYPHER, {"supplier_id": payload.supplier_id})
     cols = net.get("columns") or []
     for row in (net.get("rows") or []):
         src_id  = _row_cell(cols, row, "src_id")
+        src_accent = "anchor" if src_id == payload.supplier_id else ""
         _upsert_node(src_id, _row_cell(cols, row, "src_name"),
-                     _row_cell(cols, row, "src_type"), accent="anchor")
+                     _row_cell(cols, row, "src_type"), accent=src_accent)
         dst_id = _row_cell(cols, row, "dst_id")
         if dst_id and dst_id != "?":
+            dst_accent = "anchor" if dst_id == payload.supplier_id else ""
             _upsert_node(dst_id, _row_cell(cols, row, "dst_name"),
-                         _row_cell(cols, row, "dst_type"))
+                         _row_cell(cols, row, "dst_type"), accent=dst_accent)
             rel = _row_cell(cols, row, "rel")
             outgoing = _row_cell(cols, row, "rel_outgoing")
             if rel:

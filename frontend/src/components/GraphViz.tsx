@@ -2777,6 +2777,93 @@ const knowledgeStylesheet: any[] = [
     },
   },
 
+  // Per-ontology-type colours — match the side-legend swatches in
+  // styles.css (.dot-type-Supplier, .dot-type-PurchaseOrder, etc.).
+  // Listed AFTER accent-default so a "default" node still picks up its
+  // type colour; the special-purpose accents (anchor / risk / risk_path /
+  // alt) are listed BEFORE so they win for the failing supplier, the
+  // sanctioned entities, the carrier-alliance reach, etc. Hidden-dep +
+  // pathway classes win last (they're added/removed dynamically).
+  {
+    selector: "node.type-Supplier",
+    style: { "background-color": "#c45a3e", "border-color": "#8a3f29", color: "#5a2818" },
+  },
+  {
+    selector: "node.type-Carrier",
+    style: { "background-color": "#c45a3e", "border-color": "#8a3f29", color: "#5a2818" },
+  },
+  {
+    selector: "node.type-SanctionedNetworkEntity",
+    style: { "background-color": "#d24545", "border-color": "#7a2424", color: "#5a1818" },
+  },
+  {
+    selector: "node.type-HoldingCompany",
+    style: { "background-color": "#5a6678", "border-color": "#2f3845", color: "#1f2937" },
+  },
+  {
+    selector: "node.type-Alliance",
+    style: { "background-color": "#a08550", "border-color": "#5e4924", color: "#5e4924" },
+  },
+  {
+    selector: "node.type-PurchaseOrder",
+    style: { "background-color": "#3a8a8a", "border-color": "#266060", color: "#1a3838" },
+  },
+  {
+    selector: "node.type-Product",
+    style: { "background-color": "#9b6db0", "border-color": "#5e4070", color: "#3d2950" },
+  },
+  {
+    selector: "node.type-Program",
+    style: { "background-color": "#d4a93a", "border-color": "#8a6d20", color: "#5a4514" },
+  },
+
+  // Special accents — listed AFTER per-type so the failing supplier
+  // (anchor), sanctioned entities (risk), risk-path neighbours, and
+  // carrier-alliance reach (alt) still pop above the type colour.
+  // Re-declared in source order so cytoscape's later-wins cascade keeps
+  // these on top of the per-type rules above.
+  {
+    selector: "node.accent-anchor",
+    style: {
+      "background-color": "#0d6e7f",
+      "border-color": "#0a4f5c",
+      "border-width": 1.5,
+      width: 26,
+      height: 26,
+      "font-weight": 600,
+      "font-size": 10,
+      color: "#0a4f5c",
+    },
+  },
+  {
+    selector: "node.accent-risk",
+    style: {
+      "background-color": "#c14a4a",
+      "border-color": "#7a2424",
+      "border-width": 1.5,
+      width: 22,
+      height: 22,
+      color: "#7a2424",
+    },
+  },
+  {
+    selector: "node.accent-risk_path",
+    style: {
+      "background-color": "#94a3b8",
+      "border-color": "#c14a4a",
+      "border-width": 1.5,
+      color: "#7a2424",
+    },
+  },
+  {
+    selector: "node.accent-alt",
+    style: {
+      "background-color": "#a16207",
+      "border-color": "#854d0e",
+      color: "#854d0e",
+    },
+  },
+
   // Edges — hairlines with directed-graph arrows so the cypher direction is
   // legible at a glance (e.g. SOURCES_FROM points to the upstream supplier;
   // PLACED points from supplier to PO). The arrow matches the line colour

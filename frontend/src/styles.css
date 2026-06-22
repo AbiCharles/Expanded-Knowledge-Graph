@@ -3168,6 +3168,7 @@ details[open] > .suggested-summary .suggested-chevron {
 .dot-type-AlliancePeer         { background: #a08550; border-color: #5e4924; }
 .dot-type-PurchaseOrder        { background: #3a8a8a; border-color: #266060; }
 .dot-type-Product              { background: #9b6db0; border-color: #5e4070; }
+.dot-type-Program              { background: #d4a93a; border-color: #8a6d20; }
 .dot-type-Warehouse            { background: #3a8a8a; border-color: #266060; }
 .dot-type-Shipment             { background: #d4a93a; border-color: #8a6d20; }
 .dot-type-IngestionAdapter     { background: #888888; border-color: #5a5a5a; }
