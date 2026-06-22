@@ -53,15 +53,126 @@ class CreateCaseOut(BaseModel):
 
 
 class ReplayIn(BaseModel):
-    """Body for POST /api/cases/{id}/replay — forced decision for the new case."""
+    """Body for POST /api/cases/{id}/replay.
 
-    decision: str  # "approve" | "reject" | "request_more_info"
+    Two modes:
+      • Forced-decision replay (default) — sets `decision` to one of
+        "approve" / "reject" / "request_more_info"; the sibling case runs
+        normally and the decision is auto-filed once review_ready.
+      • Baseline replay (W5 / Beat 2) — `baseline=true`. The sibling
+        case runs with the REVIEW STAGE QUERIES STRIPPED so the result
+        shows what a "supervisor without the governed knowledge layer"
+        would have surfaced. Decision auto-defaults to "approve" since
+        a baseline reviewer without the governance evidence is most
+        likely to greenlight the proposed action."""
+
+    decision: Optional[str] = None  # required unless baseline=True
+    baseline: bool = False
 
 
 class RelinkIn(BaseModel):
     """Body for POST /api/cases/{id}/relink — switch to a different scenario."""
 
     scenario_id: str
+
+
+class ReviseIn(BaseModel):
+    """Body for POST /api/cases/{id}/revise — W1 / Beat 3 (case revisioning).
+
+    A trigger_id picks one of the narrative triggers from TRIGGER_CATALOG
+    or the special value "generic_refresh" (re-snapshot current state)."""
+
+    trigger_id: str
+
+
+# W1 / Beat 3 — trigger catalog. Each entry knows which scenario(s) it
+# applies to, the fact to inject into a target stage, and the decision
+# the harness would re-recommend after seeing the new evidence. Designed
+# for the Aeronova narrative; extending to other scenarios is a YAML edit
+# away (this dict could live in a config file once the catalog grows).
+TRIGGER_CATALOG: dict[str, dict] = {
+    "ironcrest_qual_lapsed": {
+        "label": "Ironcrest qualification just lapsed",
+        "applies_to_scenarios": ["SC-PP-AERONOVA-026"],
+        "inject": {
+            "stage": "proposal",
+            "fact": {
+                "source": "kf:context",
+                "ontology_type": "QualificationUpdate",
+                "id": "QUAL-SUP-023-LAPSE",
+                "uri": None,
+                "title": "Ironcrest Metalworks (SUP-023) · qualification lapsed",
+                "summary": (
+                    "Quality certification expired 2026-07-30 · qualification: "
+                    "lapsed effective immediately · Ironcrest can no longer "
+                    "ship to flagship-program SKUs without re-certification."
+                ),
+                "via_ontology": None,
+                "via_source_binding": None,
+                "query_index": None,
+                "hops": None,
+                "tier": None,
+                "status": "lapsed",
+                "via_path": None,
+                "via_node_id": None,
+            },
+        },
+        "new_decision": "reject",
+        "explainer": (
+            "Ironcrest's quality certification just expired. The harness "
+            "re-decides: reject the swap. Both v1 (original approval) and "
+            "v2 (rejection) remain on the audit trail."
+        ),
+    },
+    "new_sdn_listing": {
+        "label": "New SDN listing puts Ironcrest within 2 hops",
+        "applies_to_scenarios": ["SC-PP-AERONOVA-026"],
+        "inject": {
+            "stage": "proposal",
+            "fact": {
+                "source": "kf:graph",
+                "ontology_type": "SanctionsProximity",
+                "id": "SDN-NET-007",
+                "uri": None,
+                "title": "Vega Marine Trading (OFAC SDN · added 2026-07-31)",
+                "summary": (
+                    "2-hop trail · HIGH risk · Ironcrest (SUP-023) → "
+                    "Northgate Sister Holdings → Vega Marine Trading · "
+                    "listed 2026-07-31"
+                ),
+                "via_ontology": None,
+                "via_source_binding": None,
+                "query_index": None,
+                "hops": 2,
+                "tier": None,
+                "status": None,
+                "via_path": (
+                    "indirect ownership via Northgate Sister Holdings"
+                ),
+                "via_node_id": None,
+            },
+        },
+        "new_decision": "reject",
+        "explainer": (
+            "OFAC just listed a new SDN that puts Ironcrest at 2-hop "
+            "proximity through an indirect-ownership chain. The harness "
+            "re-decides: reject the swap."
+        ),
+    },
+}
+
+
+def _triggers_for_scenario(scenario_id: Optional[str]) -> list[dict]:
+    return [
+        {
+            "id": tid,
+            "label": t["label"],
+            "explainer": t.get("explainer", ""),
+        }
+        for tid, t in TRIGGER_CATALOG.items()
+        if not t["applies_to_scenarios"]
+        or (scenario_id and scenario_id in t["applies_to_scenarios"])
+    ]
 
 
 # =============================================================================
@@ -252,7 +363,14 @@ async def replay_case(
     original = _own_case_or_403(state, case_id, user)
     if original.scenario_id is None:
         raise HTTPException(status_code=400, detail="original case has no scenario")
-    if payload.decision not in ("approve", "reject", "request_more_info"):
+    # Baseline mode auto-defaults to approve (the naive baseline reviewer
+    # without governance context is likeliest to greenlight). Forced-
+    # decision mode still requires the explicit value.
+    if payload.baseline and payload.decision is None:
+        decision_value = "approve"
+    elif payload.decision in ("approve", "reject", "request_more_info"):
+        decision_value = payload.decision
+    else:
         raise HTTPException(status_code=400, detail="invalid decision")
 
     new_id = f"case-{uuid.uuid4().hex[:10]}"
@@ -274,7 +392,8 @@ async def replay_case(
         user_id=user.id,
         phase="binding",
         sibling_case_ids=[case_id, *original.sibling_case_ids],
-        replay_decision=payload.decision,
+        replay_decision=decision_value,
+        baseline=payload.baseline,
     )
     state.cases[new_id] = new_case
 
@@ -316,6 +435,388 @@ async def _auto_decide_replay(state: AppState, case: CaseRecord) -> None:
         rationale=rationale or "",
         follow_up=None,
     )
+
+
+# =============================================================================
+# Compensate — reverse a previously-executed compensatable action.
+# =============================================================================
+@router.post("/cases/{case_id}/compensate")
+async def compensate_case(
+    case_id: str, request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> dict:
+    """Fire the compensating side-effect for a previously-executed
+    compensatable action on this case. Records the result as an
+    `action.compensated` lineage event so the audit trail captures both
+    the fire and the rollback as a paired strip.
+
+    Refuses (400) when:
+      • the case has no execution_result yet, or it failed,
+      • the action isn't compensatable, or has no compensation block,
+      • a prior `action.compensated` event already exists (one-shot).
+    """
+    from tcs_hitl_context import Stage, make_event
+
+    state: AppState = request.app.state.app_state
+    case = _own_case_or_403(state, case_id, user)
+    er = case.execution_result or {}
+    if not er or not er.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail="case has no successful execution to compensate",
+        )
+    action_id = er.get("action_id")
+    if not action_id:
+        raise HTTPException(
+            status_code=400,
+            detail="execution_result missing action_id",
+        )
+    action = state.actions.get(action_id)
+    if action is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"action {action_id!r} not registered",
+        )
+    if action.reversibility_class != "compensatable" or action.compensation is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"action {action_id!r} is {action.reversibility_class!r}; "
+                "no compensation defined"
+            ),
+        )
+    # Idempotency-by-event: if the case already carries an
+    # action.compensated event for this action, refuse — the demo's
+    # "Compensate" button should only fire once per executed action.
+    if case.ctx is not None:
+        for ev in case.ctx.lineage:
+            if ev.action == "action.compensated":
+                raise HTTPException(
+                    status_code=400,
+                    detail="action already compensated",
+                )
+
+    # Build a one-shot Action with the compensation executor swapped in,
+    # then dispatch through the same execute_action() path so SQL/HTTP
+    # error handling stays uniform with the forward direction.
+    from ..actions import execute_action
+
+    compensating_action = action.model_copy(update={"executor": action.compensation})
+    args = dict(er.get("args") or {})
+    args.setdefault("__case_id", case.case_id)
+    result = execute_action(compensating_action, args, sources=state.data_sources)
+
+    # Persist the compensation result on the case so a refresh re-renders
+    # the paired strip without re-fetching the lineage table separately.
+    case.compensation_result = result.model_dump(mode="json")
+
+    if case.ctx is not None:
+        ev = make_event(
+            stage=Stage.EXECUTE,
+            actor="agent-write-actions",
+            action="action.compensated" if result.ok else "action.compensate_failed",
+            detail=(
+                f"action_id={action_id} · {result.detail}"
+                if result.ok
+                else f"action_id={action_id} · compensation FAILED: {result.detail}"
+            ),
+        )
+        case.ctx.append_lineage(ev)
+        state.lineage.record(case.ctx.case_id, ev)
+
+    state.cases.save(case)
+    return {
+        "case_id": case_id,
+        "action_id": action_id,
+        "ok": result.ok,
+        "detail": result.detail,
+    }
+
+
+# =============================================================================
+# Revise — W1 / Beat 3 ("a decision re-versioned the moment new evidence
+# arrived"). Builds a new revision of the case, optionally driven by a
+# narrative trigger from the catalog above.
+# =============================================================================
+@router.get("/cases/{case_id}/revise/triggers")
+def list_revise_triggers(
+    case_id: str, request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> dict:
+    """Return triggers available for this case's scenario, plus a flag for
+    the generic-refresh fallback."""
+    state: AppState = request.app.state.app_state
+    case = _own_case_or_403(state, case_id, user)
+    return {
+        "case_id": case_id,
+        "scenario_id": case.scenario_id,
+        "triggers": _triggers_for_scenario(case.scenario_id),
+        "supports_generic_refresh": True,
+    }
+
+
+@router.post("/cases/{case_id}/revise")
+async def revise_case(
+    case_id: str, payload: ReviseIn, request: Request,
+    user: CurrentUser = Depends(current_user),
+) -> dict:
+    """Seal a new revision of this case driven by `trigger_id`.
+
+    Narrative triggers inject a curated synthetic fact into the target
+    stage and re-decide per the trigger's `new_decision`. The "generic
+    refresh" path snapshots current state without injection and reports
+    no-change in demo mode (the real implementation would re-run the
+    proposal + review queries against current data and diff).
+
+    Emits a `case.re_versioned` lineage event with the trigger label so
+    the audit trail captures BOTH revisions side-by-side.
+    """
+    from datetime import datetime, timezone
+
+    from tcs_hitl_context import Stage, make_event
+
+    from ..case_record import CaseRevision
+    from ..orchestrator import seal_initial_revision, snapshot_current_stages
+
+    state: AppState = request.app.state.app_state
+    case = _own_case_or_403(state, case_id, user)
+    # Lazy-seal v1 for cases that completed before W1 shipped (or before
+    # the backend was last restarted — revisions live in-memory). A
+    # completed case with no revisions is just stale state: snapshot its
+    # current stages as v1 so /revise can proceed normally.
+    if not case.revisions and case.phase == "complete":
+        seal_initial_revision(case)
+    if not case.revisions:
+        raise HTTPException(
+            status_code=400,
+            detail="case has no initial revision yet (not completed)",
+        )
+
+    last_rev = case.revisions[-1]
+    # Generic refresh — actually re-runs the proposal + review binders
+    # against current data. If the resulting fact set materially differs
+    # from the last revision's snapshot, seal a new revision. Otherwise
+    # signal "no change" but the audit trail still records that the
+    # check happened.
+    if payload.trigger_id == "generic_refresh":
+        from ..binders import _facts_from_stage
+
+        if not case.scenario_id:
+            raise HTTPException(400, "case has no scenario")
+        sc = state.scenarios.get(case.scenario_id)
+        if sc is None:
+            raise HTTPException(400, f"scenario {case.scenario_id!r} not found")
+
+        # Build the action.payload context the binders need. Mirrors
+        # what agent_runtime.draft_action does.
+        action_payload = dict(sc.get("action_payload") or {})
+        action_payload["__scenario_id__"] = case.scenario_id
+
+        def _kf_to_dict(f):
+            return {
+                "source": f.ref.source,
+                "ontology_type": f.ref.ontology_type,
+                "id": f.ref.id,
+                "uri": f.ref.uri,
+                "title": f.payload.get("title"),
+                "summary": f.payload.get("summary"),
+                "via_ontology": f.payload.get("via_ontology"),
+                "via_source_binding": f.payload.get("via_source_binding"),
+                "query_index": f.payload.get("query_index"),
+                "hops": f.payload.get("hops"),
+                "tier": f.payload.get("tier"),
+                "status": f.payload.get("status"),
+                "via_path": f.payload.get("via_path"),
+                "via_node_id": f.payload.get("via_node_id"),
+            }
+
+        stages = sc.get("stages", {})
+        fresh_snapshot: list[dict] = []
+        # Preserve any inline stages from the last revision (agent_intake's
+        # facts come from YAML `facts:` blocks, not data queries — they
+        # don't change unless the scenario YAML was edited).
+        for stage in last_rev.stages_snapshot:
+            if stage["stage"] == "agent_intake":
+                fresh_snapshot.append(
+                    {**stage, "facts": [{**f} for f in stage.get("facts", [])]}
+                )
+        # Re-run proposal stage queries
+        if "proposal" in stages:
+            stage_def = stages["proposal"]
+            facts, _ = _facts_from_stage(
+                stage_def,
+                sources=state.data_sources,
+                ontology=state.ontology_resolver,
+                payload=action_payload,
+            )
+            fresh_snapshot.append({
+                "stage": "proposal",
+                "binder": stage_def.get("binder", "FixtureProposalBinder/1.0"),
+                "facts": [_kf_to_dict(f) for f in facts],
+            })
+        # Re-run review stage queries (if exists)
+        if "review" in stages:
+            stage_def = stages["review"]
+            facts, _ = _facts_from_stage(
+                stage_def,
+                sources=state.data_sources,
+                ontology=state.ontology_resolver,
+                payload=action_payload,
+            )
+            fresh_snapshot.append({
+                "stage": "review",
+                "binder": stage_def.get("binder", "FixtureReviewBinder/1.0"),
+                "facts": [_kf_to_dict(f) for f in facts],
+            })
+
+        # Diff fact sets between last revision and fresh snapshot
+        def _fact_keys(snapshot: list[dict]) -> set[tuple]:
+            out = set()
+            for stg in snapshot:
+                for f in stg.get("facts", []) or []:
+                    out.add((
+                        f.get("source"),
+                        f.get("ontology_type"),
+                        f.get("id"),
+                    ))
+            return out
+
+        old_keys = _fact_keys(last_rev.stages_snapshot)
+        new_keys = _fact_keys(fresh_snapshot)
+        material_change = old_keys != new_keys
+        total_facts_checked = sum(
+            len(s.get("facts") or []) for s in fresh_snapshot
+        )
+
+        # Always emit a lineage event so the audit trail records that the
+        # check happened — even when nothing materially changed.
+        from tcs_hitl_context import Stage, make_event
+        if case.ctx is not None:
+            ev = make_event(
+                stage=Stage.REVIEW,
+                actor="agent-revisioning",
+                action=(
+                    "case.refresh_checked"
+                    if not material_change
+                    else "case.re_versioned"
+                ),
+                detail=(
+                    f"Re-ran proposal + review binders · {total_facts_checked} "
+                    f"facts checked · "
+                    + (
+                        "no material change · still at v"
+                        f"{last_rev.revision_no}"
+                        if not material_change
+                        else f"changes detected · sealed new revision"
+                    )
+                ),
+            )
+            case.ctx.append_lineage(ev)
+            state.lineage.record(case.ctx.case_id, ev)
+
+        if not material_change:
+            state.cases.save(case)
+            return {
+                "case_id": case_id,
+                "revision_no": last_rev.revision_no,
+                "no_change": True,
+                "facts_checked": total_facts_checked,
+            }
+
+        # Fact set changed — seal new revision. Mark the new-vs-old
+        # facts on each fact so the Envelope's green NEW EVIDENCE badge
+        # surfaces them.
+        for stage in fresh_snapshot:
+            for f in stage.get("facts", []):
+                key = (f.get("source"), f.get("ontology_type"), f.get("id"))
+                if key not in old_keys:
+                    f["_revision_new"] = True
+
+        new_revno = last_rev.revision_no + 1
+        case.revisions.append(
+            CaseRevision(
+                revision_no=new_revno,
+                stages_snapshot=fresh_snapshot,
+                decision=last_rev.decision,
+                triggered_by="generic_refresh",
+                trigger_label="Re-ran with fresh data",
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+        case.current_revision = new_revno
+        state.cases.save(case)
+        return {
+            "case_id": case_id,
+            "revision_no": new_revno,
+            "trigger_label": "Re-ran with fresh data",
+            "facts_checked": total_facts_checked,
+        }
+
+    trigger = TRIGGER_CATALOG.get(payload.trigger_id)
+    if trigger is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown trigger_id: {payload.trigger_id!r}",
+        )
+
+    # Build the new stages snapshot from the previous revision + injection.
+    # Deep-copy so we don't mutate the prior snapshot in place.
+    new_snapshot = [
+        {**stage, "facts": [{**f} for f in stage.get("facts", [])]}
+        for stage in (last_rev.stages_snapshot or snapshot_current_stages(case))
+    ]
+    inject = trigger["inject"]
+    target_stage_name = inject["stage"]
+    injected_fact = {**inject["fact"]}
+    # Mark the fact as new-in-this-revision so the Envelope can render a
+    # green gutter on it when v2 (or later) is selected.
+    injected_fact["_revision_new"] = True
+
+    for stage in new_snapshot:
+        if stage["stage"] == target_stage_name:
+            stage["facts"].append(injected_fact)
+            break
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=f"target stage {target_stage_name!r} not found in revision",
+        )
+
+    new_decision = trigger.get("new_decision", last_rev.decision)
+    new_revno = last_rev.revision_no + 1
+    case.revisions.append(
+        CaseRevision(
+            revision_no=new_revno,
+            stages_snapshot=new_snapshot,
+            decision=new_decision,
+            triggered_by=payload.trigger_id,
+            trigger_label=trigger["label"],
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+    )
+    case.current_revision = new_revno
+
+    # Lineage event so the audit trail captures both versions.
+    if case.ctx is not None:
+        ev = make_event(
+            stage=Stage.REVIEW,
+            actor="agent-revisioning",
+            action="case.re_versioned",
+            detail=(
+                f"v{new_revno} sealed · trigger: {trigger['label']} · "
+                f"new decision: {new_decision}"
+            ),
+        )
+        case.ctx.append_lineage(ev)
+        state.lineage.record(case.ctx.case_id, ev)
+
+    state.cases.save(case)
+    return {
+        "case_id": case_id,
+        "revision_no": new_revno,
+        "trigger_label": trigger["label"],
+        "new_decision": new_decision,
+    }
 
 
 @router.get("/cases")
@@ -398,6 +899,7 @@ def _case_summary(c: CaseRecord) -> dict:
         "candidates": c.candidates,
         "sibling_case_ids": c.sibling_case_ids,
         "replay_decision": c.replay_decision,
+        "baseline": c.baseline,
     }
 
 
@@ -407,6 +909,20 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
     out["lineage"] = []
     out["closing_message"] = c.closing_message
     out["execution_result"] = c.execution_result
+    out["compensation_result"] = c.compensation_result
+    out["risk_band"] = c.risk_band
+    out["revisions"] = [
+        {
+            "revision_no": r.revision_no,
+            "stages_snapshot": r.stages_snapshot,
+            "decision": r.decision,
+            "triggered_by": r.triggered_by,
+            "trigger_label": r.trigger_label,
+            "created_at": r.created_at,
+        }
+        for r in c.revisions
+    ]
+    out["current_revision"] = c.current_revision
     scenario = state.scenarios.get(c.scenario_id) if c.scenario_id else None
     if scenario:
         out["scenario"] = {
@@ -463,6 +979,23 @@ def _case_full(state: AppState, c: CaseRecord) -> dict:
                         # `facts:` blocks). Used by the frontend's
                         # QueryPlanPanel for click-to-highlight.
                         "query_index": f.payload.get("query_index"),
+                        # Structured multi-hop depth markers (set by graph
+                        # resolvers when the cypher RETURNs `hops` / `tier`
+                        # columns). Drive the "hidden dependency" callout in
+                        # the Envelope without parsing summary text.
+                        "hops": f.payload.get("hops"),
+                        "tier": f.payload.get("tier"),
+                        # Role + path markers (also set by graph resolvers).
+                        # `status` drives the FAILING pill on Supplier facts
+                        # whose underlying node has e.g. `chapter_11_filed_*`.
+                        # `via_path` is a human label for the relationship
+                        # vector that connects the case subject to the fact's
+                        # entity. `via_node_id` is the intermediate graph
+                        # node (e.g. the HoldingCompany) used to highlight
+                        # the chain inside GraphViz.
+                        "status": f.payload.get("status"),
+                        "via_path": f.payload.get("via_path"),
+                        "via_node_id": f.payload.get("via_node_id"),
                     }
                     for f in sc.facts
                 ],

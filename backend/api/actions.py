@@ -27,6 +27,10 @@ class ActionSummary(BaseModel):
     target_source: Optional[str] = None
     argument_count: int
     default: bool
+    # Reversibility marker drives the "Compensate" button in the
+    # LineagePanel — only `compensatable` actions get the button when
+    # they've fired successfully.
+    reversibility_class: str = "irreversible"
 
 
 class RawActionIn(BaseModel):
@@ -55,6 +59,7 @@ def list_actions(request: Request) -> list[ActionSummary]:
                 target_source=target,
                 argument_count=len(a.arguments),
                 default=a.default,
+                reversibility_class=a.reversibility_class,
             )
         )
     return out

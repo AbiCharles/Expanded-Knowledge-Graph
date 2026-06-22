@@ -1,0 +1,58 @@
+id: requisition_alt_supplier
+title: Requisition swap to alternative supplier
+description: Files a swap requisition with the procurement system after a reviewer
+  approves switching from a failing supplier to a vetted alternative. Wired against
+  the registered public test API (jsonplaceholder) so the demo can fire a real
+  HTTP POST without external creds. The compensation block makes it reversible —
+  the LineagePanel's "Compensate" button fires an HTTP DELETE to undo the
+  requisition, and a paired action.compensated event records the rollback on the
+  audit trail.
+hitl: true
+arguments:
+  - { name: failing_supplier_id, type: string, required: true,
+      description: The supplier being replaced (the trigger of the case).,
+      example: SUP-021 }
+  - { name: failing_supplier_name, type: string, required: false,
+      description: Display name of the failing supplier; included in the
+        requisition body.,
+      example: Northwind Forge & Castings }
+  - { name: alt_supplier_id, type: string, required: true,
+      description: The chosen alternative supplier.,
+      example: SUP-023 }
+  - { name: alt_supplier_name, type: string, required: false,
+      description: Display name of the chosen alternative.,
+      example: Ironcrest Metalworks }
+  - { name: chosen_by, type: string, required: true,
+      description: Reviewer's identifier; recorded as the responsible party.,
+      example: supply.assurance.lead.tlee }
+executor:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: POST
+  path_template: /posts
+  content_type: application/json
+  body_template: |
+    {{
+      "title": "Supply-assurance requisition · {failing_supplier_id} -> {alt_supplier_id}",
+      "body": "Approved by {chosen_by}. Failing: {failing_supplier_name} ({failing_supplier_id}). Alternative: {alt_supplier_name} ({alt_supplier_id}). Case: {__case_id}.",
+      "userId": 1
+    }}
+reversibility_class: compensatable
+# Compensation: cancel the requisition. Compensatable actions are reversed
+# by firing this executor with the same args as the original. For the demo
+# the path hits jsonplaceholder /posts/1 (the API always returns 200 OK on
+# DELETE regardless of ID), so the reversal succeeds without depending on
+# external state. In a production action the path would reference the
+# resource id returned by the forward POST.
+compensation:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: DELETE
+  path_template: /posts/1
+  content_type: application/json
+match_keywords:
+  - requisition alt supplier
+  - approve swap
+  - swap to alternative
+  - supply assurance approve
+default: true

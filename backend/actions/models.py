@@ -134,6 +134,24 @@ class Action(BaseModel):
     # Optional pre-flight check that short-circuits execution when the
     # current state already matches the target.
     idempotency: Optional[Idempotency] = None
+    # Reversibility classification (deck Beat 4):
+    #   idempotent     — re-firing yields the same result; no compensation
+    #                    needed (already covered by `idempotency`).
+    #   compensatable  — the side effect can be reversed by firing the
+    #                    `compensation` executor below. The reviewer-facing
+    #                    UI offers a "Compensate" button on this action's
+    #                    executed event in the lineage panel.
+    #   irreversible   — once committed, cannot be rolled back (default).
+    #                    No compensation surface offered.
+    # SAFE DEFAULT is irreversible so an author has to opt in to surfacing
+    # a compensation control.
+    reversibility_class: Literal[
+        "idempotent", "compensatable", "irreversible"
+    ] = "irreversible"
+    # The compensating side-effect for a `compensatable` action. Same
+    # Executor shape as the forward `executor`. Required when
+    # reversibility_class == 'compensatable'; ignored otherwise.
+    compensation: Optional[Executor] = None
     # Hints the keyword-fallback picker uses when no LLM is available.
     match_keywords: list[str] = Field(default_factory=list)
     # Built-in actions can't be deleted via the API. Mirrors the same

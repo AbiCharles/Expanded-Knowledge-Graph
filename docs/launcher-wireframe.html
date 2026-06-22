@@ -97,6 +97,34 @@
   .footer-tip { margin-top: 20px; font-size: 12px; color: #6b7280; line-height: 1.5; }
   .info-box { margin-top: 16px; padding: 12px 16px; background: #eef2ff; border-left: 3px solid #4f46e5;
               font-size: 12px; color: #4338ca; line-height: 1.5; border-radius: 0 4px 4px 0; }
+  /* "Enables in the running instance" callout. Sits at the bottom of
+     each step body to connect launcher config → demo capability without
+     interrupting the configuration flow. Indigo eyebrow matches the
+     authority-recalculated treatment in the running app. */
+  .enables-callout { margin-top: 22px; padding: 12px 16px; background: #f5f3ff;
+                     border-left: 3px solid #6366f1; border-radius: 0 4px 4px 0; }
+  .enables-callout .enables-eyebrow { font-size: 10px; font-weight: 700;
+                                      letter-spacing: 0.12em; color: #4338ca;
+                                      text-transform: uppercase; margin-bottom: 4px; }
+  .enables-callout .enables-text { font-size: 12.5px; color: #1f2937; line-height: 1.55; }
+  .enables-callout .enables-text em { color: #4338ca; font-style: italic; font-weight: 600; }
+  /* Closing summary table on the Review screen — six rows, one per step,
+     each carrying the same phrase used on its step. Lets the reviewer
+     end the launcher with a clear hand-off to "what this enables when
+     it runs." */
+  .enables-summary { margin-top: 24px; border: 1px solid #c7d2fe;
+                     border-radius: 6px; overflow: hidden; }
+  .enables-summary-title { padding: 10px 14px; background: #eef2ff;
+                           border-bottom: 1px solid #c7d2fe; font-size: 11px;
+                           font-weight: 700; letter-spacing: 0.12em; color: #4338ca;
+                           text-transform: uppercase; }
+  .enables-summary-row { display: grid; grid-template-columns: 200px 1fr;
+                         padding: 10px 14px; border-bottom: 1px solid #e5e7eb;
+                         font-size: 12.5px; align-items: start; }
+  .enables-summary-row:last-child { border-bottom: 0; }
+  .enables-summary-step { font-weight: 700; color: #1E2761; }
+  .enables-summary-text { color: #1f2937; line-height: 1.55; }
+  .enables-summary-text em { color: #4338ca; font-style: italic; font-weight: 600; }
   .crumb { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
   .crumb a { color: #4f46e5; text-decoration: underline; cursor: pointer; }
   code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
@@ -221,6 +249,27 @@ function screenWelcome() {
    </div>`;
 }
 
+// Renders the "Enables in the running instance" callout that lands at
+// the bottom of each step body. Connects launcher config → demo
+// capability so the audience sees the through-line.
+function enablesCallout(html) {
+  return `<div class="enables-callout">
+    <div class="enables-eyebrow">Enables in the running instance</div>
+    <div class="enables-text">${html}</div>
+  </div>`;
+}
+
+// Phrases used both on each step's callout AND on the Review screen
+// summary. Defined once so the two surfaces never drift.
+const ENABLES_PHRASES = {
+  1: 'The ontology, the write actions, and the seed scenarios every running case binds against. <em>Foundation for every demoable capability below.</em>',
+  2: "The agent's IAM scope shown on every case's Stage 1 (“policy &amp; scope”) row — every fact the agent reads or writes is gated by what you set here.",
+  3: '<em>Authority recalculated; the one risky call escalated.</em> When a case crosses the ladder’s risk envelope, the harness demotes itself from auto-execute to human review and stamps the override on the audit trail.',
+  4: '<em>Hidden tier-2 dependency surfaced before any decision.</em> Each connector becomes a source on the evidence map; multi-hop walks across them surface dependencies you wouldn’t see from any single system.',
+  5: '<em>A decision re-versioned the moment new evidence arrived</em> — v1 stays sealed on the audit trail when v2 lands. <em>Reversible action cancelled and compensated, not stranded</em> — both halves paired on the same trail.',
+  6: '<em>Invalid alternate rejected — same parent, lapsed qualification.</em> Promoted patterns become the harness’s instinct; that’s what separates the governed run from a naive baseline.',
+};
+
 function screenDomainPack() {
   if (state.customMode) return screenCustomPack();
   return `<div class="eyebrow">Step 1 of 6</div>
@@ -233,7 +282,8 @@ function screenDomainPack() {
      <div class="card"><h3>Finance ops</h3><div class="count">7 scenarios · 10 classes</div><ul><li>Invoice exception</li><li>Expense audit</li><li>Reconciliation</li><li>+ 4 more</li></ul></div>
      <div class="card"><h3>HR</h3><div class="count">5 scenarios · 8 classes</div><ul><li>Hiring decision</li><li>Promotion review</li><li>Offboard checklist</li><li>+ 2 more</li></ul></div>
      <div class="card custom" onclick="state.customMode=true; render();"><h3>Custom →</h3><div class="count">Build your own</div><ul><li>Name your pack</li><li>Fork an existing pack or start blank</li><li>Choose visibility</li><li><b>Click to configure</b></li></ul></div>
-   </div>`;
+   </div>
+   ${enablesCallout(ENABLES_PHRASES[1])}`;
 }
 
 function screenCustomPack() {
@@ -1727,7 +1777,8 @@ function screenBasics() {
    <div class="form-row"><label>Customer organisation</label><input value="Hemlock Manufacturing"></div>
    <div class="form-row"><label>Region (data residency)</label><select><option>US East (Ashburn)</option><option>EU West (Dublin)</option><option>APAC South (Singapore)</option></select></div>
    <div class="form-row"><label>Deployment shape</label><select><option>Dedicated single-tenant (recommended)</option><option>Shared multi-tenant</option><option>On-prem / air-gapped</option></select></div>
-   <div class="form-row"><label>Scale tier</label><select><option>Demo (5 users · 100 cases/day)</option><option selected>Production (500 users · 10k cases/day)</option><option>Enterprise (10k users · 100k cases/day)</option></select></div>`;
+   <div class="form-row"><label>Scale tier</label><select><option>Demo (5 users · 100 cases/day)</option><option selected>Production (500 users · 10k cases/day)</option><option>Enterprise (10k users · 100k cases/day)</option></select></div>
+   ${enablesCallout(ENABLES_PHRASES[2])}`;
 }
 
 function screenDecisionLadder() {
@@ -1802,7 +1853,8 @@ function screenDecisionLadder() {
    <h1>Decision policy — the autonomy ladder</h1>
    <p class="lede">For each scenario, set the default autonomy state. <b>Observe</b> = log-only, no action. <b>Propose</b> = HITL review required. <b>Auto-act</b> = execute without review. The Auto-act cell is disabled when the action is irreversible.</p>
    <div style="margin-top: 14px;">${rows}</div>
-   <p class="footer-tip">Graduation rules live <i>inline</i> on each scenario — click <a style="color:#4f46e5;">Edit ▾</a> to configure approvals + sign-off + audit. Click <a style="color:#4f46e5;">Edit ▾</a> on the first scenario to see the panel open.</p>`;
+   <p class="footer-tip">Graduation rules live <i>inline</i> on each scenario — click <a style="color:#4f46e5;">Edit ▾</a> to configure approvals + sign-off + audit. Click <a style="color:#4f46e5;">Edit ▾</a> on the first scenario to see the panel open.</p>
+   ${enablesCallout(ENABLES_PHRASES[3])}`;
 }
 
 function screenConnectors() {
@@ -1816,7 +1868,8 @@ function screenConnectors() {
      <div class="card selected"><h3>Vector store (semantic search)</h3><div class="count">Read-only</div><ul><li>Policy / SOP corpus</li><li>Embeddings: OpenAI / Azure OpenAI</li></ul></div>
      <div class="card"><h3>Enterprise systems</h3><div class="count">SAP · Salesforce · ServiceNow</div><ul><li>Default reversibility: irreversible</li><li>Requires admin approval to write</li></ul></div>
      <div class="card"><h3>HTTP webhooks</h3><div class="count">Outbound notifications</div><ul><li>Slack · Teams · custom URLs</li><li>Per-tenant rate limits</li></ul></div>
-   </div>`;
+   </div>
+   ${enablesCallout(ENABLES_PHRASES[4])}`;
 }
 
 function screenCompliance() {
@@ -1831,7 +1884,8 @@ function screenCompliance() {
      <div class="card"><h3>FedRAMP</h3><div class="count">US Government</div><ul><li>Air-gap option</li><li>All actions logged</li><li>FIPS-compliant crypto</li></ul></div>
      <div class="card"><h3>Custom</h3><div class="count">Pick à la carte</div><ul><li>Mix individual policies</li><li>(advanced — admin only)</li></ul></div>
    </div>
-   <p class="footer-tip">Selected template auto-attaches a versioned policy bundle. Admins can view + override individual policies after launch.</p>`;
+   <p class="footer-tip">Selected template auto-attaches a versioned policy bundle. Admins can view + override individual policies after launch.</p>
+   ${enablesCallout(ENABLES_PHRASES[5])}`;
 }
 
 function screenLearnedRules() {
@@ -1850,7 +1904,8 @@ function screenLearnedRules() {
    <div class="info-box">
      A <b>learned rule</b> is a "the reviewer almost always does X when Y is true" pattern that the platform proposes as a future-case hint. Admins still have to approve it. Demoting a learned rule is a one-click action with a full audit trail.
    </div>
-   <p class="footer-tip">Tip: start at Standard. Lower to Loose only for internal sandbox tenants. Raise to Strict before any healthcare or trade-compliance workload.</p>`;
+   <p class="footer-tip">Tip: start at Standard. Lower to Loose only for internal sandbox tenants. Raise to Strict before any healthcare or trade-compliance workload.</p>
+   ${enablesCallout(ENABLES_PHRASES[6])}`;
 }
 
 function screenReview() {
@@ -1913,7 +1968,16 @@ function screenReview() {
      <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.adminTab='overview'; render();">Launch instance →</button>
      <button class="btn" style="margin-left: 8px;">Download config (.yaml)</button>
      <button class="btn" style="margin-left: 8px;">Edit a step</button>
-   </p>`;
+   </p>
+   <div class="enables-summary">
+     <div class="enables-summary-title">What you just configured enables, in the running instance</div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 1 · Domain pack</div><div class="enables-summary-text">${ENABLES_PHRASES[1]}</div></div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 2 · Basics</div><div class="enables-summary-text">${ENABLES_PHRASES[2]}</div></div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 3 · Decision ladder</div><div class="enables-summary-text">${ENABLES_PHRASES[3]}</div></div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 4 · Connectors</div><div class="enables-summary-text">${ENABLES_PHRASES[4]}</div></div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 5 · Compliance</div><div class="enables-summary-text">${ENABLES_PHRASES[5]}</div></div>
+     <div class="enables-summary-row"><div class="enables-summary-step">Step 6 · Learned-rule gate</div><div class="enables-summary-text">${ENABLES_PHRASES[6]}</div></div>
+   </div>`;
 }
 
 // ----- screen orchestration -----

@@ -222,19 +222,27 @@ class AgentRuntime:
     # Step 2 — draft the AgentAction. For the demo this just instantiates the
     # scenario's declared template; a real agent would fill it from the prompt.
     # -------------------------------------------------------------------------
-    def draft_action(self, scenario: dict[str, Any]) -> AgentAction:
+    def draft_action(
+        self,
+        scenario: dict[str, Any],
+        *,
+        baseline: bool = False,
+    ) -> AgentAction:
         """Build the framework ``AgentAction`` for this scenario.
 
         Pins ``__scenario_id__`` into the payload so binders downstream can
         look up the same scenario when they need to read its declared facts
-        or queries. In a fuller agent this would also call the LLM to fill
-        scenario-specific fields from the operator's prompt; for the demo
-        the YAML's ``action_payload`` template is used as-is.
+        or queries. When ``baseline`` is True, also pins ``__baseline__``
+        into the payload — the review-stage binder reads this flag and
+        skips its ontology queries so the case ends up with an empty
+        review stage (W5 / Beat 2: "what a supervisor without the governed
+        knowledge layer would have surfaced").
         """
         action_id = f"ACT-{uuid.uuid4().hex[:10].upper()}"
         payload = dict(scenario.get("action_payload", {}))
-        # Pin the scenario id so the proposal/review binders can pick the right fixture.
         payload["__scenario_id__"] = scenario["id"]
+        if baseline:
+            payload["__baseline__"] = True
         return AgentAction(
             action_id=action_id,
             action_type=scenario["action_type"],

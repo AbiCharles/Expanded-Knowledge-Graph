@@ -1,0 +1,155 @@
+id: SC-PP-AUTO-PO-RELEASE-027
+title: 'Auto-release routine PO replenishment (envelope: ≤ $10M, supplier qualified)'
+domain: Procurement & Planning
+autonomous: true
+actor_id: agent-procurement-12
+operator_role:
+  label: Operator
+  name: planner.kwong
+action_type: release_purchase_order
+action_payload:
+  po_id: PO-2026-Q1-14002
+  supplier_id: SUP-031
+  po_value_usd: 14000000
+  release_reason: 'Bulk Q1 release locking pre-increase pricing on flagship-program SKUs'
+  scope: procurement.write_po_release_low
+match_keywords:
+- auto release po
+- release routine po
+- release purchase order
+- auto-release purchase order
+- po envelope release
+- po release auto
+interpreted_as: auto-release purchase order PO-2026-Q1-14002 ($14M) to SUP-031 per the
+  envelope policy
+clarifying_question: 'Confirm — auto-release purchase order <code>PO-2026-Q1-14002</code>
+  ($14M) to <code>SUP-031</code> for flagship-program SKUs. Envelope per <code>GR-PP-AUTO-PO-002</code>:
+  total ≤ $10M AND supplier qualification valid AND no fresh SDN exposure. I''ll bind
+  the drafted PO, the supplier qualification record, recent comparable auto-releases
+  on this lane, and the downstream program touchpoints. If the value lands above
+  envelope, authority recalculates and routes to human review. Proceed?'
+auto_approval_guardrail: GR-PP-AUTO-PO-002
+auto_approval_reason: PO value within envelope AND supplier qualification valid AND
+  comparable auto-releases on this lane closed clean. Policy GR-PP-AUTO-PO-002 permits
+  autonomous release for low-risk replenishment.
+closing_message: Done — released via <code>release_purchase_order</code>. HTTP POST
+  fired to the supplier portal API. The envelope was grounded in the qualification
+  record + recent auto-release history; execution result + audit event on the lineage.
+# W4 / Beat 5 — dynamic authority recalculation. When the drafted action
+# carries a po_value_usd above $10M, the autonomous branch is overridden
+# and the case is routed to review_ready. The agent still does all the
+# legwork (binds the proposal facts), but the final write is gated by a
+# human. The lineage emits an `authority.recalculated` event so the
+# audit trail makes the override explicit.
+risk_bands:
+  high:
+    escalate_to: review_ready
+    when:
+      payload_field: po_value_usd
+      op: gt
+      threshold: 10000000
+    reason: |-
+      PO value exceeds the $10M auto-release envelope set by
+      GR-PP-AUTO-PO-002. Authority recalculated — escalating from
+      auto_execute to review_ready so a human approves the bulk release.
+stages:
+  agent_intake:
+    binder: PolicyAndScopeAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: GR-PP-AUTO-PO-002
+      uri: kf.tcs/policy/GR-PP-AUTO-PO-002
+      title: Autonomous routine PO release envelope
+      payload: 'Agent may auto-release purchase orders when po_value_usd ≤ $10M AND
+        supplier qualification status = qualified AND no fresh OFAC SDN flag within
+        2 hops. POs above $10M (bulk consolidations, price-lock releases) route to
+        HITL via authority.recalculated.'
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-procurement-12
+      uri: iam.tcs/actors/agent-procurement-12
+      title: Actor scope
+      payload: 'Scopes: procurement.read, procurement.write_po_release_low · http_request
+        to the supplier portal API permitted within envelope'
+    - source: kf:context
+      ontology_type: PurchaseOrder
+      id: PO-2026-Q1-14002
+      uri: kf.tcs/po/PO-2026-Q1-14002
+      title: 'Drafted PO · PO-2026-Q1-14002 · $14.0M'
+      payload: 'Supplier SUP-031 · 12,000 units of SKU-CORE-71 · scheduled release
+        2026-08-01 · Q1 bulk consolidation to lock pricing before the supplier''s
+        announced 4.2% increase on 2026-09-01. Value = $14,000,000.'
+  proposal:
+    binder: SupplyChainProposalBinder/1.0
+    ontology_queries:
+    - ontology: supply_chain
+      class: Supplier
+      where:
+        supplier_id: SUP-031
+      max_results: 1
+      purpose: Supplier of record + current qualification status
+    - ontology: supply_chain
+      class: AlternativeSupplier
+      where:
+        failing_supplier_id: SUP-031
+        hops: 2
+      max_results: 3
+      purpose: Backup suppliers in case the human reviewer wants alternatives
+    - ontology: supply_chain
+      class: ProgramImpact
+      where:
+        supplier_id: SUP-031
+      max_results: 3
+      purpose: Flagship programs this PO feeds (so the reviewer can size the impact)
+  review:
+    binder: PriorOverrideReviewBinder/1.0
+    ontology_queries:
+    - ontology: tcs_core
+      class: PriorOverride
+      where:
+        scenario_id: SC-PP-AUTO-PO-RELEASE-027
+      max_results: 3
+      purpose: Prior reviewer decisions on comparable auto-release escalations
+outcomes:
+  auto_execute:
+    headline: Auto-executed — PO released within envelope
+    detail: PO value under threshold AND supplier qualified AND no fresh SDN exposure.
+      release_purchase_order ran; HTTP response status captured.
+  review_ready:
+    headline: Escalated — authority recalculated
+    detail: The drafted PO value exceeds the $10M auto-release envelope. The harness
+      demoted autonomy and routed to human review per GR-PP-AUTO-PO-002.
+  approve:
+    headline: Approved — bulk release proceeding
+    detail: Reviewer confirmed the bulk-release rationale. release_purchase_order
+      ran; HTTP response status captured.
+  reject:
+    headline: Rejected — bulk release blocked
+    detail: Reviewer declined the bulk release. The drafted PO is held; no write
+      hit the supplier portal.
+  request_more_info:
+    headline: Reviewer requested more info
+    detail: Awaiting additional context before approving.
+rationale_reasons:
+  approve:
+  - Pre-increase pricing lock is sound; the consolidation saves capital cost
+  - Supplier qualification valid + recent auto-releases on this lane closed clean
+  - Bulk volume is consistent with Q1 program forecast
+  reject:
+  - Supplier concentration risk — bulk release should split across alternates
+  - Prefer staged releases at the envelope ceiling instead of one bulk write
+  - Recent SDN exposure surfaced in the network; hold until cleared
+  request_more_info:
+  - Need the program demand forecast attached to the PO
+  - Need finance sign-off on the lump-sum payable schedule
+_executor:
+  action_id: release_purchase_order
+  arguments:
+    po_id: PO-2026-Q1-14002
+    supplier_id: SUP-031
+    po_value_usd: '14000000'
+    release_reason: Reviewer-approved bulk Q1 release per GR-PP-AUTO-PO-002 (escalated
+      via authority.recalculated; reviewer confirmed pricing-lock rationale)
+_filter_from_prompt: false
+version: 1

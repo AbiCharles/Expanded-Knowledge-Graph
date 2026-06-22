@@ -82,13 +82,21 @@ export async function relinkCase(caseId: string, scenarioId: string): Promise<{
   );
 }
 
-export async function replayCase(caseId: string, decision: DecisionKind): Promise<{ case_id: string }> {
+export async function replayCase(
+  caseId: string,
+  decision: DecisionKind | null,
+  opts?: { baseline?: boolean },
+): Promise<{ case_id: string }> {
   return jsonOrThrow(
     await authedFetch(`/api/cases/${caseId}/replay`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision }),
-    })
+      // W5 / Beat 2 — when `baseline: true`, the backend auto-defaults the
+      // decision to "approve" (a naive baseline reviewer without governance
+      // context is most likely to greenlight), so the caller doesn't need
+      // to supply one.
+      body: JSON.stringify({ decision, baseline: opts?.baseline ?? false }),
+    }),
   );
 }
 
@@ -707,6 +715,10 @@ export interface ActionSummary {
   target_source: string | null;
   argument_count: number;
   default: boolean;
+  // Reversibility marker (W3, deck Beat 4). Drives the LineagePanel
+  // Compensate button — only `compensatable` actions surface the
+  // control when they've fired successfully.
+  reversibility_class?: "idempotent" | "compensatable" | "irreversible";
 }
 
 export async function listActions(): Promise<ActionSummary[]> {
@@ -715,6 +727,61 @@ export async function listActions(): Promise<ActionSummary[]> {
 
 export async function getAction(id: string): Promise<unknown> {
   return jsonOrThrow(await authedFetch(`/api/actions/${id}`));
+}
+
+// Reverse a previously-executed compensatable action on this case.
+// Backend looks up case.execution_result, runs the action's compensation
+// executor, and emits an action.compensated lineage event.
+export async function compensateCase(
+  caseId: string,
+): Promise<{ case_id: string; action_id: string; ok: boolean; detail: string }> {
+  return jsonOrThrow(
+    await authedFetch(`/api/cases/${caseId}/compensate`, { method: "POST" }),
+  );
+}
+
+// W1 / Beat 3 — case revisioning.
+export interface ReviseTrigger {
+  id: string;
+  label: string;
+  explainer: string;
+}
+
+export interface ReviseTriggersResponse {
+  case_id: string;
+  scenario_id: string | null;
+  triggers: ReviseTrigger[];
+  supports_generic_refresh: boolean;
+}
+
+export async function listReviseTriggers(
+  caseId: string,
+): Promise<ReviseTriggersResponse> {
+  return jsonOrThrow(
+    await authedFetch(`/api/cases/${caseId}/revise/triggers`),
+  );
+}
+
+export interface ReviseResponse {
+  case_id: string;
+  revision_no: number;
+  trigger_label?: string;
+  new_decision?: string;
+  no_change?: boolean;
+  detail?: string;
+}
+
+export async function reviseCase(
+  caseId: string,
+  triggerId: string,
+): Promise<ReviseResponse> {
+  return jsonOrThrow(
+    await authedFetch(`/api/cases/${caseId}/revise`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trigger_id: triggerId }),
+    }),
+  );
 }
 
 export async function uploadActionRaw(args: {

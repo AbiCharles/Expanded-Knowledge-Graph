@@ -9,19 +9,23 @@ mappings:
         name: name
         country: country
         reliability_score: reliability_score
+        status: status
+        qualification_status: qualification_status
+        qualification_expires_on: qualification_expires_on
       table: null
-      query_template: "MATCH (n:Supplier)\nWHERE ($supplier_id IS NULL OR n.supplier_id\
-        \ = $supplier_id)\n  AND ($country IS NULL OR n.country = $country)\nRETURN\
-        \ n.supplier_id AS id,\n       n.name AS title,\n       n.country + \" \xB7\
-        \ reliability \" + toString(n.reliability_score) AS summary\nORDER BY n.supplier_id\n\
-        LIMIT $max_results"
+      # Surfaces status + qualification in the summary so the supply-assurance
+      # scenario's intake binding (Supplier filtered by SUP-021) reveals
+      # 'chapter_11_filed_...' on the same row as reliability.
+      query_template: "MATCH (n:Supplier)\nWHERE ($supplier_id IS NULL OR n.supplier_id = $supplier_id)\n  AND ($country IS NULL OR n.country = $country)\nRETURN n.supplier_id AS id,\n       n.name AS title,\n       n.country + \" \xB7 reliability \" + toString(n.reliability_score)\n         + CASE WHEN n.status IS NOT NULL AND n.status <> 'active' THEN \" \xB7 status: \" + n.status ELSE \"\" END\n         + CASE WHEN n.qualification_status IS NOT NULL THEN \" \xB7 qualification: \" + n.qualification_status\n             + CASE WHEN n.qualification_status = 'lapsed' THEN \" (expired \" + toString(n.qualification_expires_on) + \")\" ELSE \"\" END\n           ELSE \"\" END AS summary,\n       n.status AS status\nORDER BY n.supplier_id\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
       confirmed_by: null
       confirmed_at: null
       notes: Cypher template scopes by supplier_id and/or country when supplied. Falls
-        back to listing all suppliers when both filter args are unset.
+        back to listing all suppliers when both filter args are unset. Adds status
+        + qualification suffixes when those properties are set (omits them when null
+        for backwards compatibility with older nodes).
     relations: {}
   PurchaseOrder:
     sources:
@@ -101,7 +105,7 @@ mappings:
       # SanctionedNetworkEntity within 4 hops. Returns one row per
       # destination SDN with the trail collapsed into a single string
       # for the fact card summary.
-      query_template: "MATCH path = shortestPath(\n  (s:Supplier {supplier_id: $supplier_id})-[*1..4]-(sdn:SanctionedNetworkEntity)\n)\nWITH sdn,\n     length(path) AS hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nRETURN sdn.entity_id AS id,\n       sdn.name + \" (\" + sdn.program + \")\" AS title,\n       toString(hops) + \"-hop trail · \" + sdn.risk_tier + \" risk · path: \" + reduce(s = '', n IN chain | (CASE WHEN s = '' THEN n ELSE s + ' → ' + n END)) AS summary\nORDER BY hops, sdn.entity_id\nLIMIT $max_results"
+      query_template: "MATCH path = shortestPath(\n  (s:Supplier {supplier_id: $supplier_id})-[*1..4]-(sdn:SanctionedNetworkEntity)\n)\nWITH sdn,\n     length(path) AS hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nRETURN sdn.entity_id AS id,\n       sdn.name + \" (\" + sdn.program + \")\" AS title,\n       toString(hops) + \"-hop trail · \" + sdn.risk_tier + \" risk · path: \" + reduce(s = '', n IN chain | (CASE WHEN s = '' THEN n ELSE s + ' → ' + n END)) AS summary,\n       hops AS hops\nORDER BY hops, sdn.entity_id\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
@@ -152,7 +156,7 @@ mappings:
       # SOURCES_FROM edges from tier 1. One row per (tier_supplier, tier)
       # pair so the same upstream supplier can appear at different
       # depths if reached through different tier-1 paths.
-      query_template: "MATCH (p:Product {product_id: $product_id})<-[:CONTAINS]-(po:PurchaseOrder)<-[:PLACED]-(t1:Supplier)\nOPTIONAL MATCH path = (t1)-[:SOURCES_FROM*0..3]->(tier_n:Supplier)\nWITH DISTINCT p, t1, tier_n, length(path) AS hop,\n     [n IN nodes(path) | n.name] AS chain\nRETURN tier_n.supplier_id AS id,\n       tier_n.name + ' (' + tier_n.country + ')' AS title,\n       'Tier ' + toString(hop + 1) + ' · ' +\n         CASE\n           WHEN hop = 0 THEN 'direct supplier of ' + p.name\n           ELSE 'upstream chain · ' + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         END + ' · reliability ' + toString(tier_n.reliability_score) AS summary\nORDER BY hop ASC, tier_n.supplier_id ASC\nLIMIT $max_results"
+      query_template: "MATCH (p:Product {product_id: $product_id})<-[:CONTAINS]-(po:PurchaseOrder)<-[:PLACED]-(t1:Supplier)\nOPTIONAL MATCH path = (t1)-[:SOURCES_FROM*0..3]->(tier_n:Supplier)\nWITH DISTINCT p, t1, tier_n, length(path) AS hop,\n     [n IN nodes(path) | n.name] AS chain\nRETURN tier_n.supplier_id AS id,\n       tier_n.name + ' (' + tier_n.country + ')' AS title,\n       'Tier ' + toString(hop + 1) + ' · ' +\n         CASE\n           WHEN hop = 0 THEN 'direct supplier of ' + p.name\n           ELSE 'upstream chain · ' + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         END + ' · reliability ' + toString(tier_n.reliability_score) AS summary,\n       hop + 1 AS tier\nORDER BY hop ASC, tier_n.supplier_id ASC\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
@@ -172,13 +176,17 @@ mappings:
         reliability_score: reliability_score
         hop_distance: hop_distance
         via_relationship: via_relationship
+        qualification_status: qualification_status
       table: null
       # Three candidate paths combined per supplier via pattern
       # comprehensions: (1) sibling sharing a HoldingCompany,
       # (2) sibling sharing a parent Supplier, (3) direct JV partner.
       # An alt that's reachable through multiple paths gets all reasons
-      # concatenated and the shortest hop count.
-      query_template: "MATCH (blocked:Supplier {supplier_id: $supplier_id})\nMATCH (alt:Supplier) WHERE alt <> blocked\nWITH blocked, alt,\n  [(blocked)-[:CONTROLLED_BY]->(h:HoldingCompany)<-[:CONTROLLED_BY]-(alt) | 'sibling via ' + h.name + ' (HoldingCompany)'] AS via_h,\n  [(blocked)<-[:PARENT_OF]-(p:Supplier)-[:PARENT_OF]->(alt) | 'sibling via parent ' + p.name] AS via_p,\n  [(blocked)-[:JOINT_VENTURE_WITH]-(alt) | 'joint-venture partner'] AS via_jv\nWITH alt, via_h + via_p + via_jv AS reasons\nWHERE size(reasons) > 0\nWITH alt, reasons,\n  CASE WHEN size([r IN reasons WHERE r = 'joint-venture partner']) > 0 THEN 1 ELSE 2 END AS hops\nRETURN alt.supplier_id AS id,\n       alt.name + ' (' + alt.country + ')' AS title,\n       toString(hops) + '-hop alternative · ' + reduce(acc = '', r IN reasons | (CASE WHEN acc = '' THEN r ELSE acc + ' + ' + r END)) + ' · reliability ' + toString(alt.reliability_score) AS summary\nORDER BY hops ASC, alt.reliability_score DESC\nLIMIT $max_results"
+      # concatenated and the shortest hop count. Suffix appends the
+      # candidate's own qualification state so a reviewer sees at a glance
+      # when a graph-matched alternate is actually invalid (e.g. lapsed
+      # certification) — the "invalid alternate rejected" demo beat.
+      query_template: "MATCH (blocked:Supplier {supplier_id: $supplier_id})\nMATCH (alt:Supplier) WHERE alt <> blocked\nWITH blocked, alt,\n  [(blocked)-[:CONTROLLED_BY]->(h:HoldingCompany)<-[:CONTROLLED_BY]-(alt) | 'sibling via ' + h.name + ' (HoldingCompany)'] AS via_h,\n  [(blocked)-[:CONTROLLED_BY]->(h:HoldingCompany)<-[:CONTROLLED_BY]-(alt) | h.holding_id] AS shared_holding_ids,\n  [(blocked)<-[:PARENT_OF]-(p:Supplier)-[:PARENT_OF]->(alt) | 'sibling via parent ' + p.name] AS via_p,\n  [(blocked)<-[:PARENT_OF]-(p:Supplier)-[:PARENT_OF]->(alt) | p.supplier_id] AS shared_parent_ids,\n  [(blocked)-[:JOINT_VENTURE_WITH]-(alt) | 'joint-venture partner'] AS via_jv\nWITH alt, via_h + via_p + via_jv AS reasons,\n     CASE WHEN size(shared_holding_ids) > 0 THEN shared_holding_ids[0]\n          WHEN size(shared_parent_ids)  > 0 THEN shared_parent_ids[0]\n          ELSE NULL END AS via_node_id\nWHERE size(reasons) > 0\nWITH alt, reasons, via_node_id,\n  CASE WHEN size([r IN reasons WHERE r = 'joint-venture partner']) > 0 THEN 1 ELSE 2 END AS hops\nRETURN alt.supplier_id AS id,\n       alt.name + ' (' + alt.country + ')' AS title,\n       toString(hops) + '-hop alternative · ' + reduce(acc = '', r IN reasons | (CASE WHEN acc = '' THEN r ELSE acc + ' + ' + r END)) + ' · reliability ' + toString(alt.reliability_score)\n         + CASE WHEN alt.qualification_status IS NOT NULL THEN ' · qualification: ' + alt.qualification_status\n             + CASE WHEN alt.qualification_status = 'lapsed' THEN ' (expired ' + toString(alt.qualification_expires_on) + ')' ELSE '' END\n           ELSE '' END AS summary,\n       hops AS hops,\n       reasons[0] AS via_path,\n       via_node_id AS via_node_id\nORDER BY hops ASC, alt.reliability_score DESC\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
@@ -186,7 +194,9 @@ mappings:
       confirmed_at: null
       notes: "Surfaces drop-in alternatives when a supplier is blocked or
         fails QA. Combines three graph paths into one ranked list with
-        the relationship type that makes each candidate viable."
+        the relationship type that makes each candidate viable. Appends
+        the candidate's qualification state when present (additive — no
+        behaviour change for nodes without the property)."
     relations: {}
   UltimateBeneficialOwner:
     sources:
@@ -205,7 +215,7 @@ mappings:
       # for each ancestor (via outgoing CONTROLLED_BY). Returns one row
       # per ownership node — supplier ancestors AND holding controllers —
       # with the cumulative hop distance and the full chain.
-      query_template: "MATCH (s:Supplier {supplier_id: $supplier_id})\nMATCH p = (s)<-[:PARENT_OF*0..4]-(ancestor:Supplier)\nWITH s, ancestor, length(p) AS hop, [n IN nodes(p) | n.name] AS chain\nOPTIONAL MATCH (ancestor)-[c:CONTROLLED_BY]->(h:HoldingCompany)\nRETURN coalesce(h.holding_id, ancestor.supplier_id) AS id,\n       CASE WHEN h IS NOT NULL THEN h.name + \" (HoldingCompany)\"\n            ELSE ancestor.name + \" (Supplier ancestor)\"\n       END AS title,\n       toString(hop + CASE WHEN h IS NOT NULL THEN 1 ELSE 0 END) + \"-hop chain · \"\n         + \"via \" + ancestor.name\n         + CASE WHEN c IS NOT NULL THEN \" (\" + toString(c.pct) + \"% holding)\" ELSE \"\" END\n         + \" · path: \" + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         + CASE WHEN h IS NOT NULL THEN \" → \" + h.name ELSE \"\" END AS summary\nORDER BY hop ASC, h IS NULL\nLIMIT $max_results"
+      query_template: "MATCH (s:Supplier {supplier_id: $supplier_id})\nMATCH p = (s)<-[:PARENT_OF*0..4]-(ancestor:Supplier)\nWITH s, ancestor, length(p) AS hop, [n IN nodes(p) | n.name] AS chain\nOPTIONAL MATCH (ancestor)-[c:CONTROLLED_BY]->(h:HoldingCompany)\nRETURN coalesce(h.holding_id, ancestor.supplier_id) AS id,\n       CASE WHEN h IS NOT NULL THEN h.name + \" (HoldingCompany)\"\n            ELSE ancestor.name + \" (Supplier ancestor)\"\n       END AS title,\n       toString(hop + CASE WHEN h IS NOT NULL THEN 1 ELSE 0 END) + \"-hop chain · \"\n         + \"via \" + ancestor.name\n         + CASE WHEN c IS NOT NULL THEN \" (\" + toString(c.pct) + \"% holding)\" ELSE \"\" END\n         + \" · path: \" + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END))\n         + CASE WHEN h IS NOT NULL THEN \" → \" + h.name ELSE \"\" END AS summary,\n       hop + CASE WHEN h IS NOT NULL THEN 1 ELSE 0 END AS hops\nORDER BY hop ASC, h IS NULL\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
@@ -233,7 +243,7 @@ mappings:
       # every Carrier those Suppliers ship via. Aggregates by carrier so we
       # return one row per affected carrier with the SHORTEST trail and the
       # closest supplier through which the exposure flows.
-      query_template: "MATCH path = shortestPath(\n  (sdn:SanctionedNetworkEntity {entity_id: $sdn_id})-[*1..4]-(s:Supplier)\n)\nMATCH (s)-[:SHIPS_VIA]->(c:Carrier)-[:MEMBER_OF]->(a:Alliance)\nWITH c, a, s, path,\n     length(path) + 1 AS total_hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nWITH c, a, total_hops, chain, s.name AS via_supplier\nORDER BY total_hops ASC\nWITH c, a,\n     collect({hops: total_hops, chain: chain, sup: via_supplier})[0] AS best\nRETURN c.carrier_id AS id,\n       c.name + \" (\" + a.name + \")\" AS title,\n       toString(best.hops) + \"-hop SDN exposure · via supplier \" + best.sup + \" · path: \" + reduce(acc = '', n IN best.chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END)) + \" → \" + c.name AS summary\nORDER BY best.hops ASC, c.carrier_id ASC\nLIMIT $max_results"
+      query_template: "MATCH path = shortestPath(\n  (sdn:SanctionedNetworkEntity {entity_id: $sdn_id})-[*1..4]-(s:Supplier)\n)\nMATCH (s)-[:SHIPS_VIA]->(c:Carrier)-[:MEMBER_OF]->(a:Alliance)\nWITH c, a, s, path,\n     length(path) + 1 AS total_hops,\n     [n IN nodes(path) | coalesce(n.name, n.supplier_id, n.entity_id, n.holding_id)] AS chain\nWITH c, a, total_hops, chain, s.name AS via_supplier\nORDER BY total_hops ASC\nWITH c, a,\n     collect({hops: total_hops, chain: chain, sup: via_supplier})[0] AS best\nRETURN c.carrier_id AS id,\n       c.name + \" (\" + a.name + \")\" AS title,\n       toString(best.hops) + \"-hop SDN exposure · via supplier \" + best.sup + \" · path: \" + reduce(acc = '', n IN best.chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END)) + \" → \" + c.name AS summary,\n       best.hops AS hops\nORDER BY best.hops ASC, c.carrier_id ASC\nLIMIT $max_results"
       http_path_template: null
       confidence: 1.0
       suggested_by: operator
@@ -243,4 +253,84 @@ mappings:
         SDN, walks ownership chains to suppliers, then jumps SHIPS_VIA to
         carriers. Used when a new entity is listed and we need to identify
         every carrier whose biggest customer just became radioactive."
+    relations: {}
+  Program:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: program_id
+      attribute_map:
+        program_id: program_id
+        name: name
+        customer: customer
+        revenue_at_risk_usd: revenue_at_risk_usd
+        otd_penalty_per_day_usd: otd_penalty_per_day_usd
+      table: null
+      query_template: "MATCH (prg:Program)\nWHERE ($program_id IS NULL OR prg.program_id = $program_id)\n  AND ($customer IS NULL OR prg.customer = $customer)\nRETURN prg.program_id AS id,\n       prg.name + ' (' + prg.customer + ')' AS title,\n       '$' + toString(prg.revenue_at_risk_usd / 1000000) + 'M revenue at risk \xB7 $' + toString(prg.otd_penalty_per_day_usd / 1000) + 'k/day OTD penalty' AS summary\nORDER BY prg.revenue_at_risk_usd DESC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: Direct read of a flagship Program node. Used to bind the customer
+        program at the start of a supply-assurance workflow or to enumerate the
+        program portfolio for a customer.
+    relations: {}
+  DownstreamDependent:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: buyer_id
+      attribute_map:
+        buyer_id: buyer_id
+        buyer_name: buyer_name
+        country: country
+        hop_distance: hop_distance
+        chain: chain
+        reliability_score: reliability_score
+      table: null
+      # Walk SOURCES_FROM EDGES BACKWARDS from the target supplier. Each
+      # row is a downstream buyer reached at hop N with the chain of
+      # intermediates back to the target. THIS is the "who depends on the
+      # failing tier-2?" reveal — mirror of TierSupplier (which walks
+      # forwards from a Product).
+      query_template: "MATCH (target:Supplier {supplier_id: $supplier_id})\nMATCH path = (buyer:Supplier)-[:SOURCES_FROM*1..3]->(target)\nWITH buyer, target, length(path) AS hop,\n     [n IN nodes(path) | n.name] AS chain\nRETURN buyer.supplier_id AS id,\n       buyer.name + ' (' + buyer.country + ')' AS title,\n       'Tier-' + toString(hop) + ' buyer of ' + target.name + ' \xB7 chain: ' + reduce(acc = '', n IN chain | (CASE WHEN acc = '' THEN n ELSE acc + ' → ' + n END)) + ' \xB7 reliability ' + toString(buyer.reliability_score) AS summary,\n       hop AS hops\nORDER BY hop ASC, buyer.supplier_id ASC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "Reverse of TierSupplier. Given a deep-tier Supplier in
+        distress, surface every downstream Supplier that depends on it via
+        SOURCES_FROM edges (up to 3 hops). Used by the supply-assurance
+        scenario to answer 'who feels the pain when SUP-021 fails?'."
+    relations: {}
+  ProgramImpact:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: program_id
+      attribute_map:
+        program_id: program_id
+        program_name: program_name
+        customer: customer
+        revenue_at_risk_usd: revenue_at_risk_usd
+        otd_penalty_per_day_usd: otd_penalty_per_day_usd
+        via_suppliers: via_suppliers
+        skus: skus
+      table: null
+      # Walk from the failing Supplier OUT through SOURCES_FROM^-1 to
+      # every downstream buyer (tier-1), then PLACED -> CONTAINS ->
+      # INCLUDED_IN to surface every Program whose SKUs depend on the
+      # failing supplier. Aggregates by Program so each row is one
+      # exposed program with revenue + OTD penalty + the tier-1s and
+      # SKUs that channel the exposure.
+      query_template: "MATCH (target:Supplier {supplier_id: $supplier_id})\nMATCH (buyer:Supplier)-[:SOURCES_FROM*0..3]->(target)\nMATCH (buyer)-[:PLACED]->(po:PurchaseOrder)-[:CONTAINS]->(prod:Product)-[:INCLUDED_IN]->(prg:Program)\nWITH DISTINCT prg, buyer, prod\nWITH prg, collect(DISTINCT buyer.name) AS via_suppliers, collect(DISTINCT prod.name) AS skus\nRETURN prg.program_id AS id,\n       prg.name + ' (' + prg.customer + ')' AS title,\n       '$' + toString(prg.revenue_at_risk_usd / 1000000) + 'M revenue at risk \xB7 $' + toString(prg.otd_penalty_per_day_usd / 1000) + 'k/day OTD penalty \xB7 via ' + reduce(acc = '', n IN via_suppliers | (CASE WHEN acc = '' THEN n ELSE acc + ' + ' + n END)) + ' \xB7 SKUs: ' + reduce(acc = '', n IN skus | (CASE WHEN acc = '' THEN n ELSE acc + ', ' + n END)) AS summary\nORDER BY prg.revenue_at_risk_usd DESC\nLIMIT $max_results"
+      http_path_template: null
+      confidence: 1.0
+      suggested_by: operator
+      confirmed_by: null
+      confirmed_at: null
+      notes: "For a Supplier in distress, walk SOURCES_FROM upstream to
+        every tier-1 buyer, then PLACED -> CONTAINS -> INCLUDED_IN to
+        surface every Program at risk. One row per affected Program with
+        the business stake (revenue + OTD penalty) named on the audit
+        trail before any decision is made."
     relations: {}

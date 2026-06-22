@@ -21,14 +21,13 @@ sources:
   path: backend/data/shipments.csv
   id_field: shipment_id
   title_field: shipment_id
-  summary_template: "{origin} → {destination} \xB7 {pallets} pallets \xB7 cust\
+  summary_template: "{origin} \u2192 {destination} \xB7 {pallets} pallets \xB7 cust\
     \ order #{customer_order} \xB7 {mode} \xB7 vessel {vessel} (IMO {imo}) \xB7 pos\
-    \ {current_position} \xB7 scheduled {scheduled_eta} \xB7 ETA {eta} (variance\
-    \ {variance_days}d) \xB7 port {port_code} congestion {port_congestion} (berth\
-    \ wait {berth_wait_days}d)"
+    \ {current_position} \xB7 scheduled {scheduled_eta} \xB7 ETA {eta} (variance {variance_days}d)\
+    \ \xB7 port {port_code} congestion {port_congestion} (berth wait {berth_wait_days}d)"
   default: true
-  description: Synthetic shipment master + live-tracking snapshot (~3,000 rows).
-    Backs logistics.Shipment.
+  description: Synthetic shipment master + live-tracking snapshot (~3,000 rows). Backs
+    logistics.Shipment.
 - id: shipment_performance_csv
   kind: csv
   path: backend/data/shipment_performance.csv
@@ -48,14 +47,13 @@ sources:
     \ on-time 90d {on_time_rate_90d} \xB7 damage 90d {damage_rate_90d} \xB7 contract\
     \ {contract_id} renews {contract_renewal_date}"
   default: true
-  description: Hand-curated freight-carrier master (25 rows, real SCACs). Backs
-    logistics.Carrier.
+  description: Hand-curated freight-carrier master (25 rows, real SCACs). Backs logistics.Carrier.
 - id: lanes_csv
   kind: csv
   path: backend/data/lanes.csv
   id_field: lane_id
   title_field: lane_id
-  summary_template: "{origin_port} → {destination_port} ({mode}) \xB7 target\
+  summary_template: "{origin_port} \u2192 {destination_port} ({mode}) \xB7 target\
     \ {transit_days_target}d \xB7 p50 {transit_days_p50}d \xB7 p95 {transit_days_p95}d\
     \ \xB7 capacity {weekly_capacity}/wk \xB7 current delay +{current_delay_days}d\
     \ \xB7 congestion {congestion_index}"
@@ -92,26 +90,25 @@ sources:
     \ {sla_tier} \xB7 promised {promised_delivery_date} \xB7 shipment {shipment_id}\
     \ \xB7 penalty ${penalty_per_day_usd}/day"
   default: true
-  description: Customer orders tied to shipments (~750 rows). Drives SLA-risk
-    scenarios via penalty_per_day_usd. Backs logistics.CustomerOrder.
+  description: Customer orders tied to shipments (~750 rows). Drives SLA-risk scenarios
+    via penalty_per_day_usd. Backs logistics.CustomerOrder.
 - id: freight_rates_csv
   kind: csv
   path: backend/data/freight_rates.csv
   id_field: rate_id
   title_field: rate_id
   summary_template: "{lane_id} \xB7 {carrier_id} \xB7 {mode}/{container_type} \xB7\
-    \ {contract_or_spot} \xB7 ${total_rate_usd} (base ${base_rate_usd} +\
-    \ fuel ${fuel_surcharge_usd}) \xB7 valid {valid_from}→{valid_to}"
+    \ {contract_or_spot} \xB7 ${total_rate_usd} (base ${base_rate_usd} + fuel ${fuel_surcharge_usd})\
+    \ \xB7 valid {valid_from}\u2192{valid_to}"
   default: true
-  description: Current rate cards per lane \xD7 carrier \xD7 container type
-    (~60 rows). Mix of contract + spot rates. Backs logistics.FreightRate.
+  description: Current rate cards per lane \xD7 carrier \xD7 container type (~60 rows).
+    Mix of contract + spot rates. Backs logistics.FreightRate.
 - id: logistics_sqlite
   kind: sqlite
   path: backend/data/logistics.sqlite
   default: true
-  description: 'Logistics write target: bookings table (Phase 2) +
-    demurrage_charges (Phase 3). Re-tender + waive actions hit this DB. Seeded
-    by backend/data/seed_logistics.py.'
+  description: 'Logistics write target: bookings table (Phase 2) + demurrage_charges
+    (Phase 3). Re-tender + waive actions hit this DB. Seeded by backend/data/seed_logistics.py.'
 - id: governance_sqlite
   kind: sqlite
   path: backend/data/governance.sqlite
@@ -143,7 +140,9 @@ sources:
   description: 'Postgres governance store (local docker-compose.postgres.yaml): same
     prior_cases schema as the SQLite store, swappable connector. SQL lives in the
     mapping doc when bound.'
-# neo4j_default is auto-registered from NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD
-# env vars (see backend/main.py). Leaving it out of sources.yaml lets the same
-# scenarios target local Docker Neo4j (dev) or the Fly-internal Neo4j (prod)
-# without committing the URI / password to source.
+- id: neo4j_default
+  kind: neo4j
+  uri: bolt://localhost:7687
+  password: YcV7wquQWdFLKZDRwck3CqlbD0W_c1fAV0U2cpMl578
+  user: neo4j
+  description: Auto-registered from NEO4J_* env vars (bolt://localhost:7687)

@@ -21,6 +21,8 @@ from tcs_hitl_context import (
 )
 
 from . import policy
+from .case_record import CaseRevision
+from .risk_band import evaluate_risk_band
 from .sse import CaseEvent
 from .state import AppState, CaseRecord
 
@@ -58,8 +60,10 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
 
     await asyncio.sleep(DELAY_BETWEEN_STAGES)
 
-    # Stage 2 — proposal binding
-    action = state.agent_runtime.draft_action(scenario)
+    # Stage 2 — proposal binding. Baseline replays (case.baseline=True)
+    # are signalled to the binder via the __baseline__ payload key so the
+    # review-stage binder can short-circuit its ontology queries.
+    action = state.agent_runtime.draft_action(scenario, baseline=case.baseline)
     # Phase 3.E enhancement: when a chip-style ontology lookup scenario
     # routes a prompt that mentions a filter (e.g. *"show me Dutch
     # suppliers"* hits SC-ONTO-supply_chain-Supplier), pre-parse the
@@ -103,9 +107,49 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
         await _finalise_no_op(state, case, scenario, no_op)
         return
 
-    # Branch — autonomous vs HITL
+    # W4 / Beat 5 — dynamic authority recalculation. Before the
+    # autonomy branch picks a path, evaluate the scenario's optional
+    # risk-band block against the drafted action's payload. If a band
+    # matches with escalate_to=review_ready, override autonomy: emit an
+    # `authority.recalculated` lineage event and fall through to the
+    # HITL path below. Non-autonomous scenarios still see the lineage
+    # event when a band matches, but the path is unchanged (already HITL).
+    risk_match = evaluate_risk_band(scenario, action.payload)
+    is_autonomous = bool(scenario.get("autonomous"))
+    will_escalate = (
+        risk_match is not None
+        and risk_match.get("escalate_to") == "review_ready"
+        and is_autonomous
+    )
+    if risk_match is not None:
+        case.risk_band = {
+            "band": risk_match["band"],
+            "matched_field": risk_match.get("matched_field"),
+            "matched_value": risk_match.get("matched_value"),
+            "threshold": risk_match.get("threshold"),
+            "op": risk_match.get("op"),
+            "escalated": will_escalate,
+            "reason": risk_match.get("reason"),
+        }
+    if will_escalate:
+        ev = make_event(
+            stage=Stage.PROPOSAL,
+            actor="agent-authority-router",
+            action="authority.recalculated",
+            detail=(
+                f"Autonomy demoted · band: {risk_match['band']} · "
+                f"{risk_match.get('matched_field')}={risk_match.get('matched_value')} "
+                f"{risk_match.get('op')} {risk_match.get('threshold')} · "
+                f"escalated from auto_execute to review_ready"
+            ),
+        )
+        ctx.append_lineage(ev)
+        state.lineage.record(ctx.case_id, ev)
+
+    # Branch — autonomous vs HITL. If risk_band escalated above, treat
+    # this case as HITL even though the scenario is declared autonomous.
     decision = policy.evaluate(scenario)
-    if decision.mode == "auto_approve":
+    if decision.mode == "auto_approve" and not will_escalate:
         await asyncio.sleep(DELAY_BEFORE_AUTO_APPROVE)
         await _finalise_autonomous(state, case, decision)
         return
@@ -152,6 +196,10 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
     # the audit trail both surface it.
     if rd.decision.value == "approve":
         _maybe_run_executor(state, case, scenario)
+
+    # W1 / Beat 3 — seal v1 of the revision history before persisting so
+    # the Envelope's revision selector always has at least one entry.
+    seal_initial_revision(case)
 
     state.cases.save(case)
     # Phase 2 — mirror the reviewer's load-bearing-fact picks into the
@@ -200,6 +248,7 @@ async def _finalise_autonomous(state: AppState, case: CaseRecord, pd: policy.Pol
 
     # Autonomous scenarios that wire an `_executor` block run here too.
     _maybe_run_executor(state, case, scenario)
+    seal_initial_revision(case)
 
     state.cases.save(case)
 
@@ -352,6 +401,68 @@ def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> No
         state.lineage.record(case.ctx.case_id, ev)
 
 
+# =============================================================================
+# W1 / Beat 3 — case revisioning helpers
+# =============================================================================
+def snapshot_current_stages(case: CaseRecord) -> list[dict]:
+    """Serialize the case's current ctx.stages into JSON-ready dicts.
+
+    Shape mirrors what `/api/cases/{id}` already produces for `stages`, so
+    the frontend can render any revision's snapshot using the same Envelope
+    code path it uses for the live state.
+    """
+    if case.ctx is None:
+        return []
+    out: list[dict] = []
+    for stage, sc in case.ctx.stages.items():
+        out.append({
+            "stage": stage.value,
+            "binder": sc.bound_by,
+            "facts": [
+                {
+                    "source": f.ref.source,
+                    "ontology_type": f.ref.ontology_type,
+                    "id": f.ref.id,
+                    "uri": f.ref.uri,
+                    "title": f.payload.get("title"),
+                    "summary": f.payload.get("summary"),
+                    "via_ontology": f.payload.get("via_ontology"),
+                    "via_source_binding": f.payload.get("via_source_binding"),
+                    "query_index": f.payload.get("query_index"),
+                    "hops": f.payload.get("hops"),
+                    "tier": f.payload.get("tier"),
+                    "status": f.payload.get("status"),
+                    "via_path": f.payload.get("via_path"),
+                    "via_node_id": f.payload.get("via_node_id"),
+                }
+                for f in sc.facts
+            ],
+        })
+    return out
+
+
+def seal_initial_revision(case: CaseRecord) -> None:
+    """Seal v1 once the initial decision has landed.
+
+    Idempotent — only seals when revisions[] is empty. Called by every
+    completion path (HITL decision, autonomous, no-op) so any case that
+    finishes has at least one revision to point at."""
+    if case.revisions:
+        return
+    from datetime import datetime, timezone
+    case.revisions.append(
+        CaseRevision(
+            revision_no=1,
+            stages_snapshot=snapshot_current_stages(case),
+            decision=case.decision_kind,
+            triggered_by="initial",
+            trigger_label="Initial decision",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+    )
+    case.current_revision = 1
+
+
 def _closing_message_for(scenario: dict, case: CaseRecord) -> Optional[str]:
     template = (
         scenario.get("closing_messages", {})
@@ -450,6 +561,7 @@ async def _finalise_no_op(
         "detail": no_op["message"],
         "args": no_op["args"],
     }
+    seal_initial_revision(case)
     state.cases.save(case)
 
     await state.bus.emit(

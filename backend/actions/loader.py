@@ -50,26 +50,38 @@ def _coerce_to_dict(content: Union[str, bytes, dict]) -> dict[str, Any]:
     return data
 
 
+def _build_executor(cfg: dict[str, Any], field_name: str):
+    """Manual Union dispatch for one Executor block. Used for both the
+    forward `executor` and the optional `compensation` executor."""
+    kind = cfg.get("kind")
+    if kind == "sql_update":
+        return SqlUpdateExecutor.model_validate(cfg)
+    if kind == "http_request":
+        return HttpRequestExecutor.model_validate(cfg)
+    raise ActionError(
+        f"unknown {field_name} kind {kind!r} — supported: sql_update, http_request"
+    )
+
+
 def parse_action(content: Union[str, bytes, dict]) -> Action:
     """Parse + validate + dispatch the executor variant.
 
     Pydantic's discriminated-union support varies by version, so we do
-    the dispatch manually based on `executor.kind`. Cleaner than
-    forcing the operator to spell out the union in YAML."""
+    the dispatch manually based on `{executor,compensation}.kind`."""
     data = _coerce_to_dict(content)
     exec_cfg = data.get("executor")
     if not isinstance(exec_cfg, dict):
         raise ActionError("action requires an `executor:` mapping")
-    kind = exec_cfg.get("kind")
     try:
-        if kind == "sql_update":
-            data = {**data, "executor": SqlUpdateExecutor.model_validate(exec_cfg)}
-        elif kind == "http_request":
-            data = {**data, "executor": HttpRequestExecutor.model_validate(exec_cfg)}
-        else:
-            raise ActionError(
-                f"unknown executor kind {kind!r} — supported: sql_update, http_request"
-            )
+        data = {**data, "executor": _build_executor(exec_cfg, "executor")}
+        # Optional compensation block (for compensatable actions). Same
+        # Executor union, same dispatch rules. Validated even when
+        # reversibility_class != 'compensatable' so a malformed
+        # compensation block fails loudly at registry-load time rather
+        # than at the first reviewer click.
+        comp_cfg = data.get("compensation")
+        if isinstance(comp_cfg, dict):
+            data = {**data, "compensation": _build_executor(comp_cfg, "compensation")}
         return Action.model_validate(data)
     except ValidationError as exc:
         raise ActionError(f"invalid action: {exc}") from exc

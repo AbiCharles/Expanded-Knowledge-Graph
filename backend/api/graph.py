@@ -57,10 +57,18 @@ class SubgraphResponse(BaseModel):
 # Cypher queries — each returns flat tabular rows the existing
 # run_cypher() can serialize without losing data.
 # =============================================================================
-# 1) Anchor + its 1-hop corporate network (Supplier + HoldingCompany neighbours).
+# 1) Anchor + its 1-hop corporate / sourcing network (Supplier + HoldingCompany
+#    + immediate buyers/sellers), PLUS sibling-via-shared-holding suppliers
+#    (so AlternativeSupplier candidates from the case render in the graph),
+#    PLUS the program-impact path (anchor ← SOURCES_FROM ← tier-1 → PO →
+#    Product → Program) so AT-RISK PROGRAM nodes show too.
+#
+# The three UNION branches all RETURN the same 8-column shape, which the
+# caller unwinds into nodes/edges via _row_cell. Cypher UNION requires
+# identical column names in each branch.
 _NETWORK_CYPHER = """
 MATCH (s:Supplier {supplier_id: $supplier_id})
-OPTIONAL MATCH (s)-[r:PARENT_OF|JOINT_VENTURE_WITH|CONTROLLED_BY]-(neighbor)
+OPTIONAL MATCH (s)-[r:PARENT_OF|JOINT_VENTURE_WITH|CONTROLLED_BY|SOURCES_FROM]-(neighbor)
 RETURN coalesce(s.supplier_id, '?') AS src_id,
        s.name AS src_name,
        labels(s)[0] AS src_type,
@@ -69,6 +77,41 @@ RETURN coalesce(s.supplier_id, '?') AS src_id,
        coalesce(neighbor.supplier_id, neighbor.holding_id, '?') AS dst_id,
        neighbor.name AS dst_name,
        labels(neighbor)[0] AS dst_type
+
+UNION
+
+// Siblings via a shared HoldingCompany — surfaces AlternativeSupplier
+// candidates (the holding sits between the anchor and the sibling).
+MATCH (s:Supplier {supplier_id: $supplier_id})-[:CONTROLLED_BY]->(h:HoldingCompany)
+MATCH (h)<-[r:CONTROLLED_BY]-(sibling:Supplier)
+WHERE sibling <> s
+RETURN h.holding_id AS src_id,
+       h.name AS src_name,
+       'HoldingCompany' AS src_type,
+       type(r) AS rel,
+       false AS rel_outgoing,
+       sibling.supplier_id AS dst_id,
+       sibling.name AS dst_name,
+       labels(sibling)[0] AS dst_type
+
+UNION
+
+// Program-impact path edges — unwound to one row per edge, same shape as
+// the corporate network. Lets the graph render Mirage/Viper/Comet (and the
+// SKUs they consume) next to the tier-1 buyers that channel the exposure.
+MATCH (s:Supplier {supplier_id: $supplier_id})
+MATCH path = (s)<-[:SOURCES_FROM]-(buyer:Supplier)-[:PLACED]->(po:PurchaseOrder)-[:CONTAINS]->(prod:Product)-[:INCLUDED_IN]->(prg:Program)
+WITH path, nodes(path) AS ns, relationships(path) AS rs
+UNWIND range(0, size(rs) - 1) AS i
+WITH ns[i] AS src, rs[i] AS r, ns[i+1] AS dst
+RETURN coalesce(src.supplier_id, src.po_id, src.product_id, src.program_id, '?') AS src_id,
+       coalesce(src.name, '') AS src_name,
+       labels(src)[0] AS src_type,
+       type(r) AS rel,
+       startNode(r) = src AS rel_outgoing,
+       coalesce(dst.supplier_id, dst.po_id, dst.product_id, dst.program_id, '?') AS dst_id,
+       coalesce(dst.name, '') AS dst_name,
+       labels(dst)[0] AS dst_type
 """
 
 # 2) All shortest paths from the supplier to a SanctionedNetworkEntity, up to

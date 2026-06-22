@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CaseFull, FactRow, LineageEvent, StagePayload } from "../types";
+import { ActionSummary, compensateCase, listActions } from "../api";
 
 type StripTab = "audit";
 
@@ -12,7 +13,13 @@ const TAB_LABELS: Record<StripTab, string> = {
 // 360px showing that tab's body. Clicking the active tab again collapses
 // it back to the strip. Active tab + open state are persisted to
 // localStorage so a refresh keeps the reviewer's chosen view.
-export function LineagePanel({ active }: { active: CaseFull | null }) {
+export function LineagePanel({
+  active,
+  onRefresh,
+}: {
+  active: CaseFull | null;
+  onRefresh?: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<StripTab | null>(() => {
     if (typeof window === "undefined") return null;
     const open = localStorage.getItem("kf-lineage-open") === "1";
@@ -20,6 +27,22 @@ export function LineagePanel({ active }: { active: CaseFull | null }) {
     const tab = localStorage.getItem("kf-lineage-tab") as StripTab | null;
     return tab && TAB_LABELS[tab] ? tab : "audit";
   });
+
+  // One-shot fetch of the actions registry so we can look up
+  // reversibility_class for any action that fired on this case. Used to
+  // decide whether the "Compensate" button should appear next to an
+  // executed event. Cached in component state — refetched only on mount.
+  const [actionMeta, setActionMeta] = useState<Record<string, ActionSummary>>({});
+  useEffect(() => {
+    let cancelled = false;
+    listActions().then((rows) => {
+      if (cancelled) return;
+      const m: Record<string, ActionSummary> = {};
+      for (const r of rows) m[r.id] = r;
+      setActionMeta(m);
+    }).catch(() => { /* swallow — Compensate just won't appear */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const onTabClick = (tab: StripTab) => {
     const next = activeTab === tab ? null : tab;
@@ -53,7 +76,13 @@ export function LineagePanel({ active }: { active: CaseFull | null }) {
       </nav>
       {activeTab && (
         <div className="lineage-body" role="region" aria-label={TAB_LABELS[activeTab]}>
-          {activeTab === "audit" && <AuditByStageView active={active} />}
+          {activeTab === "audit" && (
+            <AuditByStageView
+              active={active}
+              actionMeta={actionMeta}
+              onRefresh={onRefresh}
+            />
+          )}
         </div>
       )}
     </aside>
@@ -65,8 +94,65 @@ export function LineagePanel({ active }: { active: CaseFull | null }) {
 // actor that ran it, the facts collected at that stage, and an expandable
 // list of raw lineage events.
 // -----------------------------------------------------------------------------
-function AuditByStageView({ active }: { active: CaseFull | null }) {
+function AuditByStageView({
+  active,
+  actionMeta,
+  onRefresh,
+}: {
+  active: CaseFull | null;
+  actionMeta: Record<string, ActionSummary>;
+  onRefresh?: () => void;
+}) {
   const grouped = useMemo(() => groupByStage(active), [active]);
+  // Pre-compute the compensation eligibility derived from the case +
+  // actions registry. Shared by every StageBlock so we don't re-run the
+  // logic per stage. The Compensate button appears on the executed
+  // event when ALL of the following hold:
+  //   • the case carries an `execution_result` with `ok=true`
+  //   • the action's reversibility_class is "compensatable"
+  //   • no `action.compensated` event has been emitted yet
+  // After a successful compensate, the lineage gains an
+  // `action.compensated` event which suppresses the button (one-shot).
+  const compensation = useMemo((): {
+    eligible: boolean;
+    actionId: string | null;
+    isCompensated: boolean;
+    compensatedEvent?: LineageEvent;
+    executedEvent?: LineageEvent;
+  } => {
+    if (!active) return { eligible: false, actionId: null, isCompensated: false };
+    const er = active.execution_result;
+    if (!er || !er.ok) return { eligible: false, actionId: null, isCompensated: false };
+    const actionId = er.action_id;
+    const meta = actionMeta[actionId];
+    const compensatedEvent = active.lineage.find(
+      (ev) =>
+        ev.action === "action.compensated" ||
+        ev.action === "action.compensate_failed",
+    );
+    const executedEvent = active.lineage.find((ev) => ev.action === "executed");
+    return {
+      eligible: !compensatedEvent && meta?.reversibility_class === "compensatable",
+      actionId,
+      isCompensated: !!compensatedEvent,
+      compensatedEvent,
+      executedEvent,
+    };
+  }, [active, actionMeta]);
+
+  const [compensating, setCompensating] = useState(false);
+  const handleCompensate = async () => {
+    if (!active?.case_id || compensating) return;
+    setCompensating(true);
+    try {
+      await compensateCase(active.case_id);
+      onRefresh?.();
+    } catch (err) {
+      console.error("Compensate failed:", err);
+    } finally {
+      setCompensating(false);
+    }
+  };
 
   if (!active) {
     return (
@@ -98,7 +184,14 @@ function AuditByStageView({ active }: { active: CaseFull | null }) {
       <div className="lineage-feed">
         {grouped.length === 0 && <div className="lineage-empty">No stages yet.</div>}
         {grouped.map((g, i) => (
-          <StageBlock key={g.stage} stage={g} index={i + 1} />
+          <StageBlock
+            key={g.stage}
+            stage={g}
+            index={i + 1}
+            compensation={compensation}
+            onCompensate={handleCompensate}
+            compensating={compensating}
+          />
         ))}
       </div>
     </>
@@ -112,7 +205,25 @@ interface GroupedStage {
   actor: string | null;
 }
 
-function StageBlock({ stage, index }: { stage: GroupedStage; index: number }) {
+function StageBlock({
+  stage,
+  index,
+  compensation,
+  onCompensate,
+  compensating,
+}: {
+  stage: GroupedStage;
+  index: number;
+  compensation: {
+    eligible: boolean;
+    actionId: string | null;
+    isCompensated: boolean;
+    compensatedEvent?: LineageEvent;
+    executedEvent?: LineageEvent;
+  };
+  onCompensate: () => void;
+  compensating: boolean;
+}) {
   return (
     <section className="audit-stage">
       <header className="audit-stage-head">
@@ -141,23 +252,74 @@ function StageBlock({ stage, index }: { stage: GroupedStage; index: number }) {
       </div>
 
       {stage.events.length > 0 && (
-        <details className="audit-stage-events">
+        <details className="audit-stage-events" open>
           <summary className="audit-section-label">
             Raw events ({stage.events.length})
-            <span className="audit-section-hint">click to expand</span>
+            <span className="audit-section-hint">click to collapse</span>
           </summary>
           <div className="audit-event-list">
-            {stage.events.map((ev) => (
-              <div className="audit-event" key={ev.sequence}>
-                <div className="audit-event-meta">
-                  <span className="seq">#{String(ev.sequence).padStart(2, "0")}</span>
-                  <span>{ev.action}</span>
-                  <span>·</span>
-                  <span>{ev.actor}</span>
+            {stage.events.map((ev) => {
+              const isExecuted = ev.action === "executed";
+              const isCompensated = ev.action === "action.compensated";
+              const isCompensateFailed = ev.action === "action.compensate_failed";
+              const isAuthorityRecalc = ev.action === "authority.recalculated";
+              return (
+                <div
+                  className={
+                    `audit-event` +
+                    (isExecuted ? " audit-event-executed" : "") +
+                    (isCompensated ? " audit-event-compensated" : "") +
+                    (isCompensateFailed ? " audit-event-compensate-failed" : "") +
+                    (isAuthorityRecalc ? " audit-event-authority-recalculated" : "")
+                  }
+                  key={ev.sequence}
+                >
+                  <div className="audit-event-meta">
+                    <span className="seq">#{String(ev.sequence).padStart(2, "0")}</span>
+                    <span className="audit-event-action-name">{ev.action}</span>
+                    <span>·</span>
+                    <span>{ev.actor}</span>
+                    {isCompensated &&
+                      compensation.executedEvent &&
+                      formatDelta(
+                        compensation.executedEvent.timestamp,
+                        ev.timestamp,
+                      ) && (
+                        <span className="audit-event-delta">
+                          Compensated {formatDelta(
+                            compensation.executedEvent.timestamp,
+                            ev.timestamp,
+                          )}{" "}later
+                        </span>
+                      )}
+                  </div>
+                  {ev.detail && <div className="audit-event-detail">{ev.detail}</div>}
+                  {/* Compensate button — only on the original executed
+                      event when the action is compensatable and hasn't
+                      been compensated yet. */}
+                  {isExecuted &&
+                    compensation.eligible &&
+                    !compensation.isCompensated && (
+                      <div className="audit-event-actions">
+                        <button
+                          type="button"
+                          className="audit-event-compensate-btn"
+                          onClick={onCompensate}
+                          disabled={compensating}
+                          title={
+                            `Fire the compensation executor for ` +
+                            `${compensation.actionId ?? "this action"} — ` +
+                            `records an action.compensated event on the ` +
+                            `audit trail.`
+                          }
+                        >
+                          {compensating ? "Compensating…" : "Compensate"}
+                        </button>
+                      </div>
+                    )}
                 </div>
-                {ev.detail && <div className="audit-event-detail">{ev.detail}</div>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </details>
       )}
@@ -168,6 +330,27 @@ function StageBlock({ stage, index }: { stage: GroupedStage; index: number }) {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+// Render a short delta between two ISO timestamps, e.g. "0:34", "2 min",
+// "1h 12m". Used on the audit.compensated event row to show how long
+// after firing the action was rolled back. Returns null on parse failure
+// so the caller can omit the badge.
+function formatDelta(fromIso: string, toIso: string): string | null {
+  try {
+    const ms = new Date(toIso).getTime() - new Date(fromIso).getTime();
+    if (!Number.isFinite(ms) || ms < 0) return null;
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    if (min < 60) return `${min}m ${sec.toString().padStart(2, "0")}s`;
+    const hr = Math.floor(min / 60);
+    const restMin = min % 60;
+    return `${hr}h ${restMin.toString().padStart(2, "0")}m`;
+  } catch {
+    return null;
+  }
+}
+
 function groupByStage(active: CaseFull | null): GroupedStage[] {
   if (!active) return [];
   // Index lineage events by stage so we can attach them when we walk the

@@ -13,6 +13,7 @@ interface Props {
   onCancel: () => void;
   onSelectCase: (caseId: string | null) => void;
   onReplay: (caseId: string, decision: DecisionKind) => void;
+  onBaselineReplay: (caseId: string) => void;
   onCompare: (caseId: string) => void;
   onOpenReview: () => void;
   onPickCandidate: (scenarioId: string) => void;
@@ -33,6 +34,7 @@ export function Console({
   onCancel,
   onSelectCase,
   onReplay,
+  onBaselineReplay,
   onCompare,
   onOpenReview,
   onPickCandidate,
@@ -123,12 +125,42 @@ export function Console({
           }}
           onToggleReplay={(id) => setReplayOpen(replayOpen === id ? null : id)}
           onReplay={(id, d) => onReplay(id, d)}
+          onBaselineReplay={(id) => onBaselineReplay(id)}
           onCompare={(id) => onCompare(id)}
           onDelete={onDeleteCase}
           onClearCompleted={onClearCompleted}
         />
       )}
       {showWelcome && <WelcomeState historyCount={historyCount} />}
+
+      {/* Pinned row — demo-headline scenarios that should always be one click
+          away without expanding the full catalogue. Renders ABOVE the
+          collapsible Suggestions section; collapses cleanly when no scenario
+          has `pinned: true` so existing demos render unchanged. */}
+      {scenarios.some((sc) => sc.pinned) && (
+        <div className="pinned-row">
+          <div className="pinned-label">Pinned</div>
+          <div className="pinned-chips">
+            {scenarios
+              .filter((sc) => sc.pinned)
+              .map((sc) => (
+                <button
+                  key={sc.id}
+                  className="chip chip-pinned"
+                  disabled={composerLocked}
+                  onClick={() => onSendPrompt(sc.suggested_prompt)}
+                  title={chipTooltip(sc)}
+                >
+                  <span className="chip-pin-marker" aria-hidden="true">★</span>
+                  {sc.suggested_prompt}
+                  {sc.run_count && sc.run_count > 0 ? (
+                    <span className="chip-stat">· {sc.run_count}</span>
+                  ) : null}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
 
       <details className="suggested-row">
         <summary className="suggested-summary">
@@ -214,6 +246,7 @@ function ThreadList({
   onSelect,
   onToggleReplay,
   onReplay,
+  onBaselineReplay,
   onCompare,
   onDelete,
   onClearCompleted,
@@ -223,6 +256,10 @@ function ThreadList({
   onSelect: (id: string) => void;
   onToggleReplay: (id: string) => void;
   onReplay: (id: string, d: DecisionKind) => void;
+  // W5 / Beat 2 — kicks off a sibling case with review-stage queries
+  // stripped, so the user can compare what a "supervisor without the
+  // governed knowledge layer" would have surfaced.
+  onBaselineReplay: (id: string) => void;
   onCompare: (id: string) => void;
   onDelete: (id: string) => void;
   onClearCompleted: () => void;
@@ -298,14 +335,6 @@ function ThreadList({
               : status === "in-progress"
               ? "in progress"
               : status || "";
-          const alternatives = (["approve", "reject", "request_more_info"] as DecisionKind[]).filter(
-            (d) => d !== c.decision_kind
-          );
-          const altLabels: Record<DecisionKind, string> = {
-            approve: "Approve",
-            reject: "Reject",
-            request_more_info: "More info",
-          };
           const isReplay = !!c.replay_decision;
           const hasSibling = (c.sibling_case_ids || []).length > 0;
           const hitlCompleted = completed && c.decision_kind && c.decision_kind !== "auto_execute";
@@ -332,44 +361,17 @@ function ThreadList({
               </div>
               <div className="thread-prompt">{c.prompt}</div>
 
-              {hitlCompleted && (
-                <>
-                  <div
-                    className="thread-replay-link"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleReplay(c.case_id);
-                    }}
-                  >
-                    ↻ Replay with different decision
-                  </div>
-                  {replayOpenFor === c.case_id && (
-                    <div className="thread-replay-options">
-                      {alternatives.slice(0, 2).map((d) => (
-                        <button
-                          key={d}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReplay(c.case_id, d);
-                          }}
-                        >
-                          {altLabels[d]}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {hasSibling && (
-                    <div
-                      className="thread-compare-link"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCompare(c.case_id);
-                      }}
-                    >
-                      ⇄ Compare side-by-side
-                    </div>
-                  )}
-                </>
+              {/* Replay / Compare controls moved to the CounterfactualCard
+                  in the main case view (Envelope) — see
+                  frontend/src/components/CounterfactualCard.tsx. The
+                  sidebar now only carries a small "siblings" hint so the
+                  user knows a case has alternative runs without exposing
+                  the controls in the wrong panel. */}
+              {hitlCompleted && hasSibling && (
+                <div className="thread-sibling-hint">
+                  ⇄ {(c.sibling_case_ids || []).length} sibling
+                  {(c.sibling_case_ids || []).length === 1 ? "" : "s"}
+                </div>
               )}
             </div>
           );

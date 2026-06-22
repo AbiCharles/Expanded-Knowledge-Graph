@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { CaseFull, MatchedPromotedPattern, StagePayload } from "../types";
+import { useEffect, useMemo, useState } from "react";
+import { CaseFull, DecisionKind, MatchedPromotedPattern, StagePayload } from "../types";
+import { ActionLifecycleCard } from "./ActionLifecycleCard";
+import { CounterfactualCard } from "./CounterfactualCard";
 import { EvidenceMap, GraphPanel } from "./GraphViz";
 
 // Plain-English labels for the operator. Raw stage names (agent_intake /
@@ -10,9 +12,133 @@ const STAGE_LABEL: Record<string, string> = {
   review: "For your decision",
 };
 
-export function Envelope({ active }: { active: CaseFull | null }) {
-  const stages = active?.stages ?? [];
+export function Envelope({
+  active,
+  onRefresh,
+  onReplay,
+  onBaselineReplay,
+  onCompare,
+  baselineRunningForActive,
+}: {
+  active: CaseFull | null;
+  onRefresh?: () => void;
+  onReplay?: (caseId: string, decision: DecisionKind) => void;
+  onBaselineReplay?: (caseId: string) => void;
+  onCompare?: (caseId: string) => void;
+  baselineRunningForActive?: boolean;
+}) {
+  // W1 / Beat 3 — revision selector. Default to viewing the LATEST
+  // revision so users see the freshest decision; users can toggle back
+  // to v1 to see the original. When the case has no revisions (still
+  // in progress), fall back to `active.stages` like before.
+  const revisions = active?.revisions ?? [];
+  const latestRevisionNo =
+    revisions.length > 0
+      ? revisions[revisions.length - 1].revision_no
+      : (active?.current_revision ?? 1);
+  const [selectedRevisionNo, setSelectedRevisionNo] = useState<number | null>(null);
+  // Reset to "latest" whenever the case changes or a new revision lands.
+  useEffect(() => {
+    setSelectedRevisionNo(null);
+  }, [active?.case_id, revisions.length]);
+  // Counter signal that, when bumped, makes GraphPanel auto-open its
+  // modal pre-selected to the Decision-pathways tab. Bumped by the OK
+  // button in the post-revision modal that CounterfactualCard raises.
+  const [openPathwaysSignal, setOpenPathwaysSignal] = useState(0);
+  const effectiveRevisionNo = selectedRevisionNo ?? latestRevisionNo;
+  const selectedRevision =
+    revisions.find((r) => r.revision_no === effectiveRevisionNo) ?? null;
+
+  // Compute which fact ids are NEW in the selected revision (relative to
+  // the prior revision) so the FactCard can render a green gutter.
+  const newFactKeys = useMemo(() => {
+    if (!selectedRevision) return new Set<string>();
+    const idx = revisions.findIndex(
+      (r) => r.revision_no === selectedRevision.revision_no,
+    );
+    if (idx <= 0) return new Set<string>();
+    const prior = revisions[idx - 1];
+    const priorKeys = new Set(
+      (prior.stages_snapshot ?? []).flatMap((s) =>
+        s.facts.map((f) => `${f.source}|${f.ontology_type}|${f.id}`),
+      ),
+    );
+    const out = new Set<string>();
+    for (const stage of selectedRevision.stages_snapshot ?? []) {
+      for (const f of stage.facts) {
+        const k = `${f.source}|${f.ontology_type}|${f.id}`;
+        if (!priorKeys.has(k)) out.add(k);
+      }
+    }
+    return out;
+  }, [revisions, selectedRevision]);
+
+  // If a revision is selected, render its snapshot; otherwise the live
+  // stages from the case (CaseFull.stages). Fall back to live stages
+  // when the snapshot is empty (legacy cases where v1 was lazy-sealed
+  // with ctx=None) so the Envelope + graph + evidence map don't all
+  // disappear together.
+  const snapshotStages = selectedRevision
+    ? (selectedRevision.stages_snapshot as StagePayload[])
+    : null;
+  const stages =
+    snapshotStages && snapshotStages.length > 0
+      ? snapshotStages
+      : (active?.stages ?? []);
   const factCount = stages.reduce((acc, s) => acc + s.facts.length, 0);
+  // Build an `effectiveActive` that mirrors `active` but with the
+  // current revision's stages substituted in. Lets the GraphPanel,
+  // EvidenceMap, and decision-pathway computations all "see" the new
+  // evidence injected by /revise (Beat 3) instead of always reading
+  // from the live state. Flipping the revision selector re-renders the
+  // graph + pathways against the chosen revision's facts.
+  //
+  // Defensive fallbacks:
+  //   - empty snapshot → keep live stages so cards don't vanish.
+  //   - snapshot missing the failing-Supplier anchor → merge the live
+  //     stages in front so the graph still has its anchor (the post-
+  //     revision OK button must always land on a working graph; a null
+  //     anchor would unmount GraphPanel and read as a blank Envelope).
+  const effectiveActive = useMemo<CaseFull | null>(() => {
+    if (!active) return null;
+    if (!selectedRevision) return active;
+    const snap = stages && stages.length > 0 ? stages : (active.stages ?? []);
+    const hasFailingSupplier = snap.some((s) =>
+      s.facts?.some(
+        (f) =>
+          f.ontology_type === "Supplier" &&
+          typeof f.status === "string" &&
+          f.status.startsWith("chapter_11"),
+      ),
+    );
+    if (hasFailingSupplier) {
+      return { ...active, stages: snap };
+    }
+    // Snapshot doesn't carry the anchor. Merge: take the live stages
+    // (which DO have the anchor) and append any facts from the snapshot
+    // that aren't already there, keyed by (source, ontology_type, id).
+    // If live stages are ALSO empty (legacy reload with ctx=None), the
+    // best we can do is keep the snapshot — at least the new fact shows.
+    const liveStages = active.stages ?? [];
+    if (liveStages.length === 0) {
+      return { ...active, stages: snap };
+    }
+    const snapStagesByName = new Map(snap.map((s) => [s.stage, s]));
+    const mergedStages: StagePayload[] = liveStages.map((live) => {
+      const matching = snapStagesByName.get(live.stage);
+      if (!matching) return live;
+      const existingKeys = new Set(
+        live.facts.map((f) => `${f.source}|${f.ontology_type}|${f.id}`),
+      );
+      const extras = matching.facts.filter(
+        (f) => !existingKeys.has(`${f.source}|${f.ontology_type}|${f.id}`),
+      );
+      return extras.length > 0
+        ? { ...live, facts: [...live.facts, ...extras] }
+        : live;
+    });
+    return { ...active, stages: mergedStages };
+  }, [active, selectedRevision, stages]);
   const [glossaryOpen, setGlossaryOpen] = useState(false);
 
   // Extract the executor's target cost (if any) so FreightRate cards can
@@ -47,19 +173,96 @@ export function Envelope({ active }: { active: CaseFull | null }) {
           <strong>{stages.length}</strong> stages · <strong>{factCount}</strong> facts
         </div>
       </div>
+      {/* W1 / Beat 3 — revision selector. Renders v1 ▸ v2 pills when
+          the case has 2+ revisions. Click switches the Envelope to that
+          revision's snapshot. v2+ also gets a "new fact" green gutter on
+          facts that didn't exist in the prior revision. */}
+      {revisions.length > 1 && (
+        <div className="revision-selector">
+          <span className="revision-selector-label">Revisions</span>
+          {revisions.map((r) => (
+            <button
+              key={r.revision_no}
+              type="button"
+              className={
+                "revision-pill" +
+                (r.revision_no === effectiveRevisionNo ? " active" : "")
+              }
+              onClick={() => setSelectedRevisionNo(r.revision_no)}
+              title={`${r.trigger_label} · ${r.decision ?? "no decision"} · ${r.created_at}`}
+            >
+              v{r.revision_no}
+              {r.decision && (
+                <span className="revision-pill-decision">· {r.decision}</span>
+              )}
+            </button>
+          ))}
+          {selectedRevision && selectedRevision.revision_no > 1 && (
+            <span className="revision-trigger-label">
+              {selectedRevision.trigger_label}
+            </span>
+          )}
+        </div>
+      )}
       <div className="envelope">
+        {/* W3 / Beat 4 — primary surface for the action lifecycle. Pinned
+            at the top of the case so the Compensate CTA is visible without
+            scrolling. Sticky position keeps it glued to the viewport top
+            as the reviewer scrolls through Stages 1-4 below. Self-renders
+            only when execution_result is set (most cases never fire an
+            action, so the top of the Envelope reads normally). */}
+        <ActionLifecycleCard active={active} onRefresh={onRefresh} />
+        {/* W5 / Beat 2 — counterfactual exploration surface. Sits right
+            below the Action Lifecycle card. Carries Run baseline +
+            Replay-with-different-decision + Compare. Renders only on
+            HITL-completed cases so most cases (and in-progress cases)
+            see nothing here. */}
+        {onReplay && onBaselineReplay && onCompare && (
+          <CounterfactualCard
+            active={active}
+            onReplay={onReplay}
+            onBaselineReplay={onBaselineReplay}
+            onCompare={onCompare}
+            baselineRunning={!!baselineRunningForActive}
+            onRevised={onRefresh}
+            onOpenPathways={() => setOpenPathwaysSignal((n) => n + 1)}
+          />
+        )}
         {stages.length === 0 && <div className="envelope-empty">Awaiting first binding…</div>}
         {active && (active.matched_promoted_patterns || []).length > 0 && (
           <PromotedPatternBanner patterns={active.matched_promoted_patterns!} />
         )}
-        {active && stages.length > 0 && (
+        {effectiveActive && stages.length > 0 && (
           <>
-            <EvidenceMap active={active} />
-            <GraphPanel active={active} />
+            <EvidenceMap active={effectiveActive} />
+            <GraphPanel
+              active={effectiveActive}
+              openPathwaysSignal={openPathwaysSignal}
+            />
           </>
         )}
+        {selectedRevision && selectedRevision.revision_no > 1 && newFactKeys.size > 0 && (
+          <div className="revision-evidence-banner">
+            <div className="revision-evidence-banner-eyebrow">
+              ⚡ Showing v{selectedRevision.revision_no} — re-versioned by new evidence
+            </div>
+            <div className="revision-evidence-banner-body">
+              <strong>{selectedRevision.trigger_label}</strong>
+              {" "}surfaced {newFactKeys.size} new fact{newFactKeys.size === 1 ? "" : "s"}.
+              Look for the <span className="revision-evidence-banner-chip">NEW EVIDENCE</span> strip
+              in the stage cards below. The knowledge graph and decision pathways have re-rendered
+              to reflect this revision; switch to v1 to see the original state.
+            </div>
+          </div>
+        )}
         {stages.map((s, idx) => (
-          <StageBlock key={s.stage} stage={s} index={idx} targetCostUsd={targetCostUsd} />
+          <StageBlock
+            key={s.stage}
+            stage={s}
+            index={idx}
+            targetCostUsd={targetCostUsd}
+            newFactKeys={newFactKeys}
+          />
         ))}
       </div>
       {glossaryOpen && <GlossaryModal onClose={() => setGlossaryOpen(false)} />}
@@ -71,10 +274,12 @@ function StageBlock({
   stage,
   index,
   targetCostUsd,
+  newFactKeys,
 }: {
   stage: StagePayload;
   index: number;
   targetCostUsd: number | null;
+  newFactKeys?: Set<string>;
 }) {
   // Each stage starts expanded (the user wants to see the work). Click the
   // header to collapse. Inside, the facts grid is capped with internal scroll
@@ -113,6 +318,7 @@ function StageBlock({
           facts={stage.facts}
           highlightedQuery={highlightedQuery}
           targetCostUsd={targetCostUsd}
+          newFactKeys={newFactKeys}
         />
       )}
     </div>
@@ -206,10 +412,12 @@ function FactsGrid({
   facts,
   highlightedQuery,
   targetCostUsd,
+  newFactKeys,
 }: {
   facts: StagePayload["facts"];
   highlightedQuery: number | null;
   targetCostUsd: number | null;
+  newFactKeys?: Set<string>;
 }) {
   const [showAll, setShowAll] = useState(false);
   const overflow = facts.length > FACT_PREVIEW_LIMIT;
@@ -224,6 +432,8 @@ function FactsGrid({
               : f.query_index === highlightedQuery
               ? "highlighted"
               : "dimmed";
+          const factKey = `${f.source}|${f.ontology_type}|${f.id}`;
+          const isNewInRevision = !!newFactKeys?.has(factKey);
           return (
             <FactCard
               key={`${f.source}-${f.id}-${i}`}
@@ -231,6 +441,7 @@ function FactsGrid({
               index={i}
               highlightState={highlightState}
               targetCostUsd={targetCostUsd}
+              isNewInRevision={isNewInRevision}
             />
           );
         })}
@@ -383,11 +594,13 @@ function FactCard({
   index,
   highlightState = "",
   targetCostUsd = null,
+  isNewInRevision = false,
 }: {
   fact: StagePayload["facts"][number];
   index: number;
   highlightState?: "highlighted" | "dimmed" | "";
   targetCostUsd?: number | null;
+  isNewInRevision?: boolean;
 }) {
   const accent = factAccent(`${fact.title} ${fact.summary}`);
   const cls = classDisplay(fact.ontology_type);
@@ -396,6 +609,83 @@ function FactCard({
   // Falls back gracefully when the card isn't a FreightRate, no target was
   // set, or the summary string doesn't parse cleanly.
   const chosenState = computeChosenState(fact, targetCostUsd);
+  // Hidden-dependency callout: fires when a graph resolver tagged this fact
+  // with tier >= 2 (upstream supply chain) OR hops >= 2 (indirect relationship
+  // path). Both are signals the entity is NOT reached by a direct contract /
+  // PO / ownership edge — the kind of risk that a flat-table query would miss.
+  // The deck's "hidden tier-2 dependency surfaced before any decision" beat
+  // lands here.
+  const tierDepth = typeof fact.tier === "number" ? fact.tier : null;
+  const hopDepth = typeof fact.hops === "number" ? fact.hops : null;
+  const isHiddenDep =
+    (tierDepth !== null && tierDepth >= 2) ||
+    (hopDepth !== null && hopDepth >= 2);
+  // Role pill — surfaces a card's role in the current scenario at a glance
+  // so the reviewer doesn't have to read the title to know "is this the
+  // failing supplier or a proposed swap candidate?". Keyed off ontology_type
+  // (plus the structured `status` field for the failing-Supplier case).
+  const rolePill: { label: string; variant: string; title: string } | null = (() => {
+    if (
+      fact.ontology_type === "Supplier" &&
+      typeof fact.status === "string" &&
+      fact.status.startsWith("chapter_11")
+    ) {
+      return {
+        label: "FAILING",
+        variant: "failing",
+        title:
+          "FAILING — this supplier filed for bankruptcy protection. " +
+          "The case exists in response to this event; everything " +
+          "downstream is mitigation.",
+      };
+    }
+    if (fact.ontology_type === "AlternativeSupplier") {
+      return {
+        label: "PROPOSED ALT",
+        variant: "proposed-alt",
+        title:
+          "PROPOSED ALTERNATIVE — a swap candidate surfaced by the graph " +
+          "walk. Not yet vetted; the reviewer must check the qualification " +
+          "state and the relationship vector before approving any swap.",
+      };
+    }
+    if (fact.ontology_type === "DownstreamDependent") {
+      return {
+        label: "AFFECTED BUYER",
+        variant: "affected-buyer",
+        title:
+          "AFFECTED BUYER — a downstream supplier that depends on the " +
+          "failing tier-N node via SOURCES_FROM edges. Its programs feel " +
+          "the pain if the failing supplier stops shipping.",
+      };
+    }
+    if (fact.ontology_type === "ProgramImpact") {
+      return {
+        label: "AT-RISK PROGRAM",
+        variant: "at-risk-program",
+        title:
+          "AT-RISK PROGRAM — a customer program whose SKUs depend on the " +
+          "failing supplier. Revenue + OTD-penalty figures show the stake.",
+      };
+    }
+    return null;
+  })();
+  // Humanise the via_path label for the hidden-dependency callout — strips
+  // the prefix ("sibling via Northgate Industrial Holdings (HoldingCompany)"
+  // -> "Northgate Industrial Holdings") so the reader sees the entity name
+  // rather than the cypher-friendly label.
+  const humanizeViaPath = (vp: string): string => {
+    if (vp === "joint-venture partner") return "a joint-venture partnership";
+    if (vp.startsWith("sibling via parent ")) {
+      return vp.replace("sibling via parent ", "") + " (shared parent)";
+    }
+    if (vp.startsWith("sibling via ")) {
+      return vp
+        .replace(/^sibling via /, "")
+        .replace(/\s+\(HoldingCompany\)$/, "");
+    }
+    return vp;
+  };
   // Split the pipe-delimited summary into individual chips. Each segment
   // gets a small badge so the eye lands on the data, not a long sentence.
   const chips = (fact.summary || "")
@@ -407,10 +697,19 @@ function FactCard({
       className={
         `fact${accent ? ` fact-accent-${accent}` : ""}` +
         (highlightState ? ` fact-${highlightState}` : "") +
-        (chosenState ? ` fact-${chosenState}` : "")
+        (chosenState ? ` fact-${chosenState}` : "") +
+        (isNewInRevision ? " fact-new-in-revision" : "")
       }
       style={{ animationDelay: `${index * 80}ms` }}
     >
+      {isNewInRevision && (
+        <div
+          className="fact-new-strip"
+          title="New evidence — surfaced in this revision but not in the prior one."
+        >
+          ⚡ NEW EVIDENCE · ADDED IN THIS REVISION
+        </div>
+      )}
       <div className="fact-source">
         <SourcePill source={fact.source} />
         <span
@@ -459,7 +758,51 @@ function FactCard({
             ALT
           </span>
         )}
+        {rolePill && (
+          <span
+            className={`fact-role-pill fact-role-${rolePill.variant}`}
+            title={rolePill.title}
+          >
+            {rolePill.label}
+          </span>
+        )}
       </div>
+      {isHiddenDep && (
+        <div
+          className={
+            `fact-hidden-dep` +
+            (tierDepth !== null ? ` fact-hidden-dep-tier` : ` fact-hidden-dep-hops`)
+          }
+          title={
+            "Reached through multi-hop graph traversal — there is no direct " +
+            "PO, contract, or ownership edge between you and this entity. " +
+            "A flat-table query would not surface this risk."
+          }
+        >
+          <span className="fact-hidden-dep-icon" aria-hidden="true">⚠</span>
+          <span className="fact-hidden-dep-text">
+            <strong>Hidden dependency</strong>
+            {" · "}
+            {tierDepth !== null && tierDepth >= 2 ? (
+              <>
+                tier-{tierDepth} supplier — reached by walking{" "}
+                {tierDepth - 1} SOURCES_FROM edge
+                {tierDepth - 1 > 1 ? "s" : ""} upstream
+              </>
+            ) : fact.via_path ? (
+              <>
+                {hopDepth}-hop chain via{" "}
+                <strong>{humanizeViaPath(fact.via_path)}</strong> — no
+                direct contract, PO, or ownership edge
+              </>
+            ) : (
+              <>
+                {hopDepth}-hop relationship chain — no direct contract path
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <div className="fact-id">{fact.title}</div>
       {cls.description && (
         <div className="fact-meaning">{cls.description}</div>
@@ -574,6 +917,27 @@ function GlossaryModal({ onClose }: { onClose: () => void }) {
               <dt><span className="fact-accent-badge premium">PREMIUM SLA</span></dt>
               <dd>Customer order on the highest service tier (typically large penalty per day late). Sourced from the <code>sla_tier</code> column of <code>customer_orders.csv</code>. Gold accent. Often paired with the SLA-risk scenario.</dd>
             </dl>
+          </section>
+
+          <section>
+            <h3>Role pills</h3>
+            <p>Small pills in the fact card's source row that name a card's role in the current scenario, so the eye doesn't have to read the title to know "is this the failing supplier or a proposed swap candidate?". Triggered by the fact's <code>ontology_type</code> (plus the structured <code>status</code> field for the failing-supplier case).</p>
+            <dl className="glossary-dl">
+              <dt><span className="fact-role-pill fact-role-failing">FAILING</span></dt>
+              <dd>The supplier whose distress triggered the case. Set when a <code>Supplier</code> fact has <code>status</code> starting with <code>chapter_11_</code> (bankruptcy filed) or another distress marker. Everything downstream in the case is a response to this event.</dd>
+              <dt><span className="fact-role-pill fact-role-proposed-alt">PROPOSED ALT</span></dt>
+              <dd>A swap candidate surfaced by an <code>AlternativeSupplier</code> graph walk. <strong>Not yet vetted.</strong> The reviewer must check the qualification state, the relationship vector to the failing supplier (often a shared HoldingCompany), and any sanctions-proximity inheritance before approving any swap.</dd>
+              <dt><span className="fact-role-pill fact-role-affected-buyer">AFFECTED BUYER</span></dt>
+              <dd>A downstream supplier (tier-1) that depends on the failing tier-N node via <code>SOURCES_FROM</code> edges in the graph. Surfaced by the <code>DownstreamDependent</code> class. Its programs will feel the pain if the failing supplier stops shipping.</dd>
+              <dt><span className="fact-role-pill fact-role-at-risk-program">AT-RISK PROGRAM</span></dt>
+              <dd>A customer program whose SKUs depend on the failing supplier — reached via <code>Supplier → PO → Product → Program</code> walk. Surfaced by the <code>ProgramImpact</code> class. The summary chip names the revenue at risk and the per-day OTD penalty so the business stake is explicit.</dd>
+            </dl>
+          </section>
+
+          <section>
+            <h3>Hidden-dependency callout</h3>
+            <p>An amber strip across the top of a fact card, between the source row and the title. Means: <strong>this entity is reached through 2+ relationship hops in the graph — there is no direct contract, PO, or ownership edge between you and it</strong>. The card carries it whenever the graph resolver tagged the row with <code>tier ≥ 2</code> (upstream supply chain) or <code>hops ≥ 2</code> (indirect relationship path).</p>
+            <p>When the resolver also returns a <code>via_path</code>, the strip names the intermediate entity (e.g. <em>"2-hop chain via Northgate Industrial Holdings — no direct contract, PO, or ownership edge"</em>). Inside the knowledge-graph modal, the same chain is drawn in amber so the route is visible end-to-end.</p>
           </section>
 
           <section>

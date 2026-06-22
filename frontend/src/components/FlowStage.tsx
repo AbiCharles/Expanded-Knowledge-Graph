@@ -1,10 +1,15 @@
-import { CaseFull } from "../types";
+import { CaseFull, DecisionKind } from "../types";
 import { Envelope } from "./Envelope";
 
 interface Props {
   active: CaseFull | null;
   role: "operator" | "reviewer";
   onOpenReview: () => void;
+  onRefresh?: () => void;
+  onReplay?: (caseId: string, decision: DecisionKind) => void;
+  onBaselineReplay?: (caseId: string) => void;
+  onCompare?: (caseId: string) => void;
+  baselineRunningForActive?: boolean;
 }
 
 const NODE_ORDER = ["agent", "propose", "review", "execute"] as const;
@@ -17,7 +22,16 @@ const NODE_LABELS: Record<NodeKey, { label: string; title: string; meta: string 
   execute: { label: "Stage 4", title: "Outcome", meta: "Execute · Abort · Loop" },
 };
 
-export function FlowStage({ active, role, onOpenReview }: Props) {
+export function FlowStage({
+  active,
+  role,
+  onOpenReview,
+  onRefresh,
+  onReplay,
+  onBaselineReplay,
+  onCompare,
+  baselineRunningForActive,
+}: Props) {
   const position = stagePosition(active);
   const isAuto = !!active?.scenario?.autonomous;
 
@@ -54,11 +68,20 @@ export function FlowStage({ active, role, onOpenReview }: Props) {
         })}
       </div>
 
+      {active?.risk_band?.escalated && <AuthorityRecalculatedBanner active={active} />}
+
       {active && active.phase === "complete" && active.scenario && (
         <OutcomeBanner active={active} />
       )}
 
-      <Envelope active={active} />
+      <Envelope
+        active={active}
+        onRefresh={onRefresh}
+        onReplay={onReplay}
+        onBaselineReplay={onBaselineReplay}
+        onCompare={onCompare}
+        baselineRunningForActive={baselineRunningForActive}
+      />
     </main>
   );
 }
@@ -151,6 +174,54 @@ function stepCounterFor(active: CaseFull | null, role: "operator" | "reviewer"):
 }
 
 // =============================================================================
+// W4 / Beat 5 — banner that lands above the Envelope whenever the
+// autonomy path was dynamically demoted by a matching risk_band. The
+// original autonomy tier is struck through; the new tier is emphasised;
+// the matched predicate + reason are surfaced so the reviewer can see
+// AT A GLANCE why this case (and only this case) escalated.
+function AuthorityRecalculatedBanner({ active }: { active: CaseFull }) {
+  const rb = active.risk_band;
+  if (!rb) return null;
+  const opPretty: Record<string, string> = {
+    gt: ">",
+    gte: "≥",
+    lt: "<",
+    lte: "≤",
+    eq: "=",
+    ne: "≠",
+  };
+  const opSymbol = opPretty[rb.op ?? ""] ?? rb.op ?? "?";
+  const matchedValue =
+    typeof rb.matched_value === "number"
+      ? rb.matched_value.toLocaleString()
+      : String(rb.matched_value ?? "?");
+  const threshold =
+    typeof rb.threshold === "number"
+      ? rb.threshold.toLocaleString()
+      : String(rb.threshold ?? "?");
+  return (
+    <div className="authority-recalc-banner">
+      <div className="authority-recalc-eyebrow">
+        ⚖ Authority recalculated · band: {rb.band}
+      </div>
+      <div className="authority-recalc-ladder">
+        <span className="authority-recalc-tier-orig">auto_execute</span>
+        <span className="authority-recalc-arrow">→</span>
+        <span className="authority-recalc-tier-new">review_ready</span>
+      </div>
+      <div className="authority-recalc-rule">
+        <span className="authority-recalc-rule-label">Match</span>
+        <code className="authority-recalc-rule-expr">
+          {rb.matched_field} = {matchedValue} {opSymbol} {threshold}
+        </code>
+      </div>
+      {rb.reason && (
+        <p className="authority-recalc-reason">{rb.reason}</p>
+      )}
+    </div>
+  );
+}
+
 function OutcomeBanner({ active }: { active: CaseFull }) {
   const decision = active.decision_kind;
   if (!decision || !active.scenario) return null;

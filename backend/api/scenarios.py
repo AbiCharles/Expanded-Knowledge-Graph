@@ -40,6 +40,7 @@ def list_scenarios(request: Request) -> list[dict]:
                 "auto_count": int(h.get("auto_count", 0)),
                 "source_kinds": source_kinds,
                 "source_ids": source_ids,
+                "pinned": bool(sc.get("pinned")),
             }
         )
     # Newest first by file mtime so freshly added/edited chips float up.

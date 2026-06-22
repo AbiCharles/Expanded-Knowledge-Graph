@@ -51,7 +51,10 @@ mappings:
         rationale: rationale
       table: null
       query_template: |
-        SELECT case_id, scenario_id, outcome, rationale
+        SELECT
+          case_id AS id,
+          'Prior decision · ' || outcome || ' · ' || case_id AS title,
+          '"' || rationale || '"  (scenario ' || scenario_id || ')' AS summary
         FROM prior_cases
         WHERE (:case_id IS NULL OR case_id = :case_id)
           AND (:scenario_id IS NULL OR scenario_id = :scenario_id)

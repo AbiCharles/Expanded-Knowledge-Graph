@@ -35,6 +35,27 @@ classes:
       identifier: false
       required: false
       description: null
+    - name: status
+      type: string
+      identifier: false
+      required: false
+      description: Operational status. 'active' for going concerns; 'chapter_11_filed_YYYY-MM-DD'
+        when bankruptcy protection has been filed. Used by the supply-assurance scenario
+        to flag a supplier in distress before any decision.
+    - name: qualification_status
+      type: string
+      identifier: false
+      required: false
+      description: Quality-system qualification state. 'qualified' for a current
+        certification; 'lapsed' when the qualification has expired. Surfaced in the
+        AlternativeSupplier summary so a reviewer can see at a glance that a proposed
+        swap is invalid.
+    - name: qualification_expires_on
+      type: date
+      identifier: false
+      required: false
+      description: Date the current qualification expires (or the date it expired,
+        for 'lapsed' status).
     relations:
     - name: places
       target: PurchaseOrder
@@ -183,6 +204,7 @@ classes:
     - {name: reliability_score, type: decimal}
     - {name: hop_distance, type: integer}
     - {name: via_relationship, type: string}
+    - {name: qualification_status, type: string}
   UltimateBeneficialOwner:
     description: One row per node found along the ownership chain ABOVE the
       queried Supplier — every supplier ancestor reached via PARENT_OF and
@@ -222,3 +244,60 @@ classes:
     - {name: hop_distance, type: integer}
     - {name: via_supplier, type: string}
     - {name: path_via, type: string}
+  Program:
+    description: A flagship customer program that consumes finished SKUs from one
+      or more tier-1 suppliers. Used by the supply-assurance scenario to surface
+      "which programs are exposed?" when a deep-tier supplier fails.
+    plain_description: >-
+      A named customer program (e.g. an avionics platform, a UAV
+      sustainment contract). Each program consumes finished SKUs from
+      tier-1 suppliers; tracking the program → SKU → supplier chain
+      means a tier-2 disruption can be translated into the specific
+      programs at risk and their dollar exposure.
+    attributes:
+    - {name: program_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: customer, type: string}
+    - {name: revenue_at_risk_usd, type: decimal}
+    - {name: otd_penalty_per_day_usd, type: decimal}
+  DownstreamDependent:
+    description: >-
+      Reverse of TierSupplier — given a deep-tier supplier (typically one
+      in distress), surface every downstream Supplier that sources from
+      it directly or transitively via SOURCES_FROM. Each row is a (buyer,
+      hops) pair with the chain back to the queried supplier. Used by
+      the supply-assurance scenario to answer "who depends on the failing
+      tier-2?" — the hidden-dependency reveal.
+    plain_description: >-
+      Which of your suppliers buy from a given upstream supplier — the
+      mirror of multi-tier visibility. When a tier-2 or tier-3 supplier
+      gets into trouble, this walk surfaces the tier-1s that depend on
+      it, so you can see who'll feel the pain.
+    attributes:
+    - {name: buyer_id, type: string, identifier: true}
+    - {name: buyer_name, type: string}
+    - {name: country, type: string}
+    - {name: hop_distance, type: integer}
+    - {name: chain, type: string}
+    - {name: reliability_score, type: decimal}
+  ProgramImpact:
+    description: >-
+      For a given Supplier in distress, walk SOURCES_FROM upstream → PLACED
+      → CONTAINS → INCLUDED_IN to surface every flagship Program whose SKUs
+      depend on the supplier (directly or transitively). Returns one row
+      per impacted Program with the revenue-at-risk and per-day OTD penalty
+      so a reviewer sees the business stake in one shot.
+    plain_description: >-
+      Which customer programs lose ground when this supplier fails. Walks
+      from the supplier outward through the SKUs and the tier-1s that
+      buy them, ending at the program that consumes the SKU — so the
+      business exposure (dollars at risk + daily penalties) is named on
+      the audit trail before any decision.
+    attributes:
+    - {name: program_id, type: string, identifier: true}
+    - {name: program_name, type: string}
+    - {name: customer, type: string}
+    - {name: revenue_at_risk_usd, type: decimal}
+    - {name: otd_penalty_per_day_usd, type: decimal}
+    - {name: via_suppliers, type: string}
+    - {name: skus, type: string}

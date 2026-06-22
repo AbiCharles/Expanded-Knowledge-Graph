@@ -175,11 +175,35 @@ class Neo4jResolver:
         )
         title = str(row.get("title") or row.get("name") or ent_id)
         summary = str(row.get("summary") or _short_repr(row))
+        # Optional structured markers — when the cypher RETURNs any of these
+        # columns alongside id/title/summary, surface them in the payload so
+        # the frontend can render role pills, the "hidden dependency" callout,
+        # and the GraphViz path highlight without parsing the summary string.
+        # All extras are optional and silently dropped if the cypher didn't
+        # emit them (back-compat with older mappings).
+        payload: dict[str, Any] = {"title": title, "summary": summary}
+        # Integer markers (graph-distance semantics).
+        for int_key in ("hops", "tier"):
+            raw = row.get(int_key)
+            if raw is not None:
+                try:
+                    payload[int_key] = int(raw)
+                except (TypeError, ValueError):
+                    pass
+        # String markers: status (e.g. 'chapter_11_filed_2026-06-18') drives
+        # the FAILING role pill; via_path is the human label for the
+        # relationship vector ('sibling via Northgate Industrial Holdings');
+        # via_node_id is the intermediate graph node ID ('HOLD-005') used to
+        # highlight the chain inside GraphViz.
+        for str_key in ("status", "via_path", "via_node_id"):
+            raw = row.get(str_key)
+            if raw is not None:
+                payload[str_key] = str(raw)
         return KnowledgeFact(
             ref=KnowledgeRef(
                 source=f"neo4j:{self.name}", ontology_type=ontology_type, id=ent_id,
             ),
-            payload={"title": title, "summary": summary},
+            payload=payload,
             fetched_by=self.name,
         )
 

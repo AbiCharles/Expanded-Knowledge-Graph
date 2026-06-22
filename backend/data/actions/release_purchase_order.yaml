@@ -1,0 +1,46 @@
+id: release_purchase_order
+title: Release a purchase order to the supplier
+description: >-
+  Push a drafted PO to the supplier portal API for execution. Used by
+  SC-PP-AUTO-PO-RELEASE-027 (autonomous within envelope, escalates to
+  HITL when the PO value crosses the W4 risk band). Compensatable —
+  the supplier portal exposes a cancel endpoint that retracts the PO
+  before it enters the manufacturing queue (so the case can demonstrate
+  the cancel + compensate beat if needed).
+hitl: true
+arguments:
+  - { name: po_id, type: string, required: true,
+      description: The drafted purchase order to release.,
+      example: PO-2026-Q1-14002 }
+  - { name: supplier_id, type: string, required: true,
+      description: Target supplier on the PO.,
+      example: SUP-031 }
+  - { name: po_value_usd, type: decimal, required: true,
+      description: Total PO value in USD — risk-band tripwire.,
+      example: "14000000" }
+  - { name: release_reason, type: string, required: true,
+      description: Short rationale captured on the audit trail.,
+      example: "Auto-released per GR-PP-AUTO-PO-002 envelope (<= $10M, supplier qualified)." }
+executor:
+  kind: http_request
+  data_source: public_jsonplaceholder
+  method: POST
+  path_template: /posts
+  content_type: application/json
+  body_template: |
+    {{
+      "title": "PO released: {po_id}",
+      "body": "Supplier {supplier_id} · value ${po_value_usd} · reason: {release_reason}",
+      "userId": 1
+    }}
+  compensate:
+    kind: http_request
+    data_source: public_jsonplaceholder
+    method: DELETE
+    path_template: /posts/1
+match_keywords:
+  - release po
+  - release purchase order
+  - auto release po
+  - release routine po
+default: false

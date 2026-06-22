@@ -135,6 +135,19 @@ CREATE (s)-[:CONTROLLED_BY {pct: 50, since: '2017-11-21'}]->(h);
 MATCH (a:Supplier {supplier_id: 'SUP-013'}), (b:Supplier {supplier_id: 'SUP-019'})
 CREATE (a)-[:JOINT_VENTURE_WITH {since: '2020-03-08', share: 0.35}]->(b);
 
+// Borealis Mining (SUP-010) under Apex Holdings International (HOLD-001) —
+// gives the SC-PP-ALT-SUP-024 demo a non-empty AlternativeSupplier result.
+// Without this edge Borealis has no CONTROLLED_BY / PARENT_OF / JV
+// relationships, so the cypher returns 0 swap candidates. Apex Holdings
+// also controls SUP-002 (Apex Metalworks) and SUP-015 (Helios Energy
+// Components), so the swap-candidate list is two siblings. Note that HOLD-001
+// owns 22% of SDN-NET-001 (Shengli Shell Trading), so both candidates
+// inherit indirect 3-hop SDN proximity — the reviewer still has to vet
+// them, which keeps the demo on-pattern with the Aeronova "every alt
+// candidate needs governance, not just a graph match" story.
+MATCH (s:Supplier {supplier_id: 'SUP-010'}), (h:HoldingCompany {holding_id: 'HOLD-001'})
+CREATE (s)-[:CONTROLLED_BY {pct: 60, since: '2010-04-14'}]->(h);
+
 // ---- Multi-tier supply chains (SOURCES_FROM -> upstream Supplier) -------
 // Each edge means "this Supplier sources material from THAT upstream
 // Supplier." Used by the Tier-N visibility scenario to walk a product's
@@ -259,3 +272,111 @@ MATCH (po:PurchaseOrder {po_id: 'PO-2026-0182'}), (p:Product {product_id: 'P-MC-
 CREATE (po)-[:CONTAINS]->(p);
 MATCH (po:PurchaseOrder {po_id: 'PO-2026-0287'}), (p:Product {product_id: 'P-MC-7101'})
 CREATE (po)-[:CONTAINS]->(p);
+
+// =============================================================================
+// Aeronova supply assurance — demo extension (2026-06)
+// =============================================================================
+// Adds three flagship programs, the tier-2 supplier that just filed for
+// protection (Northwind Forge & Castings), and a proposed alternate that
+// fails on two counts: (a) same parent holding as the failing supplier,
+// (b) lapsed quality-system qualification. Together these stand up the
+// deck's "3 programs exposed through 1 hidden tier-2 dependency" beat and
+// the "invalid alternate rejected — same parent, lapsed qualification"
+// close-list item.
+
+// ---- New tier-2 supplier (just filed Chapter 11) -------------------------
+CREATE (:Supplier {supplier_id: 'SUP-021', name: 'Northwind Forge & Castings', country: 'CZ', reliability_score: 0.82, founded_year: 1998, employees: 410, status: 'chapter_11_filed_2026-06-18', qualification_status: 'qualified', qualification_expires_on: '2027-09-30'});
+
+// ---- The trap alternate — same parent + lapsed qualification -------------
+CREATE (:Supplier {supplier_id: 'SUP-022', name: 'Stillwater Alloys', country: 'CZ', reliability_score: 0.74, founded_year: 2004, employees: 220, status: 'active', qualification_status: 'lapsed', qualification_expires_on: '2026-04-15'});
+
+// ---- Ironcrest Metalworks — the CLEAN alternative ----------------------
+// JV partner of Northwind (so AlternativeSupplier surfaces it via the
+// joint-venture path), no shared holding company, current qualification,
+// reliability above the tier-1 threshold. Gives the Aeronova demo a
+// RECOMMENDED swap candidate the reviewer should approve, alongside the
+// AVOID candidate (Stillwater).
+CREATE (:Supplier {supplier_id: 'SUP-023', name: 'Ironcrest Metalworks', country: 'DE', reliability_score: 0.91, founded_year: 1996, employees: 580, status: 'active', qualification_status: 'qualified', qualification_expires_on: '2028-03-15'});
+
+MATCH (a:Supplier {supplier_id: 'SUP-021'}), (b:Supplier {supplier_id: 'SUP-023'})
+CREATE (a)-[:JOINT_VENTURE_WITH {since: '2018-09-12', share: 0.45}]->(b);
+
+// ---- Parent holding controlling both Northwind and Stillwater ------------
+CREATE (:HoldingCompany {holding_id: 'HOLD-005', name: 'Northgate Industrial Holdings', country: 'CZ'});
+
+MATCH (s:Supplier {supplier_id: 'SUP-021'}), (h:HoldingCompany {holding_id: 'HOLD-005'})
+CREATE (s)-[:CONTROLLED_BY {pct: 100, since: '1998-04-01'}]->(h);
+
+MATCH (s:Supplier {supplier_id: 'SUP-022'}), (h:HoldingCompany {holding_id: 'HOLD-005'})
+CREATE (s)-[:CONTROLLED_BY {pct: 100, since: '2004-11-20'}]->(h);
+
+// ---- SOURCES_FROM edges: three existing tier-1s buy from Northwind --------
+// The hidden dependency — three tier-1s in three different countries, all
+// of whose flagship-program SKUs are exposed when SUP-021 fails.
+MATCH (a:Supplier {supplier_id: 'SUP-001'}), (b:Supplier {supplier_id: 'SUP-021'})
+CREATE (a)-[:SOURCES_FROM {material: 'aerospace alloy billets', since: '2017-03-08'}]->(b);
+
+MATCH (a:Supplier {supplier_id: 'SUP-003'}), (b:Supplier {supplier_id: 'SUP-021'})
+CREATE (a)-[:SOURCES_FROM {material: 'hardened forge blanks', since: '2019-05-12'}]->(b);
+
+MATCH (a:Supplier {supplier_id: 'SUP-016'}), (b:Supplier {supplier_id: 'SUP-021'})
+CREATE (a)-[:SOURCES_FROM {material: 'aero-grade forged stock', since: '2020-09-04'}]->(b);
+
+// ---- New tier-1 products so each program has its own SKU ----------------
+CREATE (:Product {product_id: 'P-GR-5001', name: 'Hardened forge bracket', category: 'castings'});
+CREATE (:Product {product_id: 'P-CR-3001', name: 'Aero-grade strut',       category: 'aerospace'});
+
+// ---- Flagship programs (3) ----------------------------------------------
+// Revenue at risk + per-day OTD penalties mirror the deck's stake numbers
+// (slide 3: $48M flagship + daily OTD penalties).
+CREATE (:Program {program_id: 'PRG-AERO-MIRAGE', name: 'Mirage Avionics platform', customer: 'Aeronova', revenue_at_risk_usd: 48000000, otd_penalty_per_day_usd: 220000});
+CREATE (:Program {program_id: 'PRG-AERO-VIPER',  name: 'Viper UAV sustainment',    customer: 'Aeronova', revenue_at_risk_usd: 11500000, otd_penalty_per_day_usd: 85000});
+CREATE (:Program {program_id: 'PRG-AERO-COMET',  name: 'Comet satellite payload',  customer: 'Aeronova', revenue_at_risk_usd: 9000000,  otd_penalty_per_day_usd: 60000});
+
+// ---- INCLUDED_IN edges: each program consumes one tier-1 product --------
+MATCH (p:Product {product_id: 'P-MC-7100'}), (prg:Program {program_id: 'PRG-AERO-MIRAGE'})
+CREATE (p)-[:INCLUDED_IN {since: '2024-08-15'}]->(prg);
+
+MATCH (p:Product {product_id: 'P-GR-5001'}), (prg:Program {program_id: 'PRG-AERO-VIPER'})
+CREATE (p)-[:INCLUDED_IN {since: '2025-02-04'}]->(prg);
+
+MATCH (p:Product {product_id: 'P-CR-3001'}), (prg:Program {program_id: 'PRG-AERO-COMET'})
+CREATE (p)-[:INCLUDED_IN {since: '2024-11-22'}]->(prg);
+
+// ---- New POs so the non-Hemlock tier-1s have a PLACED → CONTAINS chain --
+// to their flagship-program SKUs. Without these the ProgramImpact walk
+// (Supplier → PO → Product → Program) is broken for SUP-003 and SUP-016.
+// PO-2026-0512 also connects Hemlock (SUP-001) to P-MC-7100, which is the
+// Mirage-program SKU — multi-supplier sourcing of the same SKU is realistic
+// (the existing PO-2026-0182 places it via Apex Metalworks too) AND it's
+// what gives the Aeronova ProgramImpact query its third program. Without
+// this PO, Mirage isn't reachable from Northwind via any SOURCES_FROM
+// chain.
+CREATE (:PurchaseOrder {po_id: 'PO-2026-0341', total_value: 415000, placed_on: '2026-05-10'});
+CREATE (:PurchaseOrder {po_id: 'PO-2026-0398', total_value: 268000, placed_on: '2026-05-22'});
+CREATE (:PurchaseOrder {po_id: 'PO-2026-0512', total_value: 530000, placed_on: '2026-06-02'});
+
+MATCH (s:Supplier {supplier_id: 'SUP-003'}), (po:PurchaseOrder {po_id: 'PO-2026-0341'})
+CREATE (s)-[:PLACED]->(po);
+MATCH (s:Supplier {supplier_id: 'SUP-016'}), (po:PurchaseOrder {po_id: 'PO-2026-0398'})
+CREATE (s)-[:PLACED]->(po);
+MATCH (s:Supplier {supplier_id: 'SUP-001'}), (po:PurchaseOrder {po_id: 'PO-2026-0512'})
+CREATE (s)-[:PLACED]->(po);
+
+MATCH (po:PurchaseOrder {po_id: 'PO-2026-0341'}), (p:Product {product_id: 'P-GR-5001'})
+CREATE (po)-[:CONTAINS]->(p);
+MATCH (po:PurchaseOrder {po_id: 'PO-2026-0398'}), (p:Product {product_id: 'P-CR-3001'})
+CREATE (po)-[:CONTAINS]->(p);
+MATCH (po:PurchaseOrder {po_id: 'PO-2026-0512'}), (p:Product {product_id: 'P-MC-7100'})
+CREATE (po)-[:CONTAINS]->(p);
+
+// ---- Default qualification_status on pre-existing suppliers --------------
+// Backfill so the AlternativeSupplier query's qualification surfacing
+// renders uniformly across all candidates. SUP-022 keeps its explicit
+// 'lapsed' value (set above) because the WHERE clause skips nodes that
+// already have the property.
+MATCH (s:Supplier)
+WHERE s.qualification_status IS NULL
+SET s.qualification_status = 'qualified',
+    s.qualification_expires_on = '2027-12-31',
+    s.status = coalesce(s.status, 'active');

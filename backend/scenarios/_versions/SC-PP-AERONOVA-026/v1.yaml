@@ -1,0 +1,182 @@
+id: SC-PP-AERONOVA-026
+title: Supply assurance — tier-2 supplier in distress
+domain: Planning & Procurement
+teams_channel: '#procurement-supply-assurance'
+actor_id: agent-supply-assurance-07
+operator_role:
+  label: Operator
+  name: supply.assurance.analyst.tlee
+reviewer_role:
+  label: Reviewer
+  name: supply.assurance.lead.tlee
+autonomous: false
+action_type: supply_assurance_review
+action_payload:
+  supplier_id: SUP-021
+  supplier_name: Northwind Forge & Castings
+  failure_event: chapter_11_filed_2026-06-18
+  customer: Aeronova
+  originating_guardrail_id: POL-PP-SUPPLY-ASSURANCE-2026
+teams_headline: Supply assurance · Northwind Forge filed for protection
+execute_message: 'Northwind Forge & Castings (SUP-021) filed for Chapter 11 protection
+  on 2026-06-18. Northwind doesn''t place POs with you directly — it''s a tier-2 supplier
+  you may not realise you depend on. The agent walks the <strong>graph</strong> three
+  ways: (1) backwards via SOURCES_FROM to surface every tier-1 that buys from Northwind,
+  (2) onward through those tier-1s'' POs and SKUs to the flagship customer programs
+  exposed, and (3) sideways via the controlling HoldingCompany to surface drop-in
+  swap candidates — annotated with each candidate''s current qualification state.
+  Supply-assurance lead approves the mitigation with the full evidence package on
+  the audit trail.'
+match_keywords:
+- supply assurance
+- aeronova
+- tier-2 supplier failed
+- supplier filed bankruptcy
+- chapter 11 supplier
+- northwind forge
+- northwind castings
+- flagship program at risk
+- hidden tier-2 dependency
+- supplier protection filing
+- find drop-in for failing tier-2
+- which programs affected by supplier
+interpreted_as: assess Aeronova supply assurance — Northwind Forge (SUP-021) filed
+  Chapter 11; surface downstream dependents, exposed flagship programs, and vetted
+  swap candidates
+clarifying_question: 'Confirm — run supply assurance for failing tier-2 <code>SUP-021</code>
+  (Northwind Forge & Castings). I''ll bind data from four sources: the supply-chain
+  <strong>graph</strong> (downstream tier-1 buyers via SOURCES_FROM⁻¹, the Aeronova
+  flagship programs reached via PO → SKU → Program, and drop-in swap candidates via
+  the controlling HoldingCompany — each annotated with its own qualification state),
+  prior bankruptcy-mitigation decisions from the governance store, and the supply-assurance
+  SOP excerpts via the policy vector store. Supply-assurance lead approves / rejects
+  the mitigation with full evidence on the audit trail. Proceed?'
+closing_messages:
+  approve: <strong>Supply-assurance lead approved the mitigation plan.</strong> The
+    downstream-dependent walk, program-impact map, swap-candidate list with qualification
+    states, prior bankruptcy mitigations, and supply-assurance SOP excerpts are captured
+    on the audit trail. The chosen swap proceeds; affected programs are notified.
+  reject: '<strong>Supply-assurance lead declined the proposed mitigation.</strong>
+    Reason: <em>"{rationale}"</em><br><br>The failing supplier remains the bottleneck;
+    no swap executed. The agent''s findings remain on the audit trail and the case
+    is queued for re-evaluation as new evidence arrives.'
+  request_more_info: '<strong>Supply-assurance lead needs more information.</strong>
+    Specifically: <em>"{rationale}"</em><br><br>Case is back in review.'
+rationale_reasons:
+  reject:
+  - Top swap candidate sits under the SAME parent holding as the failing supplier
+    — concentration risk unchanged.
+  - Top swap candidate's quality-system qualification has lapsed — cannot ship to
+    flagship-program SKUs until re-certified.
+  - Program-impact total exceeds delegated authority — must escalate to the supply-assurance
+    council before any swap commits.
+  - Multi-tier walk is incomplete — need tier-3 visibility on the failing supplier's
+    own upstream chain before swapping.
+  request_more_info:
+  - Need re-qualification timeline for the same-parent alternate before deciding.
+  - Need a 90-day capacity confirmation from the next-best swap candidate.
+  - Need confirmation that the bankruptcy filing actually halts shipments (Chapter
+    11 != immediate cessation in every jurisdiction).
+stages:
+  agent_intake:
+    binder: PolicyAndScopeAgentBinder/1.0
+    facts:
+    - source: kf:graph
+      ontology_type: Policy
+      id: POL-PP-SUPPLY-ASSURANCE-2026
+      uri: kf.tcs/policy/POL-PP-SUPPLY-ASSURANCE-2026
+      title: Tier-N supply-assurance policy
+      payload: 'When any supplier (any tier) enters distress (Chapter 11, bankruptcy,
+        quality stop), the agent must (a) walk SOURCES_FROM backwards to identify
+        every downstream tier-1 buyer up to 3 hops, (b) trace the affected SKUs through
+        their POs to the flagship customer Programs they''re part of, (c) propose
+        swap candidates via the controlling HoldingCompany OR sibling Suppliers OR
+        JV partners — each annotated with its own qualification state, (d) named
+        supply-assurance lead approval required before any swap commits.'
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-supply-assurance-07
+      uri: iam.tcs/actors/agent-supply-assurance-07
+      title: Actor scope
+      payload: 'Scopes: assurance.read, assurance.propose, assurance.swap_after_review
+        · this case is propose-only (no autonomous swap). Authority delegated up to
+        $20M revenue-at-risk; programs above that ceiling escalate to the supply-assurance
+        council.'
+    - source: kf:context
+      ontology_type: ContextNote
+      id: NORTHWIND-FILING-2026-06-18
+      uri: kf.tcs/context/northwind-2026-06-18
+      title: Trigger event
+      payload: 'Bloomberg + Reuters confirm Northwind Forge & Castings (SUP-021) filed
+        for Chapter 11 protection on 2026-06-18 in the Czech commercial court. Filing
+        cites $42M debt + supplier-side liquidity squeeze. No public statement yet
+        on shipment continuity.'
+  proposal:
+    binder: SupplyAssuranceProposalBinder/1.0
+    ontology_queries:
+    - ontology: supply_chain
+      class: Supplier
+      where:
+        supplier_id: :supplier_id
+      purpose: Bind the failing supplier's master record (Neo4j — supply_chain.Supplier).
+        Status field shows the Chapter 11 filing.
+    - ontology: supply_chain
+      class: DownstreamDependent
+      where:
+        supplier_id: :supplier_id
+      max_results: 6
+      purpose: Walk SOURCES_FROM backwards — every tier-1 supplier (up to 3 hops)
+        that depends on the failing tier-N node. THIS is the hidden-dependency reveal.
+    - ontology: supply_chain
+      class: ProgramImpact
+      where:
+        supplier_id: :supplier_id
+      max_results: 5
+      purpose: Translate the downstream-dependent walk into flagship-program exposure
+        — for each Program at risk, the dollar revenue + per-day OTD penalty + tier-1
+        intermediates + affected SKUs.
+    - ontology: supply_chain
+      class: AlternativeSupplier
+      where:
+        supplier_id: :supplier_id
+      max_results: 6
+      purpose: Swap-candidate discovery via the graph (sibling-via-holding, sibling-via-parent,
+        JV partner). Summary line annotates each candidate's own qualification state
+        so a lapsed-cert alternate is visible at a glance.
+  review:
+    binder: SupplyAssuranceReviewBinder/1.0
+    ontology_queries:
+    - ontology: tcs_core
+      class: PriorOverride
+      where:
+        scenario_id: SC-PP-007
+      max_results: 4
+      purpose: Prior decisions on similar supplier-in-distress cases (SQLite governance
+        store)
+    - ontology: tcs_core
+      class: PolicyExcerpt
+      where:
+        query: supply assurance tier-2 supplier bankruptcy chapter 11 swap candidate
+          qualification concentration risk flagship program
+        top_k: 3
+      purpose: Relevant supply-assurance SOP excerpts via the policy vector store
+outcomes:
+  approve:
+    headline: Approved — mitigation plan accepted
+    detail: Supply-assurance lead accepted the program-impact picture + swap recommendation.
+      Mitigation proceeds; evidence package on the audit trail; affected program managers
+      notified.
+  reject:
+    headline: Rejected — no swap
+    detail: Supply-assurance lead declined. The proposed swap candidates failed governance
+      review (typically — same-parent concentration, lapsed qualification, or authority-ceiling
+      escalation). The failing supplier remains the bottleneck; the case is queued
+      for re-evaluation as new evidence arrives.
+  request_more_info:
+    headline: More information requested
+    detail: Reviewer requires additional re-qualification, capacity, or shipment-continuity
+      data before deciding.
+_filter_from_prompt: true
+_custom_suggested_prompt: Northwind Forge just filed Chapter 11 — assess Aeronova
+  supply assurance
+version: 1

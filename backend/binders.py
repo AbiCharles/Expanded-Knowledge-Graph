@@ -256,6 +256,37 @@ class FixtureReviewBinder:
                 f"Scenario {scenario_id} has no review stage — should not have reached HITL"
             )
         stage_def = stages["review"]
+        # W5 / Beat 2 — baseline mode. When the orchestrator marked this case
+        # as a baseline replay (via __baseline__ on action.payload), skip the
+        # review-stage ontology queries. The result is an empty review stage
+        # — the framework still records that the stage "happened" but with
+        # zero facts surfaced. CompareModal uses this absence to highlight
+        # the load-bearing facts that exist only on the harness side.
+        if action.payload.get("__baseline__"):
+            skipped_count = len(stage_def.get("ontology_queries", []) or [])
+            return StageContext(
+                stage=Stage.REVIEW,
+                facts=[],
+                queries_issued=[
+                    KnowledgeQuery(
+                        ontology_type="__baseline_skipped__",
+                        filters={"__baseline__": True},
+                        requested_by=stage_def["binder"],
+                        purpose=(
+                            f"Baseline mode — skipped {skipped_count} review-stage "
+                            f"ontology query(s) that depend on the governed knowledge "
+                            f"layer (typically PriorOverride + PolicyExcerpt). The "
+                            f"reviewer in this baseline never saw the evidence these "
+                            f"would have surfaced."
+                        ),
+                    ),
+                ],
+                bound_by=stage_def["binder"],
+                notes=(
+                    f"Baseline mode — review-stage queries skipped for scenario "
+                    f"{scenario_id}"
+                ),
+            )
         facts, queries_issued = _facts_from_stage(
             stage_def,
             sources=self._sources,

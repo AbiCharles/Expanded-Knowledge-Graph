@@ -50,12 +50,34 @@ def _record_to_payload(rec: CaseRecord) -> dict:
         "follow_up": rec.follow_up,
         "sibling_case_ids": rec.sibling_case_ids,
         "replay_decision": rec.replay_decision,
+        "baseline": rec.baseline,
         "closing_message": rec.closing_message,
+        "execution_result": rec.execution_result,
+        "compensation_result": rec.compensation_result,
         "highlighted_fact_refs": rec.highlighted_fact_refs,
+        # W1 / Beat 3 — persist revisions so a case re-versioned in one
+        # session retains its history after backend reload. Without this,
+        # lazy-seal-v1 on a reloaded case would produce an EMPTY snapshot
+        # (ctx is also not persisted) and the v1→v2 diff would treat every
+        # fact in v2 as "new", drowning out the actually-injected one.
+        "revisions": [
+            {
+                "revision_no": r.revision_no,
+                "stages_snapshot": r.stages_snapshot,
+                "decision": r.decision,
+                "triggered_by": r.triggered_by,
+                "trigger_label": r.trigger_label,
+                "created_at": r.created_at,
+            }
+            for r in rec.revisions
+        ],
+        "current_revision": rec.current_revision,
+        "risk_band": rec.risk_band,
     }
 
 
 def _payload_to_record(payload: dict) -> CaseRecord:
+    from backend.case_record import CaseRevision
     return CaseRecord(
         case_id=payload["case_id"],
         prompt=payload.get("prompt", ""),
@@ -74,10 +96,26 @@ def _payload_to_record(payload: dict) -> CaseRecord:
         follow_up=payload.get("follow_up"),
         sibling_case_ids=list(payload.get("sibling_case_ids", []) or []),
         replay_decision=payload.get("replay_decision"),
+        baseline=bool(payload.get("baseline", False)),
         closing_message=payload.get("closing_message"),
+        execution_result=payload.get("execution_result"),
+        compensation_result=payload.get("compensation_result"),
         highlighted_fact_refs=list(payload.get("highlighted_fact_refs", []) or []),
         # ctx is not persisted — it's derived from lineage on demand. For our
         # demo, in-flight ctx is lost on restart, but that's fine.
+        revisions=[
+            CaseRevision(
+                revision_no=int(r["revision_no"]),
+                stages_snapshot=list(r.get("stages_snapshot") or []),
+                decision=r.get("decision"),
+                triggered_by=r.get("triggered_by", "initial"),
+                trigger_label=r.get("trigger_label", "Initial decision"),
+                created_at=r.get("created_at", ""),
+            )
+            for r in (payload.get("revisions") or [])
+        ],
+        current_revision=int(payload.get("current_revision", 1) or 1),
+        risk_band=payload.get("risk_band"),
     )
 
 

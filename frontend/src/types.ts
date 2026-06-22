@@ -35,6 +35,10 @@ export interface ScenarioRow {
   // glance which physical store(s) a chip routes to.
   source_kinds?: string[];
   source_ids?: string[];
+  // Surfaces the scenario in the operator console's "Pinned" row above the
+  // collapsible Suggestions panel. Used for demo-headlining scenarios so the
+  // primary one-click path is always visible without expanding the catalogue.
+  pinned?: boolean;
 }
 
 export interface FactRow {
@@ -49,6 +53,23 @@ export interface FactRow {
   // Correlates this fact back to the ontology_query that produced it.
   // Null/undefined for inline facts authored directly in the scenario.
   query_index?: number | null;
+  // Structured multi-hop depth markers from graph resolvers (Neo4j cypher
+  // RETURNing `hops` / `tier` columns). Used to render a "hidden dependency"
+  // callout when the entity is reached through 2+ relationship hops or sits
+  // at tier 2+ in a supply-chain walk. Absent for facts that have no graph-
+  // distance semantics (inline facts, single-node lookups, etc.).
+  hops?: number | null;
+  tier?: number | null;
+  // Role + path markers (Neo4j-resolved). `status` carries an operational
+  // state like `chapter_11_filed_YYYY-MM-DD` and drives the FAILING role
+  // pill on Supplier facts. `via_path` is the human-readable relationship
+  // vector ("sibling via Northgate Industrial Holdings (HoldingCompany)")
+  // used inside the hidden-dependency callout. `via_node_id` is the
+  // intermediate graph-node ID (e.g. `HOLD-005`) used by GraphViz to draw
+  // the highlighted chain.
+  status?: string | null;
+  via_path?: string | null;
+  via_node_id?: string | null;
 }
 
 // One ontology_query issued by the stage binder. The frontend's
@@ -114,6 +135,10 @@ export interface CaseSummary {
   candidates: ScenarioCandidate[];
   sibling_case_ids: string[];
   replay_decision: DecisionKind | null;
+  // W5 / Beat 2 — true when this case is a baseline replay (review-stage
+  // queries skipped so the case represents "what a supervisor without the
+  // governed knowledge layer would have surfaced").
+  baseline?: boolean;
 }
 
 export interface ScenarioMeta {
@@ -162,12 +187,54 @@ export interface MatchedPromotedPattern {
   matched_fact_ids: string[];
 }
 
+// W1 / Beat 3 — immutable snapshot of a case's stages at a point in time.
+// v1 lands when the initial decision is recorded; v2+ come from /revise
+// calls (narrative triggers or generic refresh).
+export interface CaseRevision {
+  revision_no: number;
+  // Same shape as CaseFull.stages so the Envelope can render any
+  // historical revision through the same FactCard code path it uses
+  // for the live state.
+  stages_snapshot: StagePayload[];
+  decision: string | null;
+  // "initial" for v1, a trigger id ("ironcrest_qual_lapsed", etc.) for
+  // narrative triggers, or "generic_refresh" for the diff-the-current-
+  // state path.
+  triggered_by: string;
+  trigger_label: string;
+  // ISO-8601 UTC.
+  created_at: string;
+}
+
 export interface CaseFull extends CaseSummary {
   stages: StagePayload[];
   lineage: LineageEvent[];
   scenario?: ScenarioMeta;
   closing_message?: string;
   execution_result?: ExecutionResult | null;
+  // W1 / Beat 3 — revision history. Empty until the case completes;
+  // [v1, v2, v3...] in order once it does.
+  revisions?: CaseRevision[];
+  current_revision?: number;
+  // Result of a manual /compensate call (W3 — deck Beat 4). Populated
+  // when the FDE clicks the Compensate button on a compensatable
+  // executed action and the reversal succeeds (or fails — `ok=false`
+  // captures a failed compensation).
+  compensation_result?: ExecutionResult | null;
+  // W4 / Beat 5 — dynamic authority recalculation. Populated by the
+  // orchestrator after the proposal stage when a scenario's `risk_bands`
+  // block matches. `escalated: true` means an autonomous scenario was
+  // demoted to review_ready; the FlowStage banner reads this to render
+  // the ladder override.
+  risk_band?: {
+    band: string;
+    matched_field?: string | null;
+    matched_value?: number | string | null;
+    threshold?: number | string | null;
+    op?: string | null;
+    escalated?: boolean;
+    reason?: string | null;
+  } | null;
   matched_promoted_patterns?: MatchedPromotedPattern[];
 }
 

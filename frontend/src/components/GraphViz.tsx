@@ -4,7 +4,7 @@ import cytoscape from "cytoscape";
 import dagre from "cytoscape-dagre";
 import CytoscapeComponent from "react-cytoscapejs";
 
-import { CaseFull } from "../types";
+import { CaseFull, FactRow } from "../types";
 import {
   GraphNode as ApiNode,
   GraphEdge as ApiEdge,
@@ -69,14 +69,51 @@ function useSupplierSubgraph(supplier_id: string | null, active: boolean) {
   return { data, error };
 }
 
-export function GraphPanel({ active }: { active: CaseFull }) {
+export function GraphPanel({
+  active,
+  openPathwaysSignal,
+}: {
+  active: CaseFull;
+  // Counter prop — when its value changes, GraphPanel opens its modal
+  // pre-selected to the Decision-pathways tab. Used by the post-revision
+  // flow in CounterfactualCard to deep-link the reviewer straight into
+  // the re-rendered pathways view.
+  openPathwaysSignal?: number;
+}) {
   const anchor = useMemo(() => findGraphAnchor(active), [active]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [initialViewMode, setInitialViewMode] = useState<"network" | "pathways">("network");
+  // Any positive bump of the signal opens the modal on the Pathways
+  // tab. The signal counter is monotonic from Envelope, so even if the
+  // user closes and re-triggers, the new value will be > 0 and the
+  // effect re-fires.
+  useEffect(() => {
+    if (!openPathwaysSignal) return;
+    setInitialViewMode("pathways");
+    setModalOpen(true);
+  }, [openPathwaysSignal]);
   const hidden = useFilterSubscription();
   const { data, error } = useSupplierSubgraph(
     anchor?.supplier_id ?? null,
     modalOpen,
   );
+  // Hidden-dependency path nodes: the failing supplier (anchor), every
+  // AlternativeSupplier candidate id, plus the via_node_id (typically the
+  // shared HoldingCompany) on each alternate. Passed into GraphModal which
+  // applies the .cy-hidden-dep-path class to those nodes + the connecting
+  // edges so the chain visually pops inside the supply-chain subgraph.
+  const hiddenDepPath = useMemo(() => {
+    const ids = new Set<string>();
+    if (anchor?.supplier_id) ids.add(anchor.supplier_id);
+    for (const stage of active.stages ?? []) {
+      for (const fact of stage.facts ?? []) {
+        if (fact.ontology_type !== "AlternativeSupplier") continue;
+        if (fact.id) ids.add(fact.id);
+        if (fact.via_node_id) ids.add(fact.via_node_id);
+      }
+    }
+    return Array.from(ids);
+  }, [active, anchor]);
 
   if (!anchor) return null;
 
@@ -107,10 +144,17 @@ export function GraphPanel({ active }: { active: CaseFull }) {
           rawNodes={data?.nodes}
           rawEdges={data?.edges}
           defaultLayout="dagre"
-          onClose={() => setModalOpen(false)}
+          onClose={() => {
+            setModalOpen(false);
+            // Reset so the next manual open lands on Network again.
+            setInitialViewMode("network");
+          }}
           loading={!data && !error}
           error={error}
           hidden={hidden}
+          hiddenDepPath={hiddenDepPath}
+          active={active}
+          initialViewMode={initialViewMode}
         />
       )}
     </>
@@ -207,6 +251,16 @@ interface SelectedClassFacts {
   }[];
 }
 
+// Click-to-reveal record: when an entity node in the knowledge graph
+// matches a fact in the case (by id), we stash that fact + the stage it
+// came from so the side legend can render a "what this node says in the
+// stages" panel. Lets the user look at a graph node and read its evidence
+// card without closing the modal and scrolling through stages.
+interface EntityFactReveal {
+  fact: FactRow;
+  stageName: string;
+}
+
 type GraphModalProps = {
   title: string;
   subtitle?: string;
@@ -235,6 +289,14 @@ type GraphModalProps = {
   // at the top of the side legend. Per-modal copy (evidence map vs
   // knowledge graph vs platform flow).
   explainer?: string;
+  // List of node IDs that form a hidden-dependency chain. After each layout
+  // pass, these nodes (and any edge whose both endpoints are in the list)
+  // get the .cy-hidden-dep-path class so the chain renders amber against
+  // the rest of the network. Set by GraphPanel from the case's facts.
+  hiddenDepPath?: string[];
+  // Which tab to open on. Defaults to "network". Used by the post-revision
+  // flow in CounterfactualCard to deep-link straight into Decision pathways.
+  initialViewMode?: "network" | "pathways";
 };
 
 function GraphModal({
@@ -252,12 +314,40 @@ function GraphModal({
   onDrill,
   active,
   explainer,
+  hiddenDepPath,
+  initialViewMode = "network",
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
   const [selectedClassFacts, setSelectedClassFacts] = useState<SelectedClassFacts | null>(null);
+  // Click-to-reveal: when an entity node is tapped, if its id matches one of
+  // the case's facts (across any stage), surface that fact's card in the side
+  // legend so the user can read what the stages say about this node without
+  // closing the modal. Null when the modal is dimmer-only / no case attached.
+  const [selectedEntityFact, setSelectedEntityFact] = useState<EntityFactReveal | null>(null);
+  // View mode — toggled via the tab strip above the canvas. "network" is the
+  // clean overview; "pathways" overlays a per-pathway highlight using the
+  // case's decision support data (proposed swap chain stays amber, at-risk
+  // program chains glow slate, everything else dims).
+  const [viewMode, setViewMode] = useState<"network" | "pathways">(initialViewMode);
+  const decisionSupport = useMemo(
+    () => computeDecisionSupport(active ?? null),
+    [active],
+  );
   const cyRef = useRef<cytoscape.Core | null>(null);
+  // Bumped once react-cytoscapejs hands us the cy instance — included as a
+  // dependency on layout / pathway / hidden-dep effects so they re-run when
+  // cy first becomes available. Without this, opening the modal with
+  // initialViewMode="pathways" (the post-revision deep-link path) leaves
+  // the highlight unapplied because the effect already ran while cyRef was
+  // still null. Flipping to Network and back used to work as a side-effect
+  // because the viewMode change re-fired the effect after cy had attached.
+  const [cyReadyTick, setCyReadyTick] = useState(0);
+  // Defensive cap on how many times the pathway effect can re-run waiting
+  // for cytoscape to ingest the failing node. Without a cap, a misconfigured
+  // case (failing node not in the supplier subgraph) would spin forever.
+  const pathwayRetriesRef = useRef(0);
   const hiddenSub = useFilterSubscription();
   const hidden = hiddenProp ?? hiddenSub;
 
@@ -284,8 +374,12 @@ function GraphModal({
 
   // Run a fresh layout when the underlying element set changes (filters
   // toggled) OR when the user picks a new layout from the dropdown.
-  // Auto-fit on layoutstop AND via a backup timeout, so the canvas is
-  // never left blank even if the layout never fires its stop event.
+  // Auto-fit on layoutstop AND via TWO backup timers so the canvas is never
+  // left blank or zoomed-out-of-view even if layoutstop fires too early or
+  // never. The longer timer (650 ms) catches the slow-mount case where the
+  // modal opens, elements arrive, dagre runs against a canvas that hasn't
+  // been sized yet, the fit settles on the wrong viewport — then this
+  // re-fit recomputes against the final canvas dimensions.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || elements.length === 0) return;
@@ -305,11 +399,276 @@ function GraphModal({
       console.warn("Layout", layout, "failed, falling back to cose:", e);
       try { runOne("cose"); } catch { /* swallow */ }
     }
-    // Belt-and-braces: even if layoutstop fires too early or never, this
-    // timer guarantees a fit after the browser has painted.
-    const t = setTimeout(safeFit, 300);
-    return () => { cancelled = true; clearTimeout(t); };
+    // Belt-and-braces: even if layoutstop fires too early or never, these
+    // timers guarantee a fit after the browser has painted. Two delays
+    // because react-cytoscapejs mount + dagre on 15+ nodes can exceed
+    // 300 ms on a cold start.
+    const t1 = setTimeout(safeFit, 300);
+    const t2 = setTimeout(safeFit, 650);
+    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
   }, [elements.length, layout]);
+
+  // Apply the Decision-pathways highlight. Runs when viewMode flips to
+  // "pathways" (or the case data changes). Uses Cytoscape's dijkstra to
+  // walk from the failing entity to each impact program AND each proposed
+  // swap candidate, then paints those paths and dims everything else. The
+  // amber hidden-dep highlight (managed by the next effect) layers on top
+  // so the proposed-swap chain stays visually distinct from the at-risk
+  // program chains. Clears on flip back to "network".
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    // Clear pathway-mode classes before deciding what to apply this pass.
+    cy.elements().removeClass(
+      "cy-impact-path cy-proposed-path cy-pathway-dim " +
+      "cy-pathway-terminal cy-pathway-failing cy-pathway-edge-reverse",
+    );
+    // Restore any node + edge labels we mutated in the previous pass so
+    // the Network tab reads normally again.
+    const previousLabels =
+      (cy.scratch("_kfPathwayOriginalLabels") as Record<string, string>) || {};
+    for (const [id, original] of Object.entries(previousLabels)) {
+      const n = cy.getElementById(id);
+      if (n && n.length > 0) n.data("label", original);
+    }
+    cy.scratch("_kfPathwayOriginalLabels", {});
+    const previousEdgeLabels =
+      (cy.scratch("_kfPathwayOriginalEdgeLabels") as Record<string, string>) || {};
+    for (const [id, original] of Object.entries(previousEdgeLabels)) {
+      const e = cy.getElementById(id);
+      if (e && e.length > 0) e.data("label", original);
+    }
+    cy.scratch("_kfPathwayOriginalEdgeLabels", {});
+
+    if (viewMode !== "pathways" || !decisionSupport?.failing) {
+      pathwayRetriesRef.current = 0;
+      return;
+    }
+    const failingId = decisionSupport.failing.entityId;
+    const failingNode = cy.getElementById(failingId);
+    // When the modal first opens with initialViewMode="pathways" via the
+    // post-revision deep-link, this effect can run before cytoscape has
+    // finished ingesting the async-fetched elements. If the failing node
+    // isn't there yet, schedule a single retry on the next paint frame —
+    // by then cytoscape has caught up. Capped at 6 retries to avoid an
+    // unbounded loop if the failing node truly isn't in the subgraph.
+    if (!failingNode || failingNode.length === 0) {
+      if (pathwayRetriesRef.current >= 6) return;
+      pathwayRetriesRef.current += 1;
+      const t = setTimeout(() => setCyReadyTick((n) => n + 1), 120);
+      return () => clearTimeout(t);
+    }
+    pathwayRetriesRef.current = 0;
+    const dijkstra = cy.elements().dijkstra({ root: failingNode });
+    const keep = cy.collection();
+    keep.merge(failingNode);
+    const newOriginalLabels: Record<string, string> = {};
+    // Per-node step number along its pathway (failing = 1; intermediate
+    // buyers = 2; POs = 3; SKUs = 4; terminals = 5 for the typical
+    // SUPPLIER → BUYER → PO → SKU → PROGRAM walk). When a node sits on
+    // multiple pathways, the LOWEST step wins (a node "closer to the
+    // start" reads more naturally as that step). Failing node always
+    // pinned to 1 since it's the root of every dijkstra.
+    const nodeStep: Record<string, number> = { [failingId]: 1 };
+    const nodeCategory: Record<string, "failing" | "impact" | "proposed" | "context"> = {
+      [failingId]: "failing",
+    };
+    const terminalIds = new Set<string>();
+
+    // RECOMMENDED swap candidates — GREEN treatment. These have NO
+    // surfaced concerns and are the pathways the reviewer should approve.
+    decisionSupport.recommended.forEach((rec) => {
+      const target = cy.getElementById(rec.entityId);
+      if (!target || target.length === 0) return;
+      const path = dijkstra.pathTo(target);
+      if (path.length === 0) return;
+      path.edges().addClass("cy-proposed-path");
+      keep.merge(path);
+      terminalIds.add(rec.entityId);
+      path.nodes().forEach((node: any, i: number) => {
+        const id = node.id();
+        const step = i + 1;
+        if (nodeStep[id] === undefined || step < nodeStep[id]) {
+          nodeStep[id] = step;
+        }
+        if (!nodeCategory[id]) nodeCategory[id] = "proposed";
+      });
+    });
+
+    // NOT-RECOMMENDED swap candidates — RED treatment. These have one or
+    // more surfaced concerns (lapsed qualification, shared parent, etc.)
+    // and should be rejected by the reviewer.
+    decisionSupport.notRecommended.forEach((nr) => {
+      const target = cy.getElementById(nr.entityId);
+      if (!target || target.length === 0) return;
+      const path = dijkstra.pathTo(target);
+      if (path.length === 0) return;
+      path.edges().addClass("cy-impact-path");
+      keep.merge(path);
+      terminalIds.add(nr.entityId);
+      path.nodes().forEach((node: any, i: number) => {
+        const id = node.id();
+        const step = i + 1;
+        if (nodeStep[id] === undefined || step < nodeStep[id]) {
+          nodeStep[id] = step;
+        }
+        // not-recommended (red/impact) overrides only un-set; failing and
+        // proposed (green) both stay since they're more specific.
+        if (!nodeCategory[id]) nodeCategory[id] = "impact";
+      });
+    });
+
+    // AT-RISK programs — SLATE treatment (cy-context-path). These aren't
+    // supplier choices; they're the business stake the decision is
+    // protecting. Rendered on the graph so the reviewer sees the full
+    // context — failing supplier on the left, RECOMMENDED + AVOID
+    // candidates in the middle, AT-RISK programs flowing out via the
+    // tier-1 buyers and PO chains. Lowest category priority so a node
+    // that lands on a recommended/avoid path keeps that color.
+    decisionSupport.impacts.forEach((impact) => {
+      const target = cy.getElementById(impact.entityId);
+      if (!target || target.length === 0) return;
+      const path = dijkstra.pathTo(target);
+      if (path.length === 0) return;
+      path.edges().addClass("cy-context-path");
+      keep.merge(path);
+      terminalIds.add(impact.entityId);
+      path.nodes().forEach((node: any, i: number) => {
+        const id = node.id();
+        const step = i + 1;
+        if (nodeStep[id] === undefined || step < nodeStep[id]) {
+          nodeStep[id] = step;
+        }
+        if (!nodeCategory[id]) nodeCategory[id] = "context";
+      });
+    });
+
+    // Apply per-node label prefix + category class. The prefix gives the
+    // reviewer a strict reading order (1 → 2 → 3 → …) regardless of which
+    // way the underlying cypher arrows point. Terminal nodes also get a
+    // second-line WHY:
+    //   • Recommended (green) terminals show the positive attributes
+    //     ("✓ qualified · reliability 0.91") so the reviewer can see at a
+    //     glance WHY this candidate is the right pick.
+    //   • Not-recommended (red) terminals show the concerns
+    //     ("⚠ qual lapsed 2026-04-15 · shared parent") so the reviewer
+    //     sees WHY this candidate should be rejected.
+    const recommendedByEntity = new Map(
+      decisionSupport.recommended.map((p) => [p.entityId, p]),
+    );
+    const notRecommendedByEntity = new Map(
+      decisionSupport.notRecommended.map((p) => [p.entityId, p]),
+    );
+    const impactsByEntity = new Map(
+      decisionSupport.impacts.map((p) => [p.entityId, p]),
+    );
+    for (const [id, step] of Object.entries(nodeStep)) {
+      const node = cy.getElementById(id);
+      if (!node || node.length === 0) continue;
+      const original = node.data("label") as string;
+      newOriginalLabels[id] = original;
+      let labelText = `${step} · ${original}`;
+      if (terminalIds.has(id)) {
+        const cat = nodeCategory[id];
+        if (cat === "proposed") {
+          const rec = recommendedByEntity.get(id);
+          if (rec?.positives && rec.positives.length > 0) {
+            labelText = `${labelText}\n✓ ${rec.positives.join(" · ")}`;
+          }
+        } else if (cat === "impact") {
+          const nr = notRecommendedByEntity.get(id);
+          if (nr?.concerns && nr.concerns.length > 0) {
+            labelText = `${labelText}\n⚠ ${compactProposedConcerns(nr.concerns)}`;
+          }
+        } else if (cat === "context") {
+          const ctx = impactsByEntity.get(id);
+          if (ctx?.stake) {
+            labelText = `${labelText}\n${compactImpactStake(ctx.stake)}`;
+          }
+        }
+      }
+      node.data("label", labelText);
+      const cat = nodeCategory[id];
+      if (cat === "failing") node.addClass("cy-pathway-failing");
+      else if (cat === "proposed") node.addClass("cy-proposed-path");
+      else if (cat === "impact") node.addClass("cy-impact-path");
+      else if (cat === "context") node.addClass("cy-context-path");
+      if (terminalIds.has(id)) node.addClass("cy-pathway-terminal");
+    }
+
+    // Pathway view = DECISION graph (not cypher graph). For every pathway
+    // edge whose cypher source sits at a HIGHER step than its target, we
+    // tag it with cy-pathway-edge-reverse so the visible arrow flips to
+    // point from the low-step end to the high-step end. The reviewer's eye
+    // can then follow the colored chain in step order without ever having
+    // to walk against an arrow. The cypher-relationship label is also
+    // rewritten to a flow-of-risk story phrase ("supplies", "placed
+    // order", "delivered to", ...) so the edge text reads as a verb in
+    // the flow direction rather than a graph-query type.
+    const newOriginalEdgeLabels: Record<string, string> = {};
+    cy.edges(".cy-impact-path, .cy-proposed-path").forEach((edge: any) => {
+      const srcStep = nodeStep[edge.source().id()];
+      const tgtStep = nodeStep[edge.target().id()];
+      const reversed =
+        srcStep !== undefined && tgtStep !== undefined && srcStep > tgtStep;
+      if (reversed) edge.addClass("cy-pathway-edge-reverse");
+      const cypherLabel = (edge.data("label") as string) || "";
+      newOriginalEdgeLabels[edge.id()] = cypherLabel;
+      edge.data("label", pathwayEdgeStory(cypherLabel, reversed));
+    });
+    cy.scratch("_kfPathwayOriginalEdgeLabels", newOriginalEdgeLabels);
+
+    cy.scratch("_kfPathwayOriginalLabels", newOriginalLabels);
+    // Hide every element NOT on a highlighted pathway. cy-pathway-dim now
+    // sets display:none in the stylesheet so the canvas shows ONLY the
+    // decision chains. Re-fit so the visible subset uses the whole canvas
+    // (otherwise the pathways look lost in empty space left by the hidden
+    // off-pathway nodes).
+    cy.elements().difference(keep).addClass("cy-pathway-dim");
+    setTimeout(() => {
+      try { cy.fit(cy.elements(":visible"), 40); } catch { /* swallow */ }
+    }, 50);
+  }, [viewMode, decisionSupport, elements.length, layout, cyReadyTick]);
+
+  // When the user flips back to the Network tab, re-fit to ALL elements
+  // so the wider graph isn't stranded off-screen at the pathway-zoom.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || viewMode !== "network") return;
+    const t = setTimeout(() => {
+      try { cy.fit(undefined, 40); } catch { /* swallow */ }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [viewMode]);
+
+  // Apply the hidden-dependency path highlight. Runs after the elements
+  // collection settles (and re-runs when the path list changes). Adds the
+  // .cy-hidden-dep-path class to every matching node and every edge whose
+  // two endpoints are both in the highlighted set. Doesn't dim the rest of
+  // the graph — the user keeps full freedom to click-explore; the amber
+  // chain just glows against the default palette.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements().removeClass("cy-hidden-dep-path");
+    const ids = (hiddenDepPath ?? []).filter(Boolean);
+    if (ids.length === 0) return;
+    const targetNodes = cy.collection();
+    for (const id of ids) {
+      const n = cy.getElementById(id);
+      if (n.length) targetNodes.merge(n);
+    }
+    if (targetNodes.length === 0) return;
+    targetNodes.addClass("cy-hidden-dep-path");
+    targetNodes.connectedEdges().forEach((edge: any) => {
+      if (
+        edge.source().hasClass("cy-hidden-dep-path") &&
+        edge.target().hasClass("cy-hidden-dep-path")
+      ) {
+        edge.addClass("cy-hidden-dep-path");
+      }
+    });
+  }, [hiddenDepPath, elements.length, layout]);
 
   // Derive per-type counts for the topbar and legend. (Relationships are
   // labelled directly on the edges now, not enumerated in the side panel.)
@@ -391,6 +750,39 @@ function GraphModal({
             >×</button>
           </div>
         </header>
+        {/* View-mode tabs — Network is the clean overview; Decision pathways
+            overlays per-pathway highlights using the case's decisionSupport
+            data. The Pathways tab is disabled when the case has no proposed
+            or at-risk pathways to highlight (e.g. simpler onboarding cases). */}
+        <div className="graph-modal-tabs">
+          <button
+            type="button"
+            className={`graph-modal-tab${viewMode === "network" ? " active" : ""}`}
+            onClick={() => setViewMode("network")}
+          >
+            Network
+          </button>
+          <button
+            type="button"
+            className={`graph-modal-tab${viewMode === "pathways" ? " active" : ""}`}
+            onClick={() => setViewMode("pathways")}
+            disabled={!decisionSupport}
+            title={
+              decisionSupport
+                ? "Highlight the proposed swap pathway + at-risk program pathways; dim everything else."
+                : "This case has no proposed or at-risk pathways to highlight."
+            }
+          >
+            Decision pathways
+            {decisionSupport && (
+              <span className="graph-modal-tab-count">
+                {decisionSupport.recommended.length +
+                 decisionSupport.notRecommended.length +
+                 decisionSupport.impacts.length}
+              </span>
+            )}
+          </button>
+        </div>
         <div className="graph-modal-stage">
           <div className="graph-modal-canvas">
             {loading && (
@@ -421,7 +813,18 @@ function GraphModal({
                 style={{ width: "100%", height: "100%" }}
                 wheelSensitivity={0.2}
                 cy={(cy) => {
+                  // react-cytoscapejs fires this callback on EVERY render
+                  // (componentDidUpdate), not just on first mount. Guard
+                  // so the side effects + setCyReadyTick only run when
+                  // we get a genuinely new cy instance — otherwise the
+                  // setState here triggers a render → which fires this
+                  // callback again → infinite loop (React's "Maximum
+                  // update depth exceeded").
+                  if (cyRef.current === cy) return;
                   cyRef.current = cy;
+                  // Tell every cy-dependent effect that the ref is now
+                  // populated. One bump per cytoscape instance.
+                  setCyReadyTick((n) => n + 1);
                   // Cap zoom so cy.fit() never enlarges nodes past their
                   // intrinsic size — without this, small dots cause the
                   // Editorial knowledge graph to zoom 4–5× in and the
@@ -430,6 +833,35 @@ function GraphModal({
                   cy.minZoom(0.2);
                   attachInteractivity(cy);
                   attachEvidenceMapBehaviour(cy, setSelectedClassFacts, onDrill ?? null, active ?? null);
+                  attachEntityFactClickReveal(cy, active ?? null, setSelectedEntityFact);
+                  // First-mount layout kick — fixes the "everything piled
+                  // at (0,0)" first-open bug. Sequence on modal open:
+                  //   1. Fetch resolves, elements transition 0 → N
+                  //   2. The layout useEffect fires, bails at `if (!cy)`
+                  //      because react-cytoscapejs hasn't called us yet
+                  //   3. THEN this callback fires and sets cyRef
+                  //   4. The useEffect never re-runs because its deps
+                  //      [elements.length, layout] didn't change
+                  // So nothing ever lays out the graph. We fix that by
+                  // running the layout right here on first attach when
+                  // elements are already present. Scratch flag makes it
+                  // idempotent against re-invocation of the cy callback.
+                  if (!cy.scratch("_kfInitLayoutDone") && cy.elements().length > 0) {
+                    cy.scratch("_kfInitLayoutDone", true);
+                    try {
+                      const l = cy.layout(layoutOptions(layout));
+                      l.on("layoutstop", () => {
+                        try { cy.fit(undefined, 40); } catch { /* swallow */ }
+                      });
+                      l.run();
+                      // Belt-and-braces fit timers in case layoutstop fires
+                      // before the canvas finished sizing.
+                      setTimeout(() => { try { cy.fit(undefined, 40); } catch {} }, 300);
+                      setTimeout(() => { try { cy.fit(undefined, 40); } catch {} }, 650);
+                    } catch (e) {
+                      console.warn("Initial layout failed:", e);
+                    }
+                  }
                 }}
               />
             )}
@@ -448,6 +880,9 @@ function GraphModal({
                 ? DRILL_HANDLERS.neo4j.hint
                 : null
             }
+            selectedEntityFact={selectedEntityFact}
+            onDismissEntityFact={() => setSelectedEntityFact(null)}
+            decisionSupport={viewMode === "pathways" ? decisionSupport : null}
           />
         </div>
       </div>
@@ -471,6 +906,9 @@ function GraphModalSideLegend({
   selectedClassFacts,
   onDismissFacts,
   drillHint,
+  selectedEntityFact,
+  onDismissEntityFact,
+  decisionSupport,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -481,6 +919,9 @@ function GraphModalSideLegend({
   selectedClassFacts?: SelectedClassFacts | null;
   onDismissFacts?: () => void;
   drillHint?: string | null;
+  selectedEntityFact?: EntityFactReveal | null;
+  onDismissEntityFact?: () => void;
+  decisionSupport?: DecisionSupport | null;
 }) {
   return (
     <aside className={`graph-modal-side-legend${open ? "" : " collapsed"}`}>
@@ -490,10 +931,32 @@ function GraphModalSideLegend({
       </button>
       {open && (
         <div className="graph-modal-side-legend-body">
+          {/* Decision-support panel sits at the very top — it's the most
+              decision-relevant content. Renders ONLY when the case actually
+              has proposed or at-risk pathways to summarise (otherwise the
+              panel returns null and nothing is added to the legend). */}
+          {decisionSupport && <DecisionSupportPanel support={decisionSupport} />}
           {explainer && (
             <div className="graph-modal-side-legend-explainer">{explainer}</div>
           )}
           {subtitle && <div className="graph-modal-side-legend-subtitle">{subtitle}</div>}
+          {/* Pinned at the top of the legend whenever a node has been tapped
+              and matched to a case fact. The card shows what that node is
+              "saying" inside the stages — role pill, hidden-dep callout,
+              summary chips — so the user can read the evidence without
+              closing the modal. Dismisses cleanly when a non-matching node
+              or the background is tapped. */}
+          {selectedEntityFact && (
+            <EntityFactRevealCard
+              reveal={selectedEntityFact}
+              onDismiss={onDismissEntityFact ?? (() => {})}
+            />
+          )}
+          {!selectedEntityFact && variant === "knowledge" && (
+            <div className="graph-modal-side-legend-tip">
+              <strong>Tip ·</strong> click any node to see its card from the stages.
+            </div>
+          )}
           {selectedClassFacts && (
             <ClassDetailsPanel
               className={selectedClassFacts.className}
@@ -586,6 +1049,536 @@ function GraphModalSideLegend({
         </div>
       )}
     </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pathway palette — two semantic colours only so the reviewer's eye doesn't
+// have to learn a 5-colour key:
+//   • GREEN — proposed pathway (a swap candidate)
+//   • RED   — at-risk pathway (a program / SKU / buyer at stake)
+// Multiple pathways in the same category are disambiguated by a numbered
+// terminal-node label ("1 · Stillwater Alloys", "1 · Mirage Avionics",
+// etc.) — the number cross-references the side-panel order.
+// ---------------------------------------------------------------------------
+const PROPOSED_PATH_COLOR = "#16a34a"; // green
+const IMPACT_PATH_COLOR = "#c14a4a";   // red
+
+// Compact-for-graph helpers — used to append the WHY (stake or
+// concerns) to a terminal node's label without overflowing the
+// 110px text-max-width set in the knowledge stylesheet.
+function compactImpactStake(stake: string): string {
+  // "$48M revenue · $220k/day OTD penalty" → "$48M · $220k/day"
+  return stake
+    .replace(/ revenue at risk/g, "")
+    .replace(/ revenue/g, "")
+    .replace(/ OTD penalty/g, "")
+    .replace(/\s+·\s+/g, " · ");
+}
+
+function compactProposedConcerns(concerns: string[]): string {
+  // Map known phrases to short tags so the suffix fits on a second line.
+  return concerns
+    .map((c) => {
+      const lower = c.toLowerCase();
+      if (lower.includes("qualification") || lower.includes("certification")) {
+        const expM = c.match(/expired ([0-9-]+)/);
+        return expM ? `qual lapsed ${expM[1]}` : "qual lapsed";
+      }
+      if (lower.includes("shared parent")) return "shared parent";
+      if (lower.includes("authority")) return "above authority";
+      return c.length > 32 ? c.substring(0, 29) + "…" : c;
+    })
+    .join(" · ");
+}
+
+// Cypher relationship → story-of-risk-flow label rewrite for the
+// Pathways tab. The 2nd arg flags edges whose cypher direction is
+// opposite to the path-step direction (so the visible arrow was
+// flipped via cy-pathway-edge-reverse); the verb tense changes
+// accordingly. Default: lowercase the cypher type with spaces.
+function pathwayEdgeStory(cypherLabel: string, reversed: boolean): string {
+  switch (cypherLabel) {
+    case "SOURCES_FROM":      return reversed ? "supplies" : "buys from";
+    case "PLACED":            return "placed order";
+    case "CONTAINS":          return "for SKU";
+    case "INCLUDED_IN":       return "delivered to";
+    case "CONTROLLED_BY":     return reversed ? "also owns" : "owned by";
+    case "OWNS_SHARE":        return "owns share in";
+    case "PARENT_OF":         return reversed ? "subsidiary of" : "parent of";
+    case "JOINT_VENTURE_WITH":return "JV partner";
+    case "SHIPS_VIA":         return "ships via";
+    case "MEMBER_OF":         return "member of";
+    default:                  return cypherLabel.toLowerCase().replace(/_/g, " ");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Decision support — walks the case's facts and groups them into the
+// pathways the reviewer is being asked to evaluate. Surfaces:
+//   • the failing entity that triggered the case (FAILING)
+//   • each proposed swap pathway with its concerns parsed from the summary
+//   • each at-risk pathway with the business stake parsed from the summary
+//   • an inferred recommendation if every proposed swap has concerns
+// Renders ONLY in the side legend — the graph itself stays uncluttered.
+// ---------------------------------------------------------------------------
+interface DecisionPath {
+  entityId: string;
+  entityName: string;
+  viaPath?: string;
+  hops?: number;
+  concerns?: string[];   // populated on not-recommended candidates only
+  positives?: string[];  // populated on recommended candidates only
+  stake?: string;        // populated on impact entries only
+}
+
+interface DecisionSupport {
+  // Swap candidates with NO concerns surfaced — what the reviewer should
+  // most likely pick. Rendered GREEN in the graph + side panel.
+  recommended: DecisionPath[];
+  // Swap candidates WITH concerns (lapsed qualification, shared parent,
+  // above-authority risk, etc.) — what the reviewer should reject. RED.
+  notRecommended: DecisionPath[];
+  // Programs whose SKUs are exposed if no swap happens. Surfaced in the
+  // side panel as CONTEXT ("here's what's at stake") but NOT drawn on
+  // the pathways graph — they aren't supplier choices.
+  impacts: DecisionPath[];
+  failing?: { entityId: string; entityName: string; statusLabel: string };
+  recommendation?: string;
+}
+
+function _humanizeViaPathForSupport(vp: string): string {
+  if (vp === "joint-venture partner") return "a joint-venture partnership";
+  if (vp.startsWith("sibling via parent ")) {
+    return vp.replace("sibling via parent ", "") + " (shared parent)";
+  }
+  if (vp.startsWith("sibling via ")) {
+    return vp.replace(/^sibling via /, "").replace(/\s+\(HoldingCompany\)$/, "");
+  }
+  return vp;
+}
+
+function computeDecisionSupport(active: CaseFull | null): DecisionSupport | null {
+  if (!active?.stages) return null;
+  const recommended: DecisionPath[] = [];
+  const notRecommended: DecisionPath[] = [];
+  const impacts: DecisionPath[] = [];
+  let failing: DecisionSupport["failing"];
+
+  // W1 / Beat 3 — pre-scan for "new evidence" facts injected by /revise
+  // triggers. These reclassify previously-recommended alternatives into
+  // not-recommended ones. Each fact carries a SUP-id in its title; we
+  // match against AlternativeSupplier entity ids below.
+  //
+  // Supported new-evidence fact types:
+  //   • QualificationUpdate · status: "lapsed" → flips the matched
+  //     candidate to NOT recommended with a "qualification lapsed" concern
+  //   • SanctionsProximity (new SDN listing) → flips the matched
+  //     candidate to NOT recommended with a "fresh SDN exposure" concern
+  const evidenceConcernsByEntity = new Map<string, string[]>();
+  const SUP_ID_RE = /\bSUP-\d+\b/;
+  for (const stage of active.stages) {
+    for (const fact of stage.facts ?? []) {
+      // Qualification update — title format: "Ironcrest Metalworks (SUP-023) · qualification lapsed"
+      if (
+        fact.ontology_type === "QualificationUpdate" &&
+        typeof fact.status === "string" &&
+        fact.status === "lapsed"
+      ) {
+        const m = fact.title?.match(SUP_ID_RE);
+        if (m) {
+          const list = evidenceConcernsByEntity.get(m[0]) ?? [];
+          list.push("Quality certification lapsed (new evidence)");
+          evidenceConcernsByEntity.set(m[0], list);
+        }
+      }
+      // Fresh SDN listing — SanctionsProximity facts injected POST-decision
+      // that name a supplier id in the summary. The original-run
+      // SanctionsProximity facts named SDNs in title, not suppliers, so
+      // we only catch the injected ones.
+      if (
+        fact.ontology_type === "SanctionsProximity" &&
+        typeof fact.summary === "string"
+      ) {
+        const m = fact.summary?.match(SUP_ID_RE);
+        if (m) {
+          const list = evidenceConcernsByEntity.get(m[0]) ?? [];
+          list.push("Fresh OFAC SDN exposure surfaced (new evidence)");
+          evidenceConcernsByEntity.set(m[0], list);
+        }
+        // Also catch by title (e.g. "Vega Marine Trading (OFAC SDN)" with
+        // summary mentioning "Ironcrest"). Look for SUP-XXX in summary.
+      }
+    }
+  }
+
+  for (const stage of active.stages) {
+    for (const fact of stage.facts ?? []) {
+      // FAILING supplier — the trigger node
+      if (
+        fact.ontology_type === "Supplier" &&
+        typeof fact.status === "string" &&
+        fact.status.startsWith("chapter_11")
+      ) {
+        const m = fact.status.match(/^chapter_11_filed_(\d{4}-\d{2}-\d{2})$/);
+        failing = {
+          entityId: fact.id,
+          entityName: fact.title ?? fact.id,
+          statusLabel: m ? `Chapter 11 filed · ${m[1]}` : fact.status,
+        };
+        continue;
+      }
+      // SWAP CANDIDATE — classify into recommended vs not-recommended based
+      // on the concerns surfaced from the summary + via_path. Concerns
+      // observed today:
+      //   • qualification: lapsed (quality cert expired)
+      //   • shared HoldingCompany (concentration risk unchanged)
+      //   • shared parent supplier (same)
+      // A candidate with ZERO concerns is recommended (green). Any
+      // candidate with one or more concerns is NOT recommended (red).
+      if (fact.ontology_type === "AlternativeSupplier") {
+        const sum = fact.summary ?? "";
+        const concerns: string[] = [];
+        const qm = sum.match(/qualification: (lapsed)( \(expired ([0-9-]+)\))?/);
+        if (qm) {
+          concerns.push(
+            qm[3]
+              ? `Quality certification lapsed (expired ${qm[3]})`
+              : "Quality certification lapsed",
+          );
+        }
+        if (fact.via_path && fact.via_path.includes("HoldingCompany")) {
+          concerns.push(
+            "Shared parent with failing supplier — concentration risk unchanged",
+          );
+        } else if (
+          fact.via_path &&
+          fact.via_path.startsWith("sibling via parent")
+        ) {
+          concerns.push(
+            "Shared parent supplier — concentration risk unchanged",
+          );
+        }
+        // W1 / Beat 3 — fold any new-evidence concerns into this
+        // candidate's concern list. Looks the candidate up by its SUP-id
+        // in the pre-scanned map. After this, a previously-recommended
+        // (no concerns) candidate that received new evidence will move
+        // to the not-recommended pile below.
+        const evidenceConcerns = evidenceConcernsByEntity.get(fact.id) ?? [];
+        for (const ec of evidenceConcerns) {
+          if (!concerns.includes(ec)) concerns.push(ec);
+        }
+        // Positive attributes parsed from the summary for recommended
+        // candidates — qualification status, reliability score, and the
+        // graph-walk path that surfaced them. Drives the "✓ qualified ·
+        // reliability 0.91" terminal label.
+        const positives: string[] = [];
+        if (sum.match(/qualification: qualified/)) {
+          positives.push("qualified");
+        }
+        const relMatch = sum.match(/reliability ([0-9.]+)/);
+        if (relMatch) positives.push(`reliability ${relMatch[1]}`);
+        if (fact.via_path === "joint-venture partner") {
+          positives.push("JV partner");
+        }
+
+        const candidate: DecisionPath = {
+          entityId: fact.id,
+          entityName: fact.title ?? fact.id,
+          viaPath: fact.via_path
+            ? _humanizeViaPathForSupport(fact.via_path)
+            : undefined,
+          hops: typeof fact.hops === "number" ? fact.hops : undefined,
+          concerns: concerns.length > 0 ? concerns : undefined,
+          positives: positives.length > 0 ? positives : undefined,
+        };
+        if (concerns.length === 0) {
+          recommended.push(candidate);
+        } else {
+          notRecommended.push(candidate);
+        }
+        continue;
+      }
+      // AT-RISK program — surfaced as side-panel context (not on graph)
+      if (fact.ontology_type === "ProgramImpact") {
+        const sum = fact.summary ?? "";
+        const stakeMatch = sum.match(/\$([0-9.]+M)\s*revenue at risk(?:\s*·\s*\$([0-9.]+k)\/day OTD penalty)?/);
+        const viaMatch = sum.match(/via\s+([^·]+?)\s+·/);
+        let stake: string | undefined;
+        if (stakeMatch) {
+          stake = stakeMatch[2]
+            ? `$${stakeMatch[1]} revenue · $${stakeMatch[2]}/day OTD penalty`
+            : `$${stakeMatch[1]} revenue at risk`;
+        }
+        impacts.push({
+          entityId: fact.id,
+          entityName: fact.title ?? fact.id,
+          viaPath: viaMatch ? viaMatch[1].trim() : undefined,
+          stake,
+        });
+      }
+    }
+  }
+
+  if (
+    recommended.length === 0 &&
+    notRecommended.length === 0 &&
+    impacts.length === 0 &&
+    !failing
+  ) {
+    return null;
+  }
+
+  // Recommendation text — drives the bottom of the side panel.
+  let recommendation: string | undefined;
+  if (recommended.length > 0 && notRecommended.length > 0) {
+    recommendation =
+      `Recommend swap to ${recommended[0].entityName}. Avoid ${notRecommended[0].entityName} — the listed concerns make it ineligible.`;
+  } else if (recommended.length > 0) {
+    recommendation =
+      `Recommend swap to ${recommended[0].entityName} — no governance concerns surfaced.`;
+  } else if (notRecommended.length > 0) {
+    recommendation =
+      "No clean swap candidates surfaced. Every graph-matched alternative has governance concerns — consider REQUEST MORE INFO or extended search.";
+  }
+
+  return { recommended, notRecommended, impacts, failing, recommendation };
+}
+
+function DecisionSupportPanel({ support }: { support: DecisionSupport }) {
+  return (
+    <div className="decision-support">
+      <div className="decision-support-eyebrow">Decision support</div>
+      {support.failing && (
+        <div className="decision-support-trigger">
+          <span className="decision-support-trigger-marker" aria-hidden="true">⛔</span>
+          <span>
+            Triggered by{" "}
+            <strong>{support.failing.entityName}</strong>
+            <span className="decision-support-trigger-status">
+              {" "}· {support.failing.statusLabel}
+            </span>
+          </span>
+        </div>
+      )}
+      <div className="decision-support-reading-hint">
+        Pathways tab shows the <strong>decision graph</strong>:
+        {" "}<strong style={{ color: PROPOSED_PATH_COLOR }}>green</strong>{" "}
+        = recommended swap (pick this);
+        {" "}<strong style={{ color: IMPACT_PATH_COLOR }}>red</strong>{" "}
+        = candidates to reject (severe concerns);
+        {" "}<strong style={{ color: "#64748b" }}>slate</strong>{" "}
+        = at-risk programs (business stake, context only);
+        {" "}<strong style={{ color: "#000000" }}>■</strong> = failing
+        supplier. Nodes numbered <strong>1 → N</strong> in flow order.
+      </div>
+      {support.recommended.length > 0 && (
+        <div className="decision-support-section">
+          <div className="decision-support-section-label">
+            Recommended swap{support.recommended.length === 1 ? "" : "s"}
+            <span className="decision-support-count">({support.recommended.length})</span>
+          </div>
+          {support.recommended.map((p, i) => (
+            <div
+              key={p.entityId}
+              className="decision-support-path proposed"
+              style={{ borderLeftColor: PROPOSED_PATH_COLOR }}
+            >
+              <div className="decision-support-path-header">
+                <span
+                  className="decision-support-path-marker"
+                  style={{ background: PROPOSED_PATH_COLOR }}
+                  title={`Green chain in the graph terminates at "${i + 1} · ${p.entityName}"`}
+                >
+                  {i + 1}
+                </span>
+                <span className="decision-support-path-name">{p.entityName}</span>
+              </div>
+              {p.viaPath && (
+                <div className="decision-support-path-via">
+                  via <strong>{p.viaPath}</strong>
+                  {typeof p.hops === "number" && ` · ${p.hops}-hop chain`}
+                </div>
+              )}
+              {p.positives && p.positives.length > 0 && (
+                <ul className="decision-support-positives">
+                  {p.positives.map((pos, j) => (
+                    <li key={j}>{pos}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {support.notRecommended.length > 0 && (
+        <div className="decision-support-section">
+          <div className="decision-support-section-label">
+            Avoid
+            <span className="decision-support-count">({support.notRecommended.length})</span>
+          </div>
+          {support.notRecommended.map((p, i) => (
+            <div
+              key={p.entityId}
+              className="decision-support-path impact"
+              style={{ borderLeftColor: IMPACT_PATH_COLOR }}
+            >
+              <div className="decision-support-path-header">
+                <span
+                  className="decision-support-path-marker"
+                  style={{ background: IMPACT_PATH_COLOR }}
+                  title={`Red chain in the graph terminates at "${i + 1} · ${p.entityName}"`}
+                >
+                  {i + 1}
+                </span>
+                <span className="decision-support-path-name">{p.entityName}</span>
+              </div>
+              {p.viaPath && (
+                <div className="decision-support-path-via">
+                  via <strong>{p.viaPath}</strong>
+                  {typeof p.hops === "number" && ` · ${p.hops}-hop chain`}
+                </div>
+              )}
+              {p.concerns && p.concerns.length > 0 && (
+                <ul className="decision-support-concerns">
+                  {p.concerns.map((c, j) => (
+                    <li key={j}>{c}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {support.impacts.length > 0 && (
+        <div className="decision-support-section">
+          <div className="decision-support-section-label">
+            At-risk programs
+            <span className="decision-support-count">({support.impacts.length})</span>
+            <span className="decision-support-section-sublabel">— slate chains in graph, business stake only</span>
+          </div>
+          {support.impacts.map((p) => (
+            <div
+              key={p.entityId}
+              className="decision-support-path context"
+            >
+              <div className="decision-support-path-header">
+                <span className="decision-support-path-name">{p.entityName}</span>
+              </div>
+              {p.stake && (
+                <div className="decision-support-path-stake">{p.stake}</div>
+              )}
+              {p.viaPath && (
+                <div className="decision-support-path-via">via {p.viaPath}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {support.recommendation && (
+        <div className="decision-support-recommendation">
+          {support.recommendation}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Mini fact reveal — what's shown in the side legend when a graph node is
+// tapped and matches a case fact. Carries the same role pill + hidden-
+// dependency callout vocabulary the Envelope uses, so the user sees a single
+// consistent labelling system on both surfaces. Intentionally NOT a reuse of
+// Envelope's FactCard because (a) cross-importing would introduce a module
+// cycle and (b) the modal's side-panel space is much narrower than the
+// envelope grid — a simpler chrome works better.
+function EntityFactRevealCard({
+  reveal,
+  onDismiss,
+}: {
+  reveal: EntityFactReveal;
+  onDismiss: () => void;
+}) {
+  const { fact, stageName } = reveal;
+  // Same role + hidden-dep rules as Envelope.FactCard. Kept inline for
+  // visual symmetry with the FactCard's source row.
+  const role: { label: string; variant: string } | null = (() => {
+    if (
+      fact.ontology_type === "Supplier" &&
+      typeof fact.status === "string" &&
+      fact.status.startsWith("chapter_11")
+    ) return { label: "FAILING", variant: "failing" };
+    if (fact.ontology_type === "AlternativeSupplier")
+      return { label: "PROPOSED ALT", variant: "proposed-alt" };
+    if (fact.ontology_type === "DownstreamDependent")
+      return { label: "AFFECTED BUYER", variant: "affected-buyer" };
+    if (fact.ontology_type === "ProgramImpact")
+      return { label: "AT-RISK PROGRAM", variant: "at-risk-program" };
+    return null;
+  })();
+  const tierDepth = typeof fact.tier === "number" ? fact.tier : null;
+  const hopDepth = typeof fact.hops === "number" ? fact.hops : null;
+  const isHiddenDep =
+    (tierDepth !== null && tierDepth >= 2) ||
+    (hopDepth !== null && hopDepth >= 2);
+  const humanizeViaPath = (vp: string): string => {
+    if (vp === "joint-venture partner") return "a joint-venture partnership";
+    if (vp.startsWith("sibling via parent ")) {
+      return vp.replace("sibling via parent ", "") + " (shared parent)";
+    }
+    if (vp.startsWith("sibling via ")) {
+      return vp
+        .replace(/^sibling via /, "")
+        .replace(/\s+\(HoldingCompany\)$/, "");
+    }
+    return vp;
+  };
+  const chips = (fact.summary || "")
+    .split(/\s+·\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return (
+    <div className="entity-fact-reveal">
+      <div className="entity-fact-reveal-eyebrow">
+        <span>Card from stage · {stageName}</span>
+        <button
+          type="button"
+          className="entity-fact-reveal-dismiss"
+          onClick={onDismiss}
+          aria-label="Clear selection"
+        >×</button>
+      </div>
+      <div className="entity-fact-reveal-meta">
+        <span className="entity-fact-reveal-id">{fact.id}</span>
+        <span className="entity-fact-reveal-class">{fact.ontology_type}</span>
+        {role && (
+          <span className={`fact-role-pill fact-role-${role.variant}`}>
+            {role.label}
+          </span>
+        )}
+      </div>
+      <div className="entity-fact-reveal-title">{fact.title}</div>
+      {isHiddenDep && (
+        <div className="entity-fact-reveal-hidden-dep">
+          <span aria-hidden="true">⚠</span>{" "}
+          <strong>Hidden dependency</strong>
+          {" · "}
+          {tierDepth !== null && tierDepth >= 2 ? (
+            <>tier-{tierDepth} supplier — upstream chain</>
+          ) : fact.via_path ? (
+            <>{hopDepth}-hop chain via <strong>{humanizeViaPath(fact.via_path)}</strong></>
+          ) : (
+            <>{hopDepth}-hop relationship chain</>
+          )}
+        </div>
+      )}
+      {chips.length > 0 && (
+        <div className="entity-fact-reveal-chips">
+          {chips.map((c, i) => (
+            <span key={i} className="entity-fact-reveal-chip">{c}</span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -913,6 +1906,44 @@ function attachInteractivity(cy: cytoscape.Core) {
   });
 }
 
+// Click-to-reveal: when an entity node is tapped, look up the node id in the
+// case's facts (across every stage) and surface the matching fact to the
+// side legend. Background-tapping clears the reveal. Idempotent via scratch
+// flag — react-cytoscape re-invokes the cy callback on every re-render. The
+// `active` snapshot is captured at attach time, which is fine because the
+// modal closes (and the cy instance disposes) whenever active changes.
+function attachEntityFactClickReveal(
+  cy: cytoscape.Core,
+  active: CaseFull | null,
+  setReveal: (r: EntityFactReveal | null) => void,
+) {
+  if (cy.scratch("_kfEntityFactReveal")) return;
+  cy.scratch("_kfEntityFactReveal", true);
+  cy.on("tap", "node", (evt: any) => {
+    const nodeId = evt.target.id();
+    if (!active?.stages) {
+      setReveal(null);
+      return;
+    }
+    for (const stage of active.stages) {
+      for (const fact of stage.facts ?? []) {
+        if (fact.id === nodeId) {
+          setReveal({ fact, stageName: stage.stage });
+          return;
+        }
+      }
+    }
+    // Node has no matching fact card — clear any prior reveal so the side
+    // panel doesn't show a stale card. Common for graph-context nodes that
+    // the case didn't bind (e.g. a holding company surfaced by the walk but
+    // not returned by any of the scenario's queries).
+    setReveal(null);
+  });
+  cy.on("tap", (evt: any) => {
+    if (evt.target === cy) setReveal(null);
+  });
+}
+
 // React hook — subscribe to the global hidden-types store and re-render.
 function useFilterSubscription(): Set<GraphFilterType> {
   const [hidden, setHidden] = useState<Set<GraphFilterType>>(() => getHiddenGraphTypes());
@@ -927,7 +1958,19 @@ function useFilterSubscription(): Set<GraphFilterType> {
 function layoutOptions(name: LayoutName): any {
   switch (name) {
     case "dagre":
-      return { name: "dagre", rankDir: "LR", nodeSep: 30, rankSep: 80, edgeSep: 12 };
+      // rankDir: LR (left-to-right) reads naturally for directed supply-chain
+      // walks (supplier → PO → product → program). Bumped nodeSep + rankSep
+      // so 15-node subgraphs (Aeronova) don't overlap labels. Padding
+      // ensures fit() leaves room around the whole tree.
+      return {
+        name: "dagre",
+        rankDir: "LR",
+        nodeSep: 45,
+        rankSep: 110,
+        edgeSep: 18,
+        padding: 30,
+        animate: false,
+      };
     case "breadthfirst":
       return { name: "breadthfirst", directed: true, padding: 30, spacingFactor: 1.2 };
     case "circle":
@@ -1488,6 +2531,164 @@ const SHARED_INTERACTION: any[] = [
     },
   },
   { selector: ".cy-search-miss", style: { "opacity": 0.22 } },
+  // Hidden-dependency path highlight — applied by hidden-dep effect when an
+  // AlternativeSupplier fact carries via_node_id. Both endpoint nodes
+  // (failing supplier + proposed alternate) AND the intermediate holding
+  // node get the amber treatment; the connecting edges get matching colour
+  // so the 2-hop chain visually pops without dimming the rest of the graph
+  // (the user can still click-explore freely).
+  {
+    selector: "node.cy-hidden-dep-path",
+    style: {
+      "border-width": 3,
+      "border-color": "#b46d00",
+      "border-style": "solid",
+      "background-color": "#fff4dc",
+      "z-index": 100,
+    },
+  },
+  {
+    selector: "edge.cy-hidden-dep-path",
+    style: {
+      "line-color": "#b46d00",
+      "target-arrow-color": "#b46d00",
+      "source-arrow-color": "#b46d00",
+      width: 3,
+      "opacity": 1,
+      "z-index": 99,
+    },
+  },
+  // Decision-pathways tab — two-colour semantic palette.
+  //   • cy-impact-path    → RED (at-risk: programs / SKUs / buyers)
+  //   • cy-proposed-path  → GREEN (swap candidates)
+  //   • cy-pathway-terminal → emphasised border on the destination node
+  //                            (the numbered "1 ·", "2 ·" label is set by
+  //                            the React effect via data("label"))
+  //   • cy-pathway-dim    → 12% opacity on everything off all pathways
+  // Order matters: cy-proposed-path sits AFTER cy-hidden-dep-path so that
+  // when both apply (Pathways tab) the green wins. On the Network tab
+  // only cy-hidden-dep-path is applied, so the chain reads amber there.
+  {
+    selector: "node.cy-impact-path",
+    style: {
+      "border-width": 2,
+      "border-style": "solid",
+      "border-color": "#c14a4a",
+      "background-color": "#fee2e2",
+      "z-index": 60,
+    },
+  },
+  {
+    selector: "edge.cy-impact-path",
+    style: {
+      width: 2,
+      "line-color": "#c14a4a",
+      "target-arrow-color": "#c14a4a",
+      "opacity": 1,
+      "z-index": 59,
+    },
+  },
+  {
+    selector: "node.cy-proposed-path",
+    style: {
+      "border-width": 2,
+      "border-style": "solid",
+      "border-color": "#16a34a",
+      "background-color": "#dcfce7",
+      "z-index": 60,
+    },
+  },
+  {
+    selector: "edge.cy-proposed-path",
+    style: {
+      width: 2,
+      "line-color": "#16a34a",
+      "target-arrow-color": "#16a34a",
+      "opacity": 1,
+      "z-index": 59,
+    },
+  },
+  // Context-path (at-risk programs) — slate, distinct from the
+  // green-recommended and red-avoid chains because these aren't
+  // supplier choices, they're the business stake the decision is
+  // protecting. Rendered with the same step-numbered terminal labels
+  // ("5 · Mirage Avionics platform" / "$48M · $220k/day") so the
+  // reviewer can see what's at risk without leaving the graph.
+  {
+    selector: "node.cy-context-path",
+    style: {
+      "border-width": 2,
+      "border-style": "solid",
+      "border-color": "#64748b",
+      "background-color": "#e2e8f0",
+      "z-index": 55,
+    },
+  },
+  {
+    selector: "edge.cy-context-path",
+    style: {
+      width: 1.6,
+      "line-color": "#64748b",
+      "target-arrow-color": "#64748b",
+      "opacity": 1,
+      "z-index": 54,
+    },
+  },
+  {
+    selector: "edge.cy-context-path.cy-pathway-edge-reverse",
+    style: { "source-arrow-color": "#64748b" },
+  },
+  // Failing node — the START of every pathway. Black so it's
+  // immediately recognisable as the origin of every chain. The "1 · …"
+  // label prefix set in the React effect makes "step 1" explicit too.
+  {
+    selector: "node.cy-pathway-failing",
+    style: {
+      "border-width": 3,
+      "border-color": "#000000",
+      "border-style": "solid",
+      "background-color": "#000000",
+      "font-weight": 700,
+      "z-index": 65,
+    },
+  },
+  // Terminal nodes — thicker border + bolder label. text-max-width is
+  // bumped from the base 110px to 180px so the second-line WHY suffix
+  // ("$48M · $220k/day" / "⚠ qual lapsed 2026-04-15 · shared parent")
+  // fits without auto-wrapping mid-phrase.
+  {
+    selector: "node.cy-pathway-terminal",
+    style: {
+      "border-width": 3,
+      "font-weight": 700,
+      "font-size": 11,
+      "text-max-width": 180,
+    },
+  },
+  // Pathway view = decision graph, not cypher graph. Edges flagged
+  // cy-pathway-edge-reverse render their arrow at the SOURCE end (so the
+  // visible flow points to the higher-step node) instead of the target.
+  // Source-arrow colour mirrors the path colour so it stays visually
+  // consistent with the rest of the chain.
+  {
+    selector: "edge.cy-pathway-edge-reverse",
+    style: {
+      "target-arrow-shape": "none",
+      "source-arrow-shape": "triangle",
+    },
+  },
+  {
+    selector: "edge.cy-impact-path.cy-pathway-edge-reverse",
+    style: { "source-arrow-color": "#c14a4a" },
+  },
+  {
+    selector: "edge.cy-proposed-path.cy-pathway-edge-reverse",
+    style: { "source-arrow-color": "#16a34a" },
+  },
+  // Off-pathway elements: hidden on Pathways tab so the canvas shows ONLY
+  // the decision chains. Display:none keeps their layout positions intact
+  // (no expensive re-layout on tab flip) but removes them from the view.
+  { selector: ".cy-pathway-dim", style: { display: "none" } },
 ];
 
 // =============================================================================
@@ -1576,27 +2777,37 @@ const knowledgeStylesheet: any[] = [
     },
   },
 
-  // Edges — hairlines (no arrowhead), dark ink for paper feel.
+  // Edges — hairlines with directed-graph arrows so the cypher direction is
+  // legible at a glance (e.g. SOURCES_FROM points to the upstream supplier;
+  // PLACED points from supplier to PO). The arrow matches the line colour
+  // and rides at the target end. Label sits over a cream pill matching the
+  // canvas so the edge line doesn't visually slice through the relationship
+  // text. text-background-shape: roundrectangle keeps the pill compact.
   {
     selector: "edge.graph-edge",
     style: {
       width: 0.6,
       "line-color": "rgba(15,23,42,0.55)",
-      "target-arrow-shape": "none",
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": "rgba(15,23,42,0.55)",
+      "arrow-scale": 0.9,
       "curve-style": "bezier",
-      // Relationship-type label kept (very small, no background pill).
       label: "data(label)",
       "font-family": "DM Mono, ui-monospace, monospace",
       "font-size": 9,
       "text-rotation": "autorotate",
-      color: "rgba(15,23,42,0.55)",
-      "text-background-opacity": 0,
+      color: "rgba(15,23,42,0.85)",
+      "text-background-color": "#faf7f0",
+      "text-background-opacity": 1,
+      "text-background-padding": "2px",
+      "text-background-shape": "roundrectangle",
     },
   },
   {
     selector: "edge.edge-accent-risk_path",
     style: {
       "line-color": "#c14a4a",
+      "target-arrow-color": "#c14a4a",
       width: 1,
     },
   },

@@ -45,6 +45,10 @@ export default function App() {
   const [active, setActive] = useState<CaseFull | null>(null);
   const [role, setRole] = useState<"operator" | "reviewer">("operator");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  // W5 / Beat 2 — when a baseline replay is in flight, the case id of the
+  // ORIGINAL case that triggered it. CounterfactualCard reads this to
+  // render a "Running baseline..." state on the matching case.
+  const [baselineRunning, setBaselineRunning] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(getUser());
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -272,6 +276,49 @@ export default function App() {
     refreshCases();
   };
 
+  // W5 / Beat 2 — kick off a baseline replay AND keep the user on the
+  // original case (so they can immediately compare). Polls the new case
+  // until phase === "complete" then auto-opens the CompareModal between
+  // the original and the new baseline sibling. One-click demo flow.
+  const onBaselineReplay = async (caseId: string) => {
+    if (baselineRunning) return; // already one running for some case
+    setBaselineRunning(caseId);
+    try {
+      const result = await api.replayCase(caseId, null, { baseline: true });
+      refreshCases();
+      const newBaselineId = result.case_id;
+      const startTime = Date.now();
+      const TIMEOUT_MS = 30_000;
+      const POLL_INTERVAL_MS = 500;
+
+      const tryComplete = async () => {
+        // Time-out safety so a stuck case doesn't pin the UI forever.
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          setBaselineRunning(null);
+          return;
+        }
+        try {
+          const newCase = await api.getCase(newBaselineId);
+          if (newCase.phase === "complete") {
+            // Pull both cases full and open the Compare modal.
+            const originalFull = await api.getCase(caseId);
+            setModal({ kind: "compare", cases: [originalFull, newCase] });
+            setBaselineRunning(null);
+            refreshCases();
+            return;
+          }
+        } catch {
+          /* swallow transient fetch errors; will retry */
+        }
+        setTimeout(tryComplete, POLL_INTERVAL_MS);
+      };
+      setTimeout(tryComplete, POLL_INTERVAL_MS);
+    } catch (e) {
+      console.error("Baseline replay failed:", e);
+      setBaselineRunning(null);
+    }
+  };
+
   const onCompare = async (caseId: string) => {
     const c = cases.find((x) => x.case_id === caseId);
     if (!c) return;
@@ -328,6 +375,7 @@ export default function App() {
           onCancel={onCancel}
           onSelectCase={setActiveId}
           onReplay={onReplay}
+          onBaselineReplay={onBaselineReplay}
           onCompare={onCompare}
           onOpenReview={onOpenReview}
           onPickCandidate={onPickCandidate}
@@ -335,8 +383,28 @@ export default function App() {
           onClearCompleted={onClearCompleted}
           onEditScenario={(sid) => setModal({ kind: "edit-scenario", scenarioId: sid })}
         />
-        <FlowStage active={active} role={role} onOpenReview={onOpenReview} />
-        <LineagePanel active={active} />
+        <FlowStage
+          active={active}
+          role={role}
+          onOpenReview={onOpenReview}
+          onRefresh={() => {
+            refreshActive();
+            refreshCases();
+          }}
+          onReplay={onReplay}
+          onBaselineReplay={onBaselineReplay}
+          onCompare={onCompare}
+          baselineRunningForActive={
+            !!(active && baselineRunning === active.case_id)
+          }
+        />
+        <LineagePanel
+          active={active}
+          onRefresh={() => {
+            refreshActive();
+            refreshCases();
+          }}
+        />
       </div>
 
       {modal.kind === "teams" && active?.scenario && (
