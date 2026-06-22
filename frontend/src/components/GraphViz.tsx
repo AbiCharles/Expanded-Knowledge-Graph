@@ -344,6 +344,17 @@ function GraphModal({
   // still null. Flipping to Network and back used to work as a side-effect
   // because the viewMode change re-fired the effect after cy had attached.
   const [cyReadyTick, setCyReadyTick] = useState(0);
+  // Pathway-impact reveal — double-clicking a colored chain or its
+  // failing-supplier root pops a card in the side legend showing the
+  // downstream programs touched + dollar exposure. Green chains frame
+  // it as "programs protected by this pick"; red chains frame it as
+  // "programs still exposed"; the slate context chains drill to the
+  // specific program at the terminal of that chain.
+  const [pathwayDetail, setPathwayDetail] = useState<{
+    variant: "proposed" | "avoid" | "impact" | "failing";
+    triggerLabel: string;
+    programs: DecisionPath[];
+  } | null>(null);
   // Defensive cap on how many times the pathway effect can re-run waiting
   // for cytoscape to ingest the failing node. Without a cap, a misconfigured
   // case (failing node not in the supplier subgraph) would spin forever.
@@ -630,6 +641,13 @@ function GraphModal({
     }, 50);
   }, [viewMode, decisionSupport, elements.length, layout, cyReadyTick]);
 
+  // Pathway detail card is only meaningful on the Decision pathways tab —
+  // dismiss it the moment the user flips to Network so the legend doesn't
+  // hold a stale reveal.
+  useEffect(() => {
+    if (viewMode !== "pathways") setPathwayDetail(null);
+  }, [viewMode]);
+
   // When the user flips back to the Network tab, re-fit to ALL elements
   // so the wider graph isn't stranded off-screen at the pathway-zoom.
   useEffect(() => {
@@ -669,6 +687,91 @@ function GraphModal({
       }
     });
   }, [hiddenDepPath, elements.length, layout]);
+
+  // Double-click any colored pathway node to surface the downstream
+  // program exposure in the side legend. Registers on every cy attach
+  // and is no-op when viewMode isn't "pathways". Single-click still
+  // runs the existing fact-reveal handler — we don't shadow it.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (viewMode !== "pathways") return;
+    if (!decisionSupport) return;
+    const allPrograms = decisionSupport.impacts ?? [];
+    const handler = (evt: any) => {
+      const target = evt.target;
+      if (!target || typeof target.id !== "function") return;
+      const cls: string[] = (target.classes() as string[]) || [];
+      const isFailing = cls.includes("cy-pathway-failing");
+      const isProposed = cls.includes("cy-proposed-path");
+      const isAvoid = cls.includes("cy-impact-path");
+      const isImpact = cls.includes("cy-context-path");
+      if (!isFailing && !isProposed && !isAvoid && !isImpact) return;
+      // Failing supplier or a supplier-swap chain (green or red) →
+      // ALL programs affected (the swap pick is upstream of every
+      // impact chain).
+      if (isFailing) {
+        setPathwayDetail({
+          variant: "failing",
+          triggerLabel: target.data("label") || target.id(),
+          programs: allPrograms,
+        });
+        return;
+      }
+      if (isProposed) {
+        setPathwayDetail({
+          variant: "proposed",
+          triggerLabel: target.data("label") || target.id(),
+          programs: allPrograms,
+        });
+        return;
+      }
+      if (isAvoid) {
+        setPathwayDetail({
+          variant: "avoid",
+          triggerLabel: target.data("label") || target.id(),
+          programs: allPrograms,
+        });
+        return;
+      }
+      // Slate impact chain — find the specific program(s) this node
+      // sits on the path to. If the node IS a program terminal, just
+      // show that program; otherwise walk forward to find the
+      // terminal(s) reachable through cy-context-path edges.
+      const nodeId = target.id();
+      const direct = allPrograms.find((p) => p.entityId === nodeId);
+      if (direct) {
+        setPathwayDetail({
+          variant: "impact",
+          triggerLabel: target.data("label") || nodeId,
+          programs: [direct],
+        });
+        return;
+      }
+      // Walk along cy-context-path edges from this node to find the
+      // terminal program(s). Use cytoscape's dijkstra to test
+      // reachability to each program's entityId.
+      const reachable: DecisionPath[] = [];
+      for (const p of allPrograms) {
+        const dest = cy.getElementById(p.entityId);
+        if (!dest || dest.length === 0) continue;
+        const dij = cy
+          .elements(".cy-context-path, .cy-pathway-failing")
+          .dijkstra({ root: target });
+        const path = dij.pathTo(dest);
+        if (path && path.length > 0) reachable.push(p);
+      }
+      setPathwayDetail({
+        variant: "impact",
+        triggerLabel: target.data("label") || nodeId,
+        programs: reachable.length > 0 ? reachable : allPrograms,
+      });
+    };
+    cy.on("dbltap", "node", handler);
+    return () => {
+      cy.removeListener("dbltap", "node", handler);
+    };
+  }, [viewMode, decisionSupport, elements.length, cyReadyTick]);
 
   // Derive per-type counts for the topbar and legend. (Relationships are
   // labelled directly on the edges now, not enumerated in the side panel.)
@@ -883,6 +986,8 @@ function GraphModal({
             selectedEntityFact={selectedEntityFact}
             onDismissEntityFact={() => setSelectedEntityFact(null)}
             decisionSupport={viewMode === "pathways" ? decisionSupport : null}
+            pathwayDetail={viewMode === "pathways" ? pathwayDetail : null}
+            onDismissPathwayDetail={() => setPathwayDetail(null)}
           />
         </div>
       </div>
@@ -909,6 +1014,8 @@ function GraphModalSideLegend({
   selectedEntityFact,
   onDismissEntityFact,
   decisionSupport,
+  pathwayDetail,
+  onDismissPathwayDetail,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -922,6 +1029,12 @@ function GraphModalSideLegend({
   selectedEntityFact?: EntityFactReveal | null;
   onDismissEntityFact?: () => void;
   decisionSupport?: DecisionSupport | null;
+  pathwayDetail?: {
+    variant: "proposed" | "avoid" | "impact" | "failing";
+    triggerLabel: string;
+    programs: DecisionPath[];
+  } | null;
+  onDismissPathwayDetail?: () => void;
 }) {
   return (
     <aside className={`graph-modal-side-legend${open ? "" : " collapsed"}`}>
@@ -931,6 +1044,15 @@ function GraphModalSideLegend({
       </button>
       {open && (
         <div className="graph-modal-side-legend-body">
+          {/* Pathway-impact reveal — surfaces the moment the user double-
+              clicks a colored chain. Sits at the very top so it's the
+              first thing they see when they ask the question. */}
+          {pathwayDetail && (
+            <PathwayImpactCard
+              detail={pathwayDetail}
+              onDismiss={onDismissPathwayDetail ?? (() => {})}
+            />
+          )}
           {/* Decision-support panel sits at the very top — it's the most
               decision-relevant content. Renders ONLY when the case actually
               has proposed or at-risk pathways to summarise (otherwise the
@@ -952,9 +1074,18 @@ function GraphModalSideLegend({
               onDismiss={onDismissEntityFact ?? (() => {})}
             />
           )}
-          {!selectedEntityFact && variant === "knowledge" && (
+          {!selectedEntityFact && variant === "knowledge" && !pathwayDetail && (
             <div className="graph-modal-side-legend-tip">
-              <strong>Tip ·</strong> click any node to see its card from the stages.
+              <strong>Tip ·</strong> click any node to see its card from the
+              stages.
+              {decisionSupport && (
+                <>
+                  {" "}On the Decision-pathways tab,{" "}
+                  <strong>double-click</strong> a colored chain to see the
+                  downstream programs it protects (green) or leaves exposed
+                  (red).
+                </>
+              )}
             </div>
           )}
           {selectedClassFacts && (
@@ -1343,6 +1474,129 @@ function computeDecisionSupport(active: CaseFull | null): DecisionSupport | null
   }
 
   return { recommended, notRecommended, impacts, failing, recommendation };
+}
+
+// W2 / Beat 1 — pathway-impact reveal. Lands at the top of the side
+// legend when the user double-clicks a colored chain. Same shell for
+// all four variants; the eyebrow + verb adapt to the framing:
+//   • proposed (green)  — "Programs protected by this pick"
+//   • avoid (red)       — "Programs still exposed if you picked this"
+//   • failing           — "Programs at stake — every chain runs through here"
+//   • impact (slate)    — "Programs reached via this chain"
+function PathwayImpactCard({
+  detail,
+  onDismiss,
+}: {
+  detail: {
+    variant: "proposed" | "avoid" | "impact" | "failing";
+    triggerLabel: string;
+    programs: DecisionPath[];
+  };
+  onDismiss: () => void;
+}) {
+  const variantInfo: Record<
+    typeof detail.variant,
+    { className: string; eyebrow: string; verb: string; lead: string }
+  > = {
+    proposed: {
+      className: "pathway-impact-card-proposed",
+      eyebrow: "Programs protected by this pick",
+      verb: "Picking this pathway protects",
+      lead: "Approving the swap to this candidate keeps every flagship-program SKU shipping — the JV's existing capacity absorbs Northwind's role across the three tier-1 buyers.",
+    },
+    avoid: {
+      className: "pathway-impact-card-avoid",
+      eyebrow: "Programs still exposed if you picked this",
+      verb: "This pathway leaves exposed",
+      lead: "Approving this alternate does NOT mitigate the exposure — the parent risk is unchanged and the lapsed qualification blocks shipments to flagship-program SKUs. Every program below remains at full stake.",
+    },
+    failing: {
+      className: "pathway-impact-card-failing",
+      eyebrow: "Programs at stake — every chain runs through here",
+      verb: "Failure here exposes",
+      lead: "This is the root of every at-risk chain. Without a successful swap, all three programs below see their full revenue + OTD-penalty exposure.",
+    },
+    impact: {
+      className: "pathway-impact-card-impact",
+      eyebrow: "Programs reached via this chain",
+      verb: "This chain channels exposure to",
+      lead: "The tier-1 buyer on this chain places POs that feed the program(s) below. If the failing supplier isn't swapped, the program SKUs miss their delivery window.",
+    },
+  };
+  const info = variantInfo[detail.variant];
+
+  // Parse "$48M revenue · $220k/day OTD penalty" into dollar figures so we
+  // can total them up. Stake format is stable from the supply_chain ontology
+  // mapping; if the regex doesn't match we just skip that program in the
+  // total (the per-row text still renders).
+  const parsed = detail.programs.map((p) => {
+    const m = (p.stake || "").match(/\$([0-9.]+)M.*?\$([0-9.]+)k\/day/);
+    return {
+      ...p,
+      revenueM: m ? parseFloat(m[1]) : 0,
+      otdK: m ? parseFloat(m[2]) : 0,
+    };
+  });
+  const totalRevM = parsed.reduce((acc, p) => acc + p.revenueM, 0);
+  const totalOtdK = parsed.reduce((acc, p) => acc + p.otdK, 0);
+  const hasTotals = totalRevM > 0;
+
+  return (
+    <div className={`pathway-impact-card ${info.className}`}>
+      <div className="pathway-impact-card-head">
+        <div className="pathway-impact-card-eyebrow">{info.eyebrow}</div>
+        <button
+          type="button"
+          className="pathway-impact-card-dismiss"
+          onClick={onDismiss}
+          aria-label="Dismiss pathway detail"
+        >
+          ×
+        </button>
+      </div>
+      <div className="pathway-impact-card-trigger">
+        Double-clicked: <strong>{detail.triggerLabel}</strong>
+      </div>
+      <p className="pathway-impact-card-lead">{info.lead}</p>
+      {parsed.length > 0 ? (
+        <>
+          <div className="pathway-impact-card-list-label">
+            {info.verb}
+          </div>
+          <ul className="pathway-impact-card-list">
+            {parsed.map((p) => (
+              <li key={p.entityId}>
+                <div className="pathway-impact-card-program">
+                  {p.entityName}
+                </div>
+                {p.stake && (
+                  <div className="pathway-impact-card-stake">{p.stake}</div>
+                )}
+                {p.viaPath && (
+                  <div className="pathway-impact-card-via">
+                    via {p.viaPath}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {hasTotals && (
+            <div className="pathway-impact-card-total">
+              <span className="pathway-impact-card-total-label">Total</span>
+              <span className="pathway-impact-card-total-value">
+                ${totalRevM}M revenue · ${totalOtdK}k/day OTD penalty
+              </span>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="pathway-impact-card-empty">
+          No program-impact chains attached to this node in the current
+          case data.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DecisionSupportPanel({ support }: { support: DecisionSupport }) {
