@@ -98,6 +98,24 @@ class AgentRun:
             await self.events.put(None)
 
     async def _run_inner(self) -> None:
+        # ---- Step 0: News-source feed detected the Chapter 11 ------
+        # This card lands FIRST so the audience sees that the agent
+        # didn't decide to act out of nowhere — a real-world news
+        # signal triggered it. The Risk Monitor card on the next
+        # step explicitly cites this article.
+        news = risk_monitor.news_source()
+        await self.emit(
+            AgentEvent(
+                type="news_source_detected",
+                agent_id="news_feed",
+                payload={
+                    "agent_name": "News Feed Monitor",
+                    **news,
+                },
+            )
+        )
+        await asyncio.sleep(PAUSE_BETWEEN_STAGES)
+
         # ---- Step 1: Risk Monitor ----------------------------------
         risk = risk_monitor.detect_active_risk()
         await self.emit(
@@ -112,6 +130,11 @@ class AgentRun:
                     "event_date": risk["event_date"],
                     "severity": risk["severity"],
                     "summary": risk["summary"],
+                    # Pin the news article that caused this escalation
+                    # so the UI can render a dashed connector back to
+                    # the news_source_detected card.
+                    "triggered_by_source": news["source"],
+                    "triggered_by_headline": news["headline"],
                 },
             )
         )
@@ -435,6 +458,12 @@ class AgentRun:
                     "blocked": result["blocked"],
                     "drafts": result["drafts"],
                 },
+                # Deep-link → fabric's knowledge graph in Network mode,
+                # auto-launched on the Aeronova case. The audience sees
+                # the JV partner edge (SUP-021 ↔ SUP-023, Ironcrest) +
+                # the shared-parent CONTROLLED_BY edges that made
+                # Stillwater the trap alternate.
+                fabric_link=self.fabric.aeronova_view_url("graph"),
             )
         )
         return {"alternate_outreach": result}
@@ -462,6 +491,11 @@ class AgentRun:
                     "agent_name": program_manager_notifier.AGENT_NAME,
                     "notifications": notifications,
                 },
+                # Deep-link → fabric's knowledge graph in Decision-pathways
+                # mode, where the 3 Aeronova program terminals show their
+                # revenue + OTD stakes. Audience sees the same numbers the
+                # PM notifications cite.
+                fabric_link=self.fabric.aeronova_view_url("pathways"),
             )
         )
         return {"program_manager_notifier": {"notifications": notifications}}

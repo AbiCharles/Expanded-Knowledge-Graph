@@ -129,6 +129,29 @@ class FabricClient:
         """Suggestion-pill URL — opens the Aeronova case launch flow."""
         return f"{self.base_url}/?{urlencode({'prompt': 'Northwind Forge just filed Chapter 11 — assess Aeronova supply assurance'})}"
 
+    # Per-card deep-link URLs. Each one carries `launch=aeronova` to tell
+    # the fabric's App.tsx 'auto-launch the Aeronova case + then open the
+    # requested view'. The fabric's query-param handler reads `view=` to
+    # pick which modal/tab to open after the case spawns.
+    def aeronova_view_url(self, view: str) -> str:
+        """`view` is one of: graph, pathways, stages."""
+        return (
+            f"{self.base_url}/?"
+            + urlencode(
+                {
+                    "launch": "aeronova",
+                    "view": view,
+                    # Carry the prompt too so the fabric still has it
+                    # available if the launch hook fails — graceful
+                    # fallback to the existing prompt-prefill behaviour.
+                    "prompt": (
+                        "Northwind Forge just filed Chapter 11 — assess "
+                        "Aeronova supply assurance"
+                    ),
+                }
+            )
+        )
+
 
 # ----------------------------------------------------------------------
 # Subgraph parsers

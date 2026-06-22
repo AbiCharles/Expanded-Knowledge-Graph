@@ -853,6 +853,7 @@ const AGENT_ORCH_URL =
 
 export interface AgentEvent {
   type:
+    | "news_source_detected"
     | "risk_detected"
     | "investigation_started"
     | "agent_thinking"
@@ -894,6 +895,7 @@ export function agentRunStream(
 ): EventSource {
   const es = new EventSource(`${AGENT_ORCH_URL}/api/agent-run/${runId}/events`);
   const types: AgentEvent["type"][] = [
+    "news_source_detected",
     "risk_detected",
     "investigation_started",
     "agent_thinking",

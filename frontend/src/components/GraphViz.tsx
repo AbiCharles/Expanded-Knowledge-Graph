@@ -92,6 +92,21 @@ export function GraphPanel({
     setInitialViewMode("pathways");
     setModalOpen(true);
   }, [openPathwaysSignal]);
+
+  // W8 — agent-orchestrator deep-link entry. App.tsx dispatches this
+  // event when the URL carries ?launch=aeronova&view=graph|pathways
+  // after the case has bound. Default tab is Network; override via
+  // CustomEvent detail.tab.
+  useEffect(() => {
+    if (!anchor) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      setInitialViewMode(detail.tab === "pathways" ? "pathways" : "network");
+      setModalOpen(true);
+    };
+    window.addEventListener("open-knowledge-graph", handler);
+    return () => window.removeEventListener("open-knowledge-graph", handler);
+  }, [anchor]);
   const hidden = useFilterSubscription();
   const { data, error } = useSupplierSubgraph(
     anchor?.supplier_id ?? null,

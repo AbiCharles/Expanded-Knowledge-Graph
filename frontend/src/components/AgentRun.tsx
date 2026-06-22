@@ -135,7 +135,21 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
             </div>
           )}
           {state.events.map((ev, i) => (
-            <EventCard key={i} ev={ev} />
+            <EventCard
+              key={i}
+              ev={ev}
+              cardId={cardIdFor(ev, i)}
+              onTraceTo={(targetId) => {
+                const el = document.getElementById(targetId);
+                if (!el) return;
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("agent-run-card-pulse");
+                setTimeout(
+                  () => el.classList.remove("agent-run-card-pulse"),
+                  1400,
+                );
+              }}
+            />
           ))}
           {state.error && (
             <div className="agent-run-error">⚠ {state.error}</div>
@@ -232,15 +246,62 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
   );
 }
 
+// Stable card-id resolver so the trace links can scroll-to + pulse the
+// upstream finding card. We use the event type for findings that are
+// unique in the timeline (programs_at_risk_identified, etc.), and
+// fall back to the event index for repeats.
+function cardIdFor(ev: AgentEvent, index: number): string {
+  if (
+    ev.type === "programs_at_risk_identified" ||
+    ev.type === "fabric_response" ||
+    ev.type === "news_source_detected"
+  ) {
+    return `agent-card-${ev.type}`;
+  }
+  return `agent-card-${index}`;
+}
+
 // =============================================================================
 // Timeline event card — one variant per event type.
 // =============================================================================
-function EventCard({ ev }: { ev: AgentEvent }) {
+function EventCard({
+  ev,
+  cardId,
+  onTraceTo,
+}: {
+  ev: AgentEvent;
+  cardId: string;
+  onTraceTo: (targetId: string) => void;
+}) {
   const time = ev.at.slice(11, 19);
   switch (ev.type) {
+    case "news_source_detected":
+      return (
+        <Card kind="news" time={time} agent={ev.payload.agent_name} id={cardId}>
+          <div className="agent-run-news-pill">
+            📰 {ev.payload.source} · {ev.payload.section}
+          </div>
+          <div className="agent-run-news-headline">{ev.payload.headline}</div>
+          <div className="agent-run-news-meta">
+            {ev.payload.byline} · {ev.payload.published_at?.slice(0, 10)}
+          </div>
+          <p className="agent-run-news-lede">{ev.payload.lede}</p>
+          <div className="agent-run-news-match">
+            Matched entity: <strong>{ev.payload.matched_entity}</strong>{" "}
+            <code>({ev.payload.matched_supplier_id})</code> · relevance{" "}
+            {(ev.payload.relevance_score ?? 0).toFixed(2)}
+          </div>
+        </Card>
+      );
     case "risk_detected":
       return (
-        <Card kind="risk" time={time} agent={ev.payload.agent_name}>
+        <Card kind="risk" time={time} agent={ev.payload.agent_name} id={cardId}>
+          {ev.payload.triggered_by_source && (
+            <div className="agent-run-risk-connector">
+              ↑ Escalated from <strong>{ev.payload.triggered_by_source}</strong>{" "}
+              wire story above
+            </div>
+          )}
           <div className="agent-run-card-headline">
             ⚠ {ev.payload.event} · {ev.payload.supplier_name} (
             {ev.payload.supplier_id})
@@ -265,7 +326,12 @@ function EventCard({ ev }: { ev: AgentEvent }) {
       );
     case "fabric_query":
       return (
-        <Card kind="fabric-query" time={time} agent={ev.payload.agent_name}>
+        <Card
+          kind="fabric-query"
+          time={time}
+          agent={ev.payload.agent_name}
+          fabricLink={ev.fabric_link}
+        >
           <div className="agent-run-card-headline">
             🌐 Querying fabric · <code>{ev.payload.endpoint}</code>
           </div>
@@ -287,7 +353,13 @@ function EventCard({ ev }: { ev: AgentEvent }) {
       );
     case "fabric_response":
       return (
-        <Card kind="fabric-response" time={time} agent="Knowledge Fabric">
+        <Card
+          kind="fabric-response"
+          time={time}
+          agent="Knowledge Fabric"
+          id={cardId}
+          fabricLink={ev.fabric_link}
+        >
           <div className="agent-run-card-headline">
             ✓ Fabric responded · {ev.payload.node_count} nodes,{" "}
             {ev.payload.edge_count} edges
@@ -304,7 +376,12 @@ function EventCard({ ev }: { ev: AgentEvent }) {
       );
     case "tier1_buyers_found":
       return (
-        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+        <Card
+          kind="finding"
+          time={time}
+          agent={ev.payload.agent_name}
+          fabricLink={ev.fabric_link}
+        >
           <div className="agent-run-card-headline">
             🏭 {ev.payload.count} tier-1 buyer(s) source from the failing
             supplier
@@ -317,21 +394,17 @@ function EventCard({ ev }: { ev: AgentEvent }) {
               </li>
             ))}
           </ul>
-          {ev.fabric_link && (
-            <a
-              href={ev.fabric_link}
-              target="_blank"
-              rel="noreferrer"
-              className="agent-run-card-link"
-            >
-              See the corporate-network walk in the fabric ↗
-            </a>
-          )}
         </Card>
       );
     case "programs_at_risk_identified":
       return (
-        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+        <Card
+          kind="finding"
+          time={time}
+          agent={ev.payload.agent_name}
+          id={cardId}
+          fabricLink={ev.fabric_link}
+        >
           <div className="agent-run-card-headline">
             🎯 {ev.payload.count} downstream program(s) at risk
           </div>
@@ -346,7 +419,12 @@ function EventCard({ ev }: { ev: AgentEvent }) {
       );
     case "alternates_surfaced":
       return (
-        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+        <Card
+          kind="finding"
+          time={time}
+          agent={ev.payload.agent_name}
+          fabricLink={ev.fabric_link}
+        >
           <div className="agent-run-card-headline">
             🔁 {ev.payload.count} alternate supplier candidate(s) surfaced
           </div>
@@ -382,7 +460,14 @@ function EventCard({ ev }: { ev: AgentEvent }) {
         </Card>
       );
     case "subagent_completed":
-      return <SubagentResultCard ev={ev} time={time} />;
+      return (
+        <SubagentResultCard
+          ev={ev}
+          time={time}
+          cardId={cardId}
+          onTraceTo={onTraceTo}
+        />
+      );
     case "run_completed":
       return (
         <Card kind="complete" time={time} agent="Orchestrator">
@@ -409,18 +494,36 @@ function EventCard({ ev }: { ev: AgentEvent }) {
   }
 }
 
-function SubagentResultCard({ ev, time }: { ev: AgentEvent; time: string }) {
+function SubagentResultCard({
+  ev,
+  time,
+  cardId,
+  onTraceTo,
+}: {
+  ev: AgentEvent;
+  time: string;
+  cardId: string;
+  onTraceTo: (id: string) => void;
+}) {
   const id = ev.agent_id;
   const name = ev.payload.agent_name;
+  // Only the two drafts cards carry double-click→fabric. The analysis
+  // cards get the derivation viz instead (no navigation).
+  const fabricLink =
+    id === "alternate_outreach" || id === "program_manager_notifier"
+      ? ev.fabric_link
+      : null;
   return (
-    <Card kind="subagent-done" time={time} agent={name}>
+    <Card
+      kind="subagent-done"
+      time={time}
+      agent={name}
+      id={cardId}
+      fabricLink={fabricLink}
+    >
       <div className="agent-run-card-headline">✓ {name} complete</div>
       {id === "distribution_optimizer" && (
-        <div className="agent-run-card-body">
-          <strong>Allocation order:</strong>{" "}
-          {(ev.payload.ranked as any[]).map((r: any) => r.name).join(" → ")}
-          <div className="agent-run-card-note">{ev.payload.recommendation}</div>
-        </div>
+        <DistributionOptimizerBody ev={ev} onTraceTo={onTraceTo} />
       )}
       {id === "alternate_outreach" && (
         <div className="agent-run-card-body">
@@ -456,14 +559,128 @@ function SubagentResultCard({ ev, time }: { ev: AgentEvent; time: string }) {
         </div>
       )}
       {id === "financial_summarizer" && (
-        <div className="agent-run-card-body">
-          <strong>${ev.payload.total_revenue_at_risk_usd_m}M</strong>{" "}
-          revenue at risk · ${ev.payload.total_otd_penalty_usd_k_per_day}k/day
-          OTD penalty · worst-case ${ev.payload.worst_case_penalty_usd_m}M
-          over {ev.payload.days_to_mitigate_worst_case} days.
-        </div>
+        <FinancialSummarizerBody ev={ev} onTraceTo={onTraceTo} />
       )}
     </Card>
+  );
+}
+
+// ---- Derivation visualisations -------------------------------------
+// Both bodies render the analysis output PLUS a "Derivation" subsection
+// that shows the math: which fabric inputs were combined, what the
+// formula was, what the output number is. Ends with a "↗ Trace inputs"
+// link that scrolls to + pulses the upstream programs_at_risk card.
+
+function DistributionOptimizerBody({
+  ev,
+  onTraceTo,
+}: {
+  ev: AgentEvent;
+  onTraceTo: (id: string) => void;
+}) {
+  const ranked = (ev.payload.ranked as any[]) || [];
+  return (
+    <div className="agent-run-card-body">
+      <div className="agent-run-derivation-output">
+        <strong>Allocation order:</strong>{" "}
+        {ranked.map((r) => r.name).join(" → ")}
+      </div>
+      <div className="agent-run-card-note">{ev.payload.recommendation}</div>
+      <div className="agent-run-derivation">
+        <div className="agent-run-derivation-eyebrow">Derivation</div>
+        <p className="agent-run-derivation-lead">
+          Sorted the {ranked.length} Program nodes the fabric returned by
+          revenue_at_risk_usd descending. Pure function of the fabric's
+          program-impact walk — no external inputs.
+        </p>
+        <table className="agent-run-derivation-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Program (fabric Program node)</th>
+              <th>Revenue</th>
+              <th>OTD/day</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((r, i) => (
+              <tr key={r.program_id || i}>
+                <td>{i + 1}</td>
+                <td>{r.name}</td>
+                <td>${r.revenue_usd_m}M</td>
+                <td>${r.otd_penalty_usd_k_per_day}k</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button
+          type="button"
+          className="agent-run-derivation-trace"
+          onClick={() => onTraceTo("agent-card-programs_at_risk_identified")}
+        >
+          ↗ Trace inputs back to the fabric subgraph response above
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FinancialSummarizerBody({
+  ev,
+  onTraceTo,
+}: {
+  ev: AgentEvent;
+  onTraceTo: (id: string) => void;
+}) {
+  const breakdown = (ev.payload.breakdown as any[]) || [];
+  return (
+    <div className="agent-run-card-body">
+      <div className="agent-run-derivation-output">
+        <strong>${ev.payload.total_revenue_at_risk_usd_m}M</strong> revenue
+        at risk · <strong>${ev.payload.total_otd_penalty_usd_k_per_day}k</strong>/day
+        OTD penalty · worst-case{" "}
+        <strong>${ev.payload.worst_case_penalty_usd_m}M</strong> over{" "}
+        {ev.payload.days_to_mitigate_worst_case} days.
+      </div>
+      <div className="agent-run-derivation">
+        <div className="agent-run-derivation-eyebrow">Derivation</div>
+        <table className="agent-run-derivation-table">
+          <thead>
+            <tr>
+              <th>Program (fabric Program node)</th>
+              <th>Revenue</th>
+              <th>OTD/day</th>
+            </tr>
+          </thead>
+          <tbody>
+            {breakdown.map((b) => (
+              <tr key={b.program_id || b.name}>
+                <td>{b.name}</td>
+                <td>${b.revenue_usd_m}M</td>
+                <td>${b.otd_penalty_usd_k_per_day}k</td>
+              </tr>
+            ))}
+            <tr className="agent-run-derivation-total">
+              <td>TOTAL (sum of fabric stakes)</td>
+              <td>${ev.payload.total_revenue_at_risk_usd_m}M</td>
+              <td>${ev.payload.total_otd_penalty_usd_k_per_day}k</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="agent-run-derivation-formula">
+          Worst-case penalty = ${ev.payload.total_otd_penalty_usd_k_per_day}k/day
+          × {ev.payload.days_to_mitigate_worst_case} days ÷ 1000 ={" "}
+          <strong>${ev.payload.worst_case_penalty_usd_m}M</strong>
+        </p>
+        <button
+          type="button"
+          className="agent-run-derivation-trace"
+          onClick={() => onTraceTo("agent-card-programs_at_risk_identified")}
+        >
+          ↗ Trace inputs back to the fabric subgraph response above
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -472,17 +689,47 @@ function Card({
   time,
   agent,
   children,
+  id,
+  fabricLink,
 }: {
   kind: string;
   time: string;
   agent: string;
   children: React.ReactNode;
+  id?: string;
+  fabricLink?: string | null;
 }) {
+  // Double-click anywhere on the card opens the fabric_link in a new
+  // tab. Discoverable via the corner pill at the same time.
+  const onDouble = fabricLink
+    ? () => window.open(fabricLink, "_blank", "noreferrer")
+    : undefined;
   return (
-    <div className={`agent-run-card agent-run-card-${kind}`}>
+    <div
+      id={id}
+      className={
+        `agent-run-card agent-run-card-${kind}` +
+        (fabricLink ? " agent-run-card-clickable" : "")
+      }
+      onDoubleClick={onDouble}
+      title={fabricLink ? "Double-click to open in the fabric" : undefined}
+    >
       <div className="agent-run-card-meta">
         <span className="agent-run-card-agent">{agent}</span>
-        <span className="agent-run-card-time">{time}</span>
+        <div className="agent-run-card-meta-right">
+          {fabricLink && (
+            <a
+              href={fabricLink}
+              target="_blank"
+              rel="noreferrer"
+              className="agent-run-card-corner-link"
+              onClick={(e) => e.stopPropagation()}
+            >
+              ↗ Open in fabric
+            </a>
+          )}
+          <span className="agent-run-card-time">{time}</span>
+        </div>
       </div>
       {children}
     </div>

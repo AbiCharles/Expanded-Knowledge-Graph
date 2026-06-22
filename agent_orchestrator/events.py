@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 
 EventType = Literal[
+    "news_source_detected",
     "risk_detected",
     "investigation_started",
     "agent_thinking",

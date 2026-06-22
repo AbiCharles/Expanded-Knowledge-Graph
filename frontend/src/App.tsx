@@ -107,6 +107,75 @@ export default function App() {
     refreshCases();
   }, []);
 
+  // W8 — deep-link from the agent-orchestrator companion app.
+  // URL shape: ?launch=aeronova&view=graph|pathways|stages
+  // Two steps: (1) auto-launch the Aeronova prompt so the fabric is
+  // already on a fresh case when the audience lands; (2) stash the
+  // requested view so the relevant modal opens once the case binds.
+  // The view-opening logic dispatches a custom window event the
+  // GraphPanel + FlowStage already know how to handle.
+  const [pendingView, setPendingView] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const launch = params.get("launch");
+    const view = params.get("view");
+    const prompt = params.get("prompt");
+    if (launch === "aeronova") {
+      if (view) setPendingView(view);
+      if (prompt) {
+        // Fire the prompt flow as soon as we have the user + a
+        // brief settle. The createCase call lives in onSendPrompt,
+        // defined further down — call it through a small delay so
+        // React has mounted the rest of the page.
+        setTimeout(() => {
+          api
+            .createCase(prompt)
+            .then((res) => {
+              setActiveId(res.case_id);
+              refreshCases();
+              // Auto-confirm so the case binds without an operator
+              // click. The view-opener below waits for active.phase
+              // to progress past "binding".
+              return api.confirmCase(res.case_id);
+            })
+            .then(() => refreshActive())
+            .catch((e) => console.warn("auto-launch failed:", e));
+        }, 200);
+      }
+      // Clean the URL so reloads don't re-trigger the launch.
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname,
+      );
+    }
+  }, []);
+
+  // Fire the requested view once the active case has stage facts to
+  // render against. The handlers dispatch the same custom events the
+  // GraphPanel + FlowStage are already wired for, so no new plumbing.
+  useEffect(() => {
+    if (!pendingView) return;
+    if (!active || (active.stages?.length ?? 0) === 0) return;
+    const fire = () => {
+      if (pendingView === "graph") {
+        window.dispatchEvent(new CustomEvent("open-knowledge-graph"));
+      } else if (pendingView === "pathways") {
+        window.dispatchEvent(
+          new CustomEvent("open-knowledge-graph", {
+            detail: { tab: "pathways" },
+          }),
+        );
+      } else if (pendingView === "stages") {
+        const el = document.querySelector(".envelope");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    setTimeout(fire, 400);
+    setPendingView(null);
+  }, [pendingView, active]);
+
   // The graph-modal side-legend ⓘ buttons and the platform-flow
   // Scenario-node tap both dispatch this window event so they can pop
   // the Case-spec modal without threading a callback through Cytoscape.
