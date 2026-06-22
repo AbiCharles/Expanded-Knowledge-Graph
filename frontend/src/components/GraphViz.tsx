@@ -420,7 +420,7 @@ function GraphModal({
     if (!cy) return;
     // Clear pathway-mode classes before deciding what to apply this pass.
     cy.elements().removeClass(
-      "cy-impact-path cy-proposed-path cy-pathway-dim " +
+      "cy-impact-path cy-proposed-path cy-context-path cy-pathway-dim " +
       "cy-pathway-terminal cy-pathway-failing cy-pathway-edge-reverse",
     );
     // Restore any node + edge labels we mutated in the previous pass so
