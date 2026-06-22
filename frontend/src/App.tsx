@@ -109,70 +109,83 @@ export default function App() {
 
   // W8 — deep-link from the agent-orchestrator companion app.
   // URL shape: ?launch=aeronova&view=graph|pathways|stages
-  // Two steps: (1) auto-launch the Aeronova prompt so the fabric is
-  // already on a fresh case when the audience lands; (2) stash the
-  // requested view so the relevant modal opens once the case binds.
-  // The view-opening logic dispatches a custom window event the
-  // GraphPanel + FlowStage already know how to handle.
+  // Two-stage handoff:
+  //   1. On mount, read the URL params and stash them in React state.
+  //      Don't fire anything yet — the user might not be logged in.
+  //   2. Once `user` is set, fire createCase + confirmCase. The
+  //      view-opener (further down) watches `active.stages` and pops
+  //      the right modal once the case has bound.
+  const [pendingLaunch, setPendingLaunch] = useState<{
+    prompt: string;
+    view: string | null;
+  } | null>(null);
   const [pendingView, setPendingView] = useState<string | null>(null);
+  const [launchedOnce, setLaunchedOnce] = useState(false);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const launch = params.get("launch");
-    const view = params.get("view");
-    const prompt = params.get("prompt");
-    if (launch === "aeronova") {
-      if (view) setPendingView(view);
-      if (prompt) {
-        // Fire the prompt flow as soon as we have the user + a
-        // brief settle. The createCase call lives in onSendPrompt,
-        // defined further down — call it through a small delay so
-        // React has mounted the rest of the page.
-        setTimeout(() => {
-          api
-            .createCase(prompt)
-            .then((res) => {
-              setActiveId(res.case_id);
-              refreshCases();
-              // Auto-confirm so the case binds without an operator
-              // click. The view-opener below waits for active.phase
-              // to progress past "binding".
-              return api.confirmCase(res.case_id);
-            })
-            .then(() => refreshActive())
-            .catch((e) => console.warn("auto-launch failed:", e));
-        }, 200);
-      }
-      // Clean the URL so reloads don't re-trigger the launch.
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname,
-      );
+    if (params.get("launch") === "aeronova") {
+      setPendingLaunch({
+        prompt: params.get("prompt") || "",
+        view: params.get("view"),
+      });
+      // Strip the params so a reload doesn't keep re-firing the launch.
+      window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
 
+  // Fire the auto-launch once both the URL params AND the user are
+  // available. Only runs once per session (guarded by launchedOnce).
+  useEffect(() => {
+    if (!pendingLaunch || !user || launchedOnce) return;
+    if (pendingLaunch.view) setPendingView(pendingLaunch.view);
+    setLaunchedOnce(true);
+    const { prompt } = pendingLaunch;
+    if (!prompt) {
+      setPendingLaunch(null);
+      return;
+    }
+    api
+      .createCase(prompt)
+      .then((res) => {
+        setActiveId(res.case_id);
+        refreshCases();
+        return api.confirmCase(res.case_id);
+      })
+      .then(() => refreshActive())
+      .catch((e) => console.warn("auto-launch failed:", e))
+      .finally(() => setPendingLaunch(null));
+  }, [pendingLaunch, user, launchedOnce]);
+
   // Fire the requested view once the active case has stage facts to
-  // render against. The handlers dispatch the same custom events the
-  // GraphPanel + FlowStage are already wired for, so no new plumbing.
+  // render against. Two-step handoff to avoid a race with GraphPanel's
+  // event listener (which can only mount AFTER its anchor exists):
+  //   1. Stash the request on window.__kfPendingView the moment we have
+  //      a pendingView + a case with stages.
+  //   2. GraphPanel checks that window var when it mounts; if set, it
+  //      opens the modal at the right tab and clears the var.
+  // This way even if GraphPanel mounts AFTER the request lands, the
+  // request still fires the moment GraphPanel is ready.
   useEffect(() => {
     if (!pendingView) return;
     if (!active || (active.stages?.length ?? 0) === 0) return;
-    const fire = () => {
-      if (pendingView === "graph") {
-        window.dispatchEvent(new CustomEvent("open-knowledge-graph"));
-      } else if (pendingView === "pathways") {
-        window.dispatchEvent(
-          new CustomEvent("open-knowledge-graph", {
-            detail: { tab: "pathways" },
-          }),
-        );
-      } else if (pendingView === "stages") {
+    if (pendingView === "stages") {
+      setTimeout(() => {
         const el = document.querySelector(".envelope");
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-    setTimeout(fire, 400);
+      }, 200);
+    } else {
+      (window as any).__kfPendingView = pendingView;
+      // Also fire a window event so an already-mounted GraphPanel can
+      // react immediately (it polls the window var on mount AND listens
+      // for this event — belt-and-braces).
+      window.dispatchEvent(
+        new CustomEvent("open-knowledge-graph", {
+          detail: { tab: pendingView },
+        }),
+      );
+    }
     setPendingView(null);
   }, [pendingView, active]);
 

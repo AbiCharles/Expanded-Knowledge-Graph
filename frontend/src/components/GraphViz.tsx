@@ -93,18 +93,30 @@ export function GraphPanel({
     setModalOpen(true);
   }, [openPathwaysSignal]);
 
-  // W8 — agent-orchestrator deep-link entry. App.tsx dispatches this
-  // event when the URL carries ?launch=aeronova&view=graph|pathways
-  // after the case has bound. Default tab is Network; override via
-  // CustomEvent detail.tab.
+  // W8 — agent-orchestrator deep-link entry. Two ways to trigger:
+  //   (a) window event "open-knowledge-graph" with detail.tab — for the
+  //       case where GraphPanel is already mounted when App.tsx fires.
+  //   (b) window.__kfPendingView stashed by App.tsx — for the case
+  //       where App.tsx fired the event BEFORE GraphPanel could mount
+  //       its listener (race condition; the listener depends on anchor
+  //       being non-null, which can land after the URL handler runs).
+  // Belt-and-braces; whichever wins, the modal opens at the right tab.
   useEffect(() => {
     if (!anchor) return;
+    // (a) live event listener for in-session triggers
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
       setInitialViewMode(detail.tab === "pathways" ? "pathways" : "network");
       setModalOpen(true);
     };
     window.addEventListener("open-knowledge-graph", handler);
+    // (b) catch up on a stashed pending action set before we mounted
+    const pending = (window as any).__kfPendingView as string | undefined;
+    if (pending === "graph" || pending === "pathways") {
+      setInitialViewMode(pending === "pathways" ? "pathways" : "network");
+      setModalOpen(true);
+      delete (window as any).__kfPendingView;
+    }
     return () => window.removeEventListener("open-knowledge-graph", handler);
   }, [anchor]);
   const hidden = useFilterSubscription();

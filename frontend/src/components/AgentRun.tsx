@@ -452,13 +452,11 @@ function EventCard({
         </Card>
       );
     case "subagent_started":
-      return (
-        <Card kind="subagent-start" time={time} agent={ev.payload.agent_name}>
-          <div className="agent-run-card-body italic">
-            ⟳ {ev.payload.agent_name} starting…
-          </div>
-        </Card>
-      );
+      // Suppress — the right-rail status panel already shows each
+      // sub-agent transitioning idle → running → done as the events
+      // arrive. A row in the timeline for "starting…" would just
+      // clutter what's about to be a "completed" card a moment later.
+      return null;
     case "subagent_completed":
       return (
         <SubagentResultCard
