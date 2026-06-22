@@ -86,6 +86,12 @@ async def lifespan(app: FastAPI):
     # is set in the env. The operator can still add more Neo4j sources
     # via the UI form. We use a stable id (`neo4j_default`) so re-running
     # at boot updates the spec rather than creating duplicates.
+    #
+    # If a `neo4j_default` already exists in the persisted sources.yaml
+    # (e.g. shipped from a local dev machine that auto-registered
+    # bolt://localhost:7687), env-var values win. Without this, a stale
+    # localhost entry on the Fly volume would shadow the production URI
+    # forever and the supplier graph would silently return empty.
     if settings.NEO4J_PASSWORD and settings.NEO4J_URI:
         from .datasources import DataSourceSpec, ResolverError
 
@@ -94,6 +100,21 @@ async def lifespan(app: FastAPI):
             cfg["user"] = settings.NEO4J_USER
         if settings.NEO4J_DATABASE:
             cfg["database"] = settings.NEO4J_DATABASE
+        log = logging.getLogger(__name__)
+        existing = next(
+            (s for s in data_sources.specs() if s.id == "neo4j_default"),
+            None,
+        )
+        if existing is not None:
+            try:
+                data_sources.remove("neo4j_default")
+                log.info(
+                    "Removed stale neo4j_default spec (uri=%s) so env-var "
+                    "values can take precedence",
+                    existing.config.get("uri"),
+                )
+            except ResolverError as exc:
+                log.warning("Could not remove stale neo4j_default: %s", exc)
         try:
             data_sources.register(
                 DataSourceSpec(
@@ -106,13 +127,12 @@ async def lifespan(app: FastAPI):
                     ),
                 )
             )
-            logging.getLogger(__name__).info(
-                "Neo4j source `neo4j_default` auto-registered from NEO4J_* env vars"
+            log.info(
+                "Neo4j source `neo4j_default` registered with uri=%s",
+                settings.NEO4J_URI,
             )
         except ResolverError as exc:
-            logging.getLogger(__name__).warning(
-                "Neo4j auto-registration failed: %s", exc
-            )
+            log.warning("Neo4j auto-registration failed: %s", exc)
 
     ontology_dir = project_root / "backend" / "ontologies"
     ontologies = OntologyRegistry.from_directory(ontology_dir)
