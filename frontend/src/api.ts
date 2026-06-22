@@ -840,3 +840,91 @@ export async function getSupplierSubgraph(
     })
   );
 }
+
+// =============================================================================
+// Agent orchestrator companion service
+// =============================================================================
+// Lives at a separate origin (VITE_AGENT_ORCHESTRATOR_URL) — defaults to
+// localhost:8002 for dev, swap via env at build time for Fly.
+
+const AGENT_ORCH_URL =
+  (import.meta.env.VITE_AGENT_ORCHESTRATOR_URL as string | undefined) ||
+  "http://127.0.0.1:8002";
+
+export interface AgentEvent {
+  type:
+    | "risk_detected"
+    | "investigation_started"
+    | "agent_thinking"
+    | "fabric_query"
+    | "fabric_response"
+    | "tier1_buyers_found"
+    | "programs_at_risk_identified"
+    | "alternates_surfaced"
+    | "subagents_spawned"
+    | "subagent_started"
+    | "subagent_progress"
+    | "subagent_completed"
+    | "run_completed"
+    | "error";
+  agent_id: string;
+  at: string;
+  payload: Record<string, any>;
+  fabric_link?: string | null;
+}
+
+export async function agentRunStart(): Promise<{ run_id: string }> {
+  const resp = await fetch(`${AGENT_ORCH_URL}/api/agent-run/start`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!resp.ok) throw new Error(`agent-run/start ${resp.status}`);
+  return await resp.json();
+}
+
+// EventSource-based stream. Returns the underlying EventSource so the
+// caller can close it on unmount. Each named event lands in onEvent
+// already JSON-parsed; the `done` event triggers onDone.
+export function agentRunStream(
+  runId: string,
+  onEvent: (ev: AgentEvent) => void,
+  onDone: () => void,
+  onError: (err: any) => void,
+): EventSource {
+  const es = new EventSource(`${AGENT_ORCH_URL}/api/agent-run/${runId}/events`);
+  const types: AgentEvent["type"][] = [
+    "risk_detected",
+    "investigation_started",
+    "agent_thinking",
+    "fabric_query",
+    "fabric_response",
+    "tier1_buyers_found",
+    "programs_at_risk_identified",
+    "alternates_surfaced",
+    "subagents_spawned",
+    "subagent_started",
+    "subagent_progress",
+    "subagent_completed",
+    "run_completed",
+    "error",
+  ];
+  for (const t of types) {
+    es.addEventListener(t, (e: MessageEvent) => {
+      try {
+        onEvent(JSON.parse(e.data) as AgentEvent);
+      } catch (err) {
+        onError(err);
+      }
+    });
+  }
+  es.addEventListener("done", () => {
+    onDone();
+    es.close();
+  });
+  es.onerror = (err) => {
+    onError(err);
+    es.close();
+  };
+  return es;
+}

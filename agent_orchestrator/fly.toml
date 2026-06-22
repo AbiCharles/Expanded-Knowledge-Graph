@@ -1,0 +1,38 @@
+# Fly config for the agent_orchestrator companion service.
+# Build context is the REPO ROOT (one level up) so the Dockerfile can
+# COPY the shared hitl-context wrapper + the backend (currently unused
+# here but kept to maintain a single pyproject install graph). Deploy
+# from this directory with:
+#
+#   cd agent_orchestrator
+#   fly deploy --remote-only --config fly.toml --dockerfile Dockerfile
+
+app = 'tcs-agent-orchestrator'
+primary_region = 'iad'
+
+# Deploy command (from repo root):
+#   fly deploy --remote-only \
+#     --config agent_orchestrator/fly.toml \
+#     --dockerfile agent_orchestrator/Dockerfile \
+#     .
+# The trailing '.' makes the build context the repo root, so the
+# Dockerfile can COPY hitl-context/ + backend/ + agent_orchestrator/.
+
+[env]
+  LLM_PROVIDER = 'fake'
+  LOG_LEVEL = 'INFO'
+  FABRIC_BASE_URL = 'https://tcs-knowledge-fabric.fly.dev'
+  AGENT_CORS_ORIGINS = 'https://tcs-knowledge-fabric.fly.dev'
+
+[http_service]
+  internal_port = 8002
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 512

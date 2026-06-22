@@ -12,9 +12,12 @@ interface Props {
   onOpenInsights: () => void;
   onOpenPlatformFlow: () => void;
   onOpenCaseSpec: () => void;
+  // W8 — opens the agent-driven run view. Optional so the StatusBar
+  // works for older callers that don't wire it.
+  onOpenAgentRun?: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenInsights, onOpenPlatformFlow, onOpenCaseSpec }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenInsights, onOpenPlatformFlow, onOpenCaseSpec, onOpenAgentRun }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -62,6 +65,15 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
       </div>
 
       <div style={{ display: "flex", alignItems: "center" }}>
+        {onOpenAgentRun && (
+          <button
+            className="statusbar-action statusbar-action-primary"
+            onClick={onOpenAgentRun}
+            title="Watch the supplier-assurance agents investigate by calling the fabric"
+          >
+            ⚡ Agent run
+          </button>
+        )}
         <button
           className="statusbar-action statusbar-action-quiet"
           onClick={onOpenPlatformFlow}

@@ -20,6 +20,7 @@ import {
   TeamsCardModal,
 } from "./components/Modals";
 import { StatusBar } from "./components/StatusBar";
+import { AgentRun } from "./components/AgentRun";
 import { useCaseStream } from "./hooks/useCaseStream";
 import { CaseFull, CaseSummary, DecisionKind, ScenarioRow } from "./types";
 
@@ -45,6 +46,12 @@ export default function App() {
   const [active, setActive] = useState<CaseFull | null>(null);
   const [role, setRole] = useState<"operator" | "reviewer">("operator");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  // W8 — agent-run view (companion service). When true, the
+  // top-level layout swaps the fabric chrome for the AgentRun
+  // timeline component. Driven by the StatusBar "Agent run" button.
+  const [agentRunOpen, setAgentRunOpen] = useState<boolean>(
+    () => typeof window !== "undefined" && window.location.pathname === "/agent-run",
+  );
   // W5 / Beat 2 — when a baseline replay is in flight, the case id of the
   // ORIGINAL case that triggered it. CounterfactualCard reads this to
   // render a "Running baseline..." state on the matching case.
@@ -348,6 +355,22 @@ export default function App() {
     return <LoginScreen onAuth={(u) => setUser(u)} />;
   }
 
+  // W8 — full-screen Agent Run view. Swaps the whole fabric chrome
+  // for the agent timeline component when the user clicks the "Agent
+  // run" button in the StatusBar (or lands on /agent-run directly).
+  if (agentRunOpen) {
+    return (
+      <AgentRun
+        onExit={() => {
+          setAgentRunOpen(false);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(null, "", "/");
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <StatusBar
@@ -361,6 +384,12 @@ export default function App() {
         onOpenInsights={() => setModal({ kind: "insights" })}
         onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
         onOpenCaseSpec={() => setModal({ kind: "case-spec" })}
+        onOpenAgentRun={() => {
+          setAgentRunOpen(true);
+          if (typeof window !== "undefined") {
+            window.history.pushState(null, "", "/agent-run");
+          }
+        }}
       />
       <div className="main">
         <Console

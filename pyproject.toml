@@ -37,7 +37,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*"]
+include = ["backend*", "agent_orchestrator*"]
 
 [tool.uv.sources]
 tcs-hitl-context = { path = "hitl-context", editable = true }

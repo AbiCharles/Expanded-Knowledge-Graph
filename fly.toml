@@ -8,6 +8,11 @@ primary_region = 'iad'
 
 [build]
   dockerfile = 'Dockerfile'
+  [build.args]
+    # W8 — bake the agent-orchestrator companion service URL into the
+    # frontend bundle. The /agent-run route's api.ts uses this to hit
+    # the right origin for POST /api/agent-run/start + SSE.
+    VITE_AGENT_ORCHESTRATOR_URL = 'https://tcs-agent-orchestrator.fly.dev'
 
 [env]
   LLM_PROVIDER = 'fake'

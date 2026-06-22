@@ -2,6 +2,15 @@
 // Kept loose — we only need React + Cytoscape + dagre to compile; the
 // frontend's strict-mode checks live in our own components.
 
+// Vite injects import.meta.env at build time; declare the shape so
+// TypeScript stops complaining about VITE_* references.
+interface ImportMetaEnv {
+  readonly VITE_AGENT_ORCHESTRATOR_URL?: string;
+}
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 declare module "cytoscape-dagre";
 declare module "react-cytoscapejs" {
   import { ComponentType, CSSProperties } from "react";

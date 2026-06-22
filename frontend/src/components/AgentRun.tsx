@@ -1,0 +1,507 @@
+// W8 — agent-driven supply-assurance demo surface.
+//
+// Renders a timeline of events streamed from the agent_orchestrator
+// companion service. The page is intentionally minimal: a "Start
+// investigation" button at the top, a chronological feed of timeline
+// cards in the middle, a sub-agent status rail on the right, and a
+// "Walk through the fabric" panel that lands once `run_completed`
+// fires (one button per finding, opens the existing fabric in a new
+// tab — this is the Naresh handoff).
+
+import { useEffect, useRef, useState } from "react";
+import { AgentEvent, agentRunStart, agentRunStream } from "../api";
+
+interface RunState {
+  running: boolean;
+  done: boolean;
+  events: AgentEvent[];
+  error: string | null;
+  runId: string | null;
+}
+
+const INITIAL: RunState = {
+  running: false,
+  done: false,
+  events: [],
+  error: null,
+  runId: null,
+};
+
+const SUBAGENTS = [
+  { id: "distribution_optimizer", name: "Distribution Optimizer" },
+  { id: "alternate_outreach", name: "Alternate Outreach" },
+  { id: "program_manager_notifier", name: "Program Manager Notifier" },
+  { id: "financial_summarizer", name: "Financial Impact Summarizer" },
+];
+
+export function AgentRun({ onExit }: { onExit?: () => void }) {
+  const [state, setState] = useState<RunState>(INITIAL);
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    return () => {
+      esRef.current?.close();
+    };
+  }, []);
+
+  const start = async () => {
+    try {
+      esRef.current?.close();
+      setState({ ...INITIAL, running: true });
+      const { run_id } = await agentRunStart();
+      setState((s) => ({ ...s, runId: run_id }));
+      const es = agentRunStream(
+        run_id,
+        (ev) => setState((s) => ({ ...s, events: [...s.events, ev] })),
+        () => setState((s) => ({ ...s, running: false, done: true })),
+        (err) =>
+          setState((s) => ({
+            ...s,
+            running: false,
+            error: err?.message || "stream error",
+          })),
+      );
+      esRef.current = es;
+    } catch (err: any) {
+      setState((s) => ({ ...s, running: false, error: err?.message || String(err) }));
+    }
+  };
+
+  const reset = () => {
+    esRef.current?.close();
+    setState(INITIAL);
+  };
+
+  // Per sub-agent: status pill in the right rail. Started → progress → done.
+  const subagentStatus = (sid: string): "idle" | "running" | "done" => {
+    const last = [...state.events].reverse().find((e) => e.agent_id === sid);
+    if (!last) return "idle";
+    if (last.type === "subagent_completed") return "done";
+    return "running";
+  };
+
+  const completed = state.events.find((e) => e.type === "run_completed");
+  const walkthroughLinks: { label: string; url: string }[] =
+    (completed?.payload?.walkthrough_links as any[] | undefined) || [];
+
+  return (
+    <div className="agent-run">
+      <header className="agent-run-header">
+        <div>
+          <div className="agent-run-eyebrow">Agent-driven supply assurance</div>
+          <h1 className="agent-run-title">
+            Watch the agents investigate Northwind Forge & Castings
+          </h1>
+          <p className="agent-run-sub">
+            A risk-monitoring agent detected the Chapter-11 filing. The
+            Supplier Assurance orchestrator now investigates by querying
+            the Knowledge Fabric, then spawns four sub-agents in parallel.
+            After the run completes, open the fabric to walk through the
+            underlying components.
+          </p>
+        </div>
+        <div className="agent-run-actions">
+          {!state.running && !state.done && (
+            <button className="agent-run-start" onClick={start}>
+              ▶ Start investigation
+            </button>
+          )}
+          {state.running && (
+            <button className="agent-run-start running" disabled>
+              ⟳ Investigating…
+            </button>
+          )}
+          {state.done && (
+            <button className="agent-run-start" onClick={reset}>
+              ↻ Run again
+            </button>
+          )}
+          {onExit && (
+            <button className="agent-run-exit" onClick={onExit}>
+              ← Back to fabric
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="agent-run-body">
+        <div className="agent-run-timeline">
+          {state.events.length === 0 && !state.error && (
+            <div className="agent-run-empty">
+              Click <strong>Start investigation</strong> above. The
+              orchestrator will emit a timeline of events as the agents
+              work — each fabric query carries a deep-link you can click
+              to see the underlying component in the Knowledge Fabric.
+            </div>
+          )}
+          {state.events.map((ev, i) => (
+            <EventCard key={i} ev={ev} />
+          ))}
+          {state.error && (
+            <div className="agent-run-error">⚠ {state.error}</div>
+          )}
+          {completed && walkthroughLinks.length > 0 && (
+            <div className="agent-run-walkthrough">
+              <div className="agent-run-walkthrough-eyebrow">
+                Walk through the fabric
+              </div>
+              <p className="agent-run-walkthrough-lead">
+                The agents are done. Now open the Knowledge Fabric to
+                walk the audience through each component — the same
+                facts the orchestrator just pulled.
+              </p>
+              <div className="agent-run-walkthrough-buttons">
+                {walkthroughLinks.map((l) => (
+                  <a
+                    key={l.url}
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="agent-run-walkthrough-btn"
+                  >
+                    {l.label} ↗
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <aside className="agent-run-rail">
+          <div className="agent-run-rail-section">
+            <div className="agent-run-rail-label">Risk Monitor</div>
+            <div className="agent-run-rail-row">
+              <span
+                className={
+                  "agent-run-rail-pill " +
+                  (state.events.some((e) => e.type === "risk_detected")
+                    ? "done"
+                    : "idle")
+                }
+              >
+                {state.events.some((e) => e.type === "risk_detected")
+                  ? "✓ Triggered"
+                  : "Idle"}
+              </span>
+            </div>
+          </div>
+          <div className="agent-run-rail-section">
+            <div className="agent-run-rail-label">
+              Supplier Assurance Orchestrator
+            </div>
+            <div className="agent-run-rail-row">
+              <span
+                className={
+                  "agent-run-rail-pill " +
+                  (state.events.some((e) => e.type === "alternates_surfaced")
+                    ? "done"
+                    : state.events.some(
+                        (e) => e.type === "investigation_started",
+                      )
+                    ? "running"
+                    : "idle")
+                }
+              >
+                {state.events.some((e) => e.type === "alternates_surfaced")
+                  ? "✓ Investigation complete"
+                  : state.events.some(
+                      (e) => e.type === "investigation_started",
+                    )
+                  ? "⟳ Investigating…"
+                  : "Idle"}
+              </span>
+            </div>
+          </div>
+          <div className="agent-run-rail-section">
+            <div className="agent-run-rail-label">Sub-agents (parallel)</div>
+            {SUBAGENTS.map((sa) => {
+              const s = subagentStatus(sa.id);
+              return (
+                <div key={sa.id} className="agent-run-rail-row">
+                  <span className={"agent-run-rail-pill " + s}>
+                    {s === "done" ? "✓" : s === "running" ? "⟳" : "·"}
+                  </span>
+                  <span className="agent-run-rail-name">{sa.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Timeline event card — one variant per event type.
+// =============================================================================
+function EventCard({ ev }: { ev: AgentEvent }) {
+  const time = ev.at.slice(11, 19);
+  switch (ev.type) {
+    case "risk_detected":
+      return (
+        <Card kind="risk" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            ⚠ {ev.payload.event} · {ev.payload.supplier_name} (
+            {ev.payload.supplier_id})
+          </div>
+          <div className="agent-run-card-body">{ev.payload.summary}</div>
+        </Card>
+      );
+    case "investigation_started":
+      return (
+        <Card kind="orchestrator" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">Investigation opened</div>
+          <div className="agent-run-card-body">{ev.payload.scope}</div>
+        </Card>
+      );
+    case "agent_thinking":
+      return (
+        <Card kind="thinking" time={time} agent={agentNameOf(ev)}>
+          <div className="agent-run-card-body italic">
+            <em>{ev.payload.text}</em>
+          </div>
+        </Card>
+      );
+    case "fabric_query":
+      return (
+        <Card kind="fabric-query" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            🌐 Querying fabric · <code>{ev.payload.endpoint}</code>
+          </div>
+          <div className="agent-run-card-body">{ev.payload.description}</div>
+          <div className="agent-run-card-code">
+            {JSON.stringify(ev.payload.request, null, 2)}
+          </div>
+          {ev.fabric_link && (
+            <a
+              href={ev.fabric_link}
+              target="_blank"
+              rel="noreferrer"
+              className="agent-run-card-link"
+            >
+              Open the fabric at this view ↗
+            </a>
+          )}
+        </Card>
+      );
+    case "fabric_response":
+      return (
+        <Card kind="fabric-response" time={time} agent="Knowledge Fabric">
+          <div className="agent-run-card-headline">
+            ✓ Fabric responded · {ev.payload.node_count} nodes,{" "}
+            {ev.payload.edge_count} edges
+          </div>
+          <div className="agent-run-card-body">
+            stats:{" "}
+            <code>
+              {Object.entries(ev.payload.stats || {})
+                .map(([k, v]) => `${k}=${v}`)
+                .join(" · ")}
+            </code>
+          </div>
+        </Card>
+      );
+    case "tier1_buyers_found":
+      return (
+        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            🏭 {ev.payload.count} tier-1 buyer(s) source from the failing
+            supplier
+          </div>
+          <ul className="agent-run-card-list">
+            {(ev.payload.buyers as any[]).map((b: any) => (
+              <li key={b.supplier_id}>
+                <strong>{b.name}</strong>{" "}
+                <code>({b.supplier_id})</code>
+              </li>
+            ))}
+          </ul>
+          {ev.fabric_link && (
+            <a
+              href={ev.fabric_link}
+              target="_blank"
+              rel="noreferrer"
+              className="agent-run-card-link"
+            >
+              See the corporate-network walk in the fabric ↗
+            </a>
+          )}
+        </Card>
+      );
+    case "programs_at_risk_identified":
+      return (
+        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            🎯 {ev.payload.count} downstream program(s) at risk
+          </div>
+          <ul className="agent-run-card-list">
+            {(ev.payload.programs as any[]).map((p: any) => (
+              <li key={p.program_id}>
+                <strong>{p.name}</strong>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      );
+    case "alternates_surfaced":
+      return (
+        <Card kind="finding" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            🔁 {ev.payload.count} alternate supplier candidate(s) surfaced
+          </div>
+          <ul className="agent-run-card-list">
+            {(ev.payload.alternates as any[]).map((a: any) => (
+              <li key={a.supplier_id}>
+                <strong>{a.name}</strong>{" "}
+                <code>({a.supplier_id})</code> · {a.via}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      );
+    case "subagents_spawned":
+      return (
+        <Card kind="spawn" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-headline">
+            ⚡ Spawning {ev.payload.subagents.length} sub-agents in parallel
+          </div>
+          <ul className="agent-run-card-list">
+            {(ev.payload.subagents as any[]).map((sa: any) => (
+              <li key={sa.id}>{sa.name}</li>
+            ))}
+          </ul>
+        </Card>
+      );
+    case "subagent_started":
+      return (
+        <Card kind="subagent-start" time={time} agent={ev.payload.agent_name}>
+          <div className="agent-run-card-body italic">
+            ⟳ {ev.payload.agent_name} starting…
+          </div>
+        </Card>
+      );
+    case "subagent_completed":
+      return <SubagentResultCard ev={ev} time={time} />;
+    case "run_completed":
+      return (
+        <Card kind="complete" time={time} agent="Orchestrator">
+          <div className="agent-run-card-headline">
+            ✓ Investigation complete
+          </div>
+          <div className="agent-run-card-body">
+            <strong>{ev.payload.anchor_supplier_name}</strong> (
+            {ev.payload.anchor_supplier_id}) ·{" "}
+            {ev.payload.tier1_buyer_count} tier-1 buyer(s) ·{" "}
+            {ev.payload.programs_at_risk_count} program(s) at risk ·{" "}
+            {ev.payload.alternate_count} alternate candidate(s).
+          </div>
+        </Card>
+      );
+    case "error":
+      return (
+        <div className="agent-run-error">
+          <span>⚠ {ev.agent_id} · {ev.payload.message}</span>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function SubagentResultCard({ ev, time }: { ev: AgentEvent; time: string }) {
+  const id = ev.agent_id;
+  const name = ev.payload.agent_name;
+  return (
+    <Card kind="subagent-done" time={time} agent={name}>
+      <div className="agent-run-card-headline">✓ {name} complete</div>
+      {id === "distribution_optimizer" && (
+        <div className="agent-run-card-body">
+          <strong>Allocation order:</strong>{" "}
+          {(ev.payload.ranked as any[]).map((r: any) => r.name).join(" → ")}
+          <div className="agent-run-card-note">{ev.payload.recommendation}</div>
+        </div>
+      )}
+      {id === "alternate_outreach" && (
+        <div className="agent-run-card-body">
+          <div>
+            <strong>Primary outreach:</strong>{" "}
+            {(ev.payload.primary as any[])
+              .map((p: any) => p.name)
+              .join(", ") || "(none — all alternates blocked)"}
+          </div>
+          {(ev.payload.blocked as any[]).length > 0 && (
+            <div className="agent-run-card-note warn">
+              ⚠ Blocked:{" "}
+              {(ev.payload.blocked as any[])
+                .map((b: any) => `${b.name} (${b.reason})`)
+                .join("; ")}
+            </div>
+          )}
+        </div>
+      )}
+      {id === "program_manager_notifier" && (
+        <div className="agent-run-card-body">
+          <strong>
+            {(ev.payload.notifications as any[]).length} notification(s)
+            drafted:
+          </strong>
+          <ul className="agent-run-card-list">
+            {(ev.payload.notifications as any[]).map((n: any) => (
+              <li key={n.program_id}>
+                <code>{n.program_name}</code> → {n.to}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {id === "financial_summarizer" && (
+        <div className="agent-run-card-body">
+          <strong>${ev.payload.total_revenue_at_risk_usd_m}M</strong>{" "}
+          revenue at risk · ${ev.payload.total_otd_penalty_usd_k_per_day}k/day
+          OTD penalty · worst-case ${ev.payload.worst_case_penalty_usd_m}M
+          over {ev.payload.days_to_mitigate_worst_case} days.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Card({
+  kind,
+  time,
+  agent,
+  children,
+}: {
+  kind: string;
+  time: string;
+  agent: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`agent-run-card agent-run-card-${kind}`}>
+      <div className="agent-run-card-meta">
+        <span className="agent-run-card-agent">{agent}</span>
+        <span className="agent-run-card-time">{time}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function agentNameOf(ev: AgentEvent): string {
+  // Best-effort label resolver — `agent_thinking` events don't always
+  // carry agent_name; fall back to a humanised id.
+  const known: Record<string, string> = {
+    risk_monitor: "Risk Monitor",
+    supplier_assurance: "Supplier Assurance Orchestrator",
+    supplier_assurance_orchestrator: "Supplier Assurance Orchestrator",
+    distribution_optimizer: "Distribution Optimizer",
+    alternate_outreach: "Alternate Outreach",
+    program_manager_notifier: "Program Manager Notifier",
+    financial_summarizer: "Financial Impact Summarizer",
+    financial_impact_summarizer: "Financial Impact Summarizer",
+    orchestrator: "Orchestrator",
+  };
+  return known[ev.agent_id] || ev.payload?.agent_name || ev.agent_id;
+}

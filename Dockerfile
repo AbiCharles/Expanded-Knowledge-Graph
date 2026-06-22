@@ -8,6 +8,12 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
+# W8 — bake the agent-orchestrator URL into the bundle. fly.toml passes
+# VITE_AGENT_ORCHESTRATOR_URL via [build.args]; ARG→ENV forwarding here
+# is what makes Vite pick it up. Empty default = falls back to
+# localhost:8002 (api.ts), which is what dev expects.
+ARG VITE_AGENT_ORCHESTRATOR_URL=
+ENV VITE_AGENT_ORCHESTRATOR_URL=$VITE_AGENT_ORCHESTRATOR_URL
 RUN npm run build
 
 # ---------- Stage 2: backend ----------
