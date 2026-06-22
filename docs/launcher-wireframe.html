@@ -108,23 +108,6 @@
                                       text-transform: uppercase; margin-bottom: 4px; }
   .enables-callout .enables-text { font-size: 12.5px; color: #1f2937; line-height: 1.55; }
   .enables-callout .enables-text em { color: #4338ca; font-style: italic; font-weight: 600; }
-  /* Closing summary table on the Review screen — six rows, one per step,
-     each carrying the same phrase used on its step. Lets the reviewer
-     end the launcher with a clear hand-off to "what this enables when
-     it runs." */
-  .enables-summary { margin-top: 24px; border: 1px solid #c7d2fe;
-                     border-radius: 6px; overflow: hidden; }
-  .enables-summary-title { padding: 10px 14px; background: #eef2ff;
-                           border-bottom: 1px solid #c7d2fe; font-size: 11px;
-                           font-weight: 700; letter-spacing: 0.12em; color: #4338ca;
-                           text-transform: uppercase; }
-  .enables-summary-row { display: grid; grid-template-columns: 200px 1fr;
-                         padding: 10px 14px; border-bottom: 1px solid #e5e7eb;
-                         font-size: 12.5px; align-items: start; }
-  .enables-summary-row:last-child { border-bottom: 0; }
-  .enables-summary-step { font-weight: 700; color: #1E2761; }
-  .enables-summary-text { color: #1f2937; line-height: 1.55; }
-  .enables-summary-text em { color: #4338ca; font-style: italic; font-weight: 600; }
   .crumb { font-size: 11px; color: #6b7280; margin-bottom: 6px; }
   .crumb a { color: #4f46e5; text-decoration: underline; cursor: pointer; }
   code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
@@ -1968,16 +1951,7 @@ function screenReview() {
      <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.adminTab='overview'; render();">Launch instance →</button>
      <button class="btn" style="margin-left: 8px;">Download config (.yaml)</button>
      <button class="btn" style="margin-left: 8px;">Edit a step</button>
-   </p>
-   <div class="enables-summary">
-     <div class="enables-summary-title">What you just configured enables, in the running instance</div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 1 · Domain pack</div><div class="enables-summary-text">${ENABLES_PHRASES[1]}</div></div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 2 · Basics</div><div class="enables-summary-text">${ENABLES_PHRASES[2]}</div></div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 3 · Decision ladder</div><div class="enables-summary-text">${ENABLES_PHRASES[3]}</div></div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 4 · Connectors</div><div class="enables-summary-text">${ENABLES_PHRASES[4]}</div></div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 5 · Compliance</div><div class="enables-summary-text">${ENABLES_PHRASES[5]}</div></div>
-     <div class="enables-summary-row"><div class="enables-summary-step">Step 6 · Learned-rule gate</div><div class="enables-summary-text">${ENABLES_PHRASES[6]}</div></div>
-   </div>`;
+   </p>`;
 }
 
 // ----- screen orchestration -----
