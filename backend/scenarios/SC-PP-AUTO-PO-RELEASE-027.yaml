@@ -20,12 +20,21 @@ action_payload:
   release_reason: 'Bulk Q1 release locking pre-increase pricing on flagship-program SKUs'
   scope: procurement.write_po_release_low
 match_keywords:
-- auto release po
-- release routine po
+# Phrasings that overlap with the pinned suggested_prompt
+# ("Auto-release the $14M Q1 bulk PO to SUP-021 — per envelope
+# GR-PP-AUTO-PO-002") so the fallback keyword classifier can match
+# when no LLM is configured. Variants cover hyphenated + spaced forms.
+- auto-release
+- auto release
+- bulk po
+- q1 bulk po
+- release the $14m
+- release po
 - release purchase order
-- auto-release purchase order
-- po envelope release
-- po release auto
+- po envelope
+- gr-pp-auto-po
+- sup-021
+- po to sup-021
 interpreted_as: auto-release purchase order PO-2026-Q1-14002 ($14M) to SUP-021 per the
   envelope policy
 clarifying_question: 'Confirm — auto-release purchase order <code>PO-2026-Q1-14002</code>
