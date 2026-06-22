@@ -25,6 +25,11 @@ COPY hitl-context/pyproject.toml ./hitl-context/pyproject.toml
 COPY hitl-context/src/ ./hitl-context/src/
 COPY hitl-context/docs/ ./hitl-context/docs/
 COPY backend/ ./backend/
+# Ship the Neo4j seed (cypher + python applier) alongside the backend so
+# operators can re-seed the supply-chain graph from inside the container
+# when Aeronova / SUP-021 entities are missing. Run from /app:
+#   python3 share/tcs_kf_graph_data/seed_neo4j.py
+COPY share/tcs_kf_graph_data/ ./share/tcs_kf_graph_data/
 RUN pip install --no-cache-dir -e ./hitl-context && \
     pip install --no-cache-dir -e .
 
