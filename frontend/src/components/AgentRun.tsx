@@ -36,6 +36,13 @@ interface RunState {
   events: AgentEvent[];
   error: string | null;
   runId: string | null;
+  // True while the news-feed pre-roll is playing (the Reuters ticker +
+  // BREAKING flash that fires BEFORE the SSE stream's first event is
+  // surfaced). The SSE stream itself can already be running underneath
+  // — events queue up in `events` and only get rendered once the
+  // pre-roll resolves. Sells the "agent is watching a live wire" story
+  // before the deterministic investigation flow kicks in.
+  prerolling: boolean;
 }
 
 const INITIAL: RunState = {
@@ -44,7 +51,29 @@ const INITIAL: RunState = {
   events: [],
   error: null,
   runId: null,
+  prerolling: false,
 };
+
+// Decorative aerospace wire-story headlines that scroll across the
+// pre-roll ticker. Not real Reuters copy — just plausible-sounding
+// supply-chain news so the audience reads it as "a live feed the
+// agent is watching." If the demo runs long enough for the ticker
+// to fully cycle, the headlines loop seamlessly.
+const PRE_ROLL_HEADLINES = [
+  "Boeing 787-10 deliveries cleared for resumption · Tulsa final-assembly ramps",
+  "Airbus reports Q2 backlog up 4% on A321XLR demand · order book at 8,200",
+  "GE Aerospace lifts GEnx production guidance for 2026 H2 on engine TAT gains",
+  "Pratt & Whitney expands GTF inspection capacity at five MRO hubs",
+  "Lockheed Martin secures Block 70 export approval for two new buyer nations",
+  "Rolls-Royce books $1.4B in narrow-body engine MRO contracts for Asia-Pacific",
+  "Spirit AeroSystems closes Q2 with fuselage delivery rate restored to plan",
+  "FAA grants type certification for Eviation Alice all-electric commuter",
+];
+// The wire-story that the Risk Monitor matches against the watch list.
+// Mirrors the headline the orchestrator emits in the news_source_detected
+// event so the pre-roll flows naturally into the news card below it.
+const BREAKING_HEADLINE =
+  "Czech tier-2 aerospace forging supplier files for Chapter 11 protection";
 
 // Process instructions per step. Surfaced in the side panel of the
 // in-place graph overlay so the audience can read what the agent
@@ -225,7 +254,13 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
   const start = async () => {
     try {
       esRef.current?.close();
-      setState({ ...INITIAL, running: true });
+      // Flip into pre-roll mode immediately. The Reuters ticker bar
+      // mounts and animates while we kick off the SSE stream in
+      // parallel; events queue up in `state.events` but the
+      // ProcessFlow is gated on `!prerolling` so the audience sees
+      // the ticker → BREAKING → drop sequence first, then the news
+      // card materialises in its expected position.
+      setState({ ...INITIAL, running: true, prerolling: true });
       const { run_id } = await agentRunStart();
       setState((s) => ({ ...s, runId: run_id }));
       const es = agentRunStream(
@@ -241,8 +276,17 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
       );
       esRef.current = es;
     } catch (err: any) {
-      setState((s) => ({ ...s, running: false, error: err?.message || String(err) }));
+      setState((s) => ({
+        ...s,
+        running: false,
+        prerolling: false,
+        error: err?.message || String(err),
+      }));
     }
+  };
+
+  const onPreRollComplete = () => {
+    setState((s) => ({ ...s, prerolling: false }));
   };
 
   const reset = () => {
@@ -309,7 +353,9 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
         </div>
       </header>
 
-      {state.events.length === 0 && !state.error && (
+      {state.prerolling && <PreRoll onComplete={onPreRollComplete} />}
+
+      {!state.prerolling && state.events.length === 0 && !state.error && (
         <div className="pf-empty">
           Click <strong>Start investigation</strong> above. Each phase will
           land as a node in the process flow below — click any
@@ -318,7 +364,7 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
         </div>
       )}
 
-      {state.events.length > 0 && (
+      {!state.prerolling && state.events.length > 0 && (
         <ProcessFlow
           events={state.events}
           onTraceTo={onTraceTo}
@@ -1185,6 +1231,83 @@ function AgentGraphOverlay({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Pre-roll — Reuters ticker that builds anticipation before the SSE stream
+// surfaces. Three phases on a 3.5s timeline:
+//   - ticker:   2.5s — red "LIVE · REUTERS WIRE" badge + horizontally
+//               scrolling stream of benign aerospace headlines
+//   - breaking: 0.6s — bar flashes red, "BREAKING" badge replaces "LIVE",
+//               Northwind headline replaces the ticker with a quick
+//               typewriter-style entry animation
+//   - drop:     0.4s — bar slides up out of frame, then onComplete fires
+//               and AgentRun hands off to ProcessFlow
+// All animation is CSS-driven (transforms + keyframes); JS only flips
+// the phase class on a setTimeout, so there's no rAF jank during the
+// live demo.
+// =============================================================================
+function PreRoll({ onComplete }: { onComplete: () => void }) {
+  const [phase, setPhase] = useState<"ticker" | "breaking" | "drop">("ticker");
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("breaking"), 2500);
+    const t2 = setTimeout(() => setPhase("drop"), 3100);
+    const t3 = setTimeout(() => onComplete(), 3500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [onComplete]);
+
+  return (
+    <div className={`pf-preroll pf-preroll-${phase}`}>
+      <div className="pf-preroll-bar">
+        <div className="pf-preroll-badge">
+          {phase === "ticker" ? (
+            <>
+              <span className="pf-preroll-badge-dot" /> LIVE · REUTERS WIRE
+            </>
+          ) : (
+            <>⚠ BREAKING</>
+          )}
+        </div>
+        {phase === "ticker" && (
+          <div className="pf-preroll-track">
+            <div className="pf-preroll-stream">
+              {/* Render the headline list TWICE so the marquee can
+                  translate -50% without exposing the seam. The CSS
+                  scroll keyframe matches this halving. */}
+              {[...PRE_ROLL_HEADLINES, ...PRE_ROLL_HEADLINES].map((h, i) => (
+                <span key={i} className="pf-preroll-item">
+                  · {h}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {phase !== "ticker" && (
+          <div className="pf-preroll-breaking">{BREAKING_HEADLINE}</div>
+        )}
+        <div className="pf-preroll-time">
+          {new Date().toISOString().slice(11, 19)} UTC
+        </div>
+      </div>
+      {phase === "ticker" && (
+        <div className="pf-preroll-caption">
+          News Feed Monitor is watching the wire · matching against the
+          supplier watch list…
+        </div>
+      )}
+      {phase !== "ticker" && (
+        <div className="pf-preroll-caption pf-preroll-caption-match">
+          ⚡ Match · <strong>Northwind Forge &amp; Castings (SUP-021)</strong> ·
+          relevance 0.94 · escalating to Risk Monitor…
+        </div>
+      )}
     </div>
   );
 }
