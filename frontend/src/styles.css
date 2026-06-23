@@ -8452,7 +8452,11 @@ details[open] > .suggested-summary .suggested-chevron {
   padding: 5px 8px 5px 0;
   border-bottom: 1px dashed rgba(15, 23, 42, 0.08);
 }
-.pf-tbl td.num { text-align: right; }
+/* Numeric columns center-aligned in both header and cells so the
+   value sits visually beneath the column label (e.g. "48" centered
+   under "Revenue / ($M)" rather than right-edge-aligned). */
+.pf-tbl th.num { text-align: center; padding-right: 8px; }
+.pf-tbl td.num { text-align: center; padding-right: 8px; }
 .pf-tbl tr.pf-tbl-total td {
   border-bottom: 0;
   border-top: 1px solid var(--ink);
