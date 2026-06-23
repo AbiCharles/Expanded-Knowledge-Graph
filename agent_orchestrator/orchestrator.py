@@ -310,8 +310,18 @@ class AgentRun:
                 },
                 # Decision pathways tab — green chain (Ironcrest) vs red
                 # chain (Stillwater) tells the proposed-vs-avoid story
-                # better than the topology view.
-                fabric_link=self.fabric.aeronova_view_url("pathways"),
+                # better than the topology view. Focus on the alternate
+                # supplier nodes so the call-out lands on the candidates
+                # themselves (was previously missing → graph opened to
+                # an empty highlight).
+                fabric_link=self.fabric.aeronova_view_url(
+                    "pathways",
+                    focus_ids=[
+                        a.get("supplier_id")
+                        for a in alternates
+                        if a.get("supplier_id")
+                    ],
+                ),
             )
         )
         await self._narrate(
@@ -502,7 +512,16 @@ class AgentRun:
                 # context the alternate selection was reasoned against.
                 # Pathways > Network here because Network only shows
                 # topology; Pathways shows topology + decision overlay.
-                fabric_link=self.fabric.aeronova_view_url("pathways"),
+                # Focus on every alternate the sub-agent touched (primary
+                # + blocked), so both chains are highlighted.
+                fabric_link=self.fabric.aeronova_view_url(
+                    "pathways",
+                    focus_ids=[
+                        a.get("supplier_id")
+                        for a in [*result["primary"], *result["blocked"]]
+                        if a.get("supplier_id")
+                    ],
+                ),
             )
         )
         return {"alternate_outreach": result}
@@ -533,8 +552,17 @@ class AgentRun:
                 # Deep-link → fabric's knowledge graph in Decision-pathways
                 # mode, where the 3 Aeronova program terminals show their
                 # revenue + OTD stakes. Audience sees the same numbers the
-                # PM notifications cite.
-                fabric_link=self.fabric.aeronova_view_url("pathways"),
+                # PM notifications cite. Focus the call-out on the program
+                # ids so the highlight lands on the terminals carrying PM
+                # names.
+                fabric_link=self.fabric.aeronova_view_url(
+                    "pathways",
+                    focus_ids=[
+                        n.get("program_id")
+                        for n in notifications
+                        if n.get("program_id")
+                    ],
+                ),
             )
         )
         return {"program_manager_notifier": {"notifications": notifications}}

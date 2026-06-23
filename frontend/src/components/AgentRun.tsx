@@ -5,13 +5,28 @@
 // connectors between them. The orchestrator's three findings (tier-1
 // buyers / programs at risk / alternates) collapse into a single
 // 3-column node so the chain reads cleanly. Sub-agents fan out into a
-// 2×2 parallel fork below. Each node preserves the per-card
-// "Open in fabric" affordance from the previous timeline view —
-// double-click anywhere on a node OR click the corner pill to deep-
-// link into the matching Knowledge Fabric view.
+// 2×2 parallel fork below.
+//
+// Per-node "Open in fabric" no longer NAVIGATES away to the fabric's
+// /case/aeronova page (which would run the W1–W8 scenario walkthrough
+// in the Console). Instead it opens an in-place graph overlay on the
+// agent-run page itself, with the process instructions for that step
+// surfaced in a side panel. The audience stays in the agent flow;
+// the graph pops on top, contextualised by what the agent did.
 
-import { useEffect, useRef, useState } from "react";
-import { AgentEvent, agentRunStart, agentRunStream } from "../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import CytoscapeComponent from "react-cytoscapejs";
+import cytoscape from "cytoscape";
+import dagre from "cytoscape-dagre";
+import { AgentEvent, agentRunStart, agentRunStream, getSupplierSubgraph, SubgraphResponse } from "../api";
+
+// Register dagre once. cytoscape.use is idempotent if already registered
+// at the module level by GraphViz, but guard so HMR doesn't double-call.
+try {
+  (cytoscape as any).use(dagre);
+} catch {
+  /* already registered */
+}
 
 interface RunState {
   running: boolean;
@@ -29,9 +44,131 @@ const INITIAL: RunState = {
   runId: null,
 };
 
+// Process instructions per step. Surfaced in the side panel of the
+// in-place graph overlay so the audience can read what the agent
+// actually did to arrive at the graph view they're looking at.
+type StepKey =
+  | "news"
+  | "risk"
+  | "tier1"
+  | "programs"
+  | "alternates"
+  | "alt_outreach"
+  | "pm_notify";
+
+const STEPS: Record<StepKey, { title: string; lede: string; steps: string[] }> = {
+  news: {
+    title: "News-feed pickup",
+    lede: "News-Feed Monitor watches the supplier-failure watch list and " +
+      "raises a hit when a wire-story names a supplier on it.",
+    steps: [
+      "Reuters wire ingested into the agent's source pipe.",
+      "Entity recognition: 'Northwind Forge & Castings' → SUP-021.",
+      "Relevance score 0.94 → above 0.80 threshold → escalate.",
+      "Hand-off to Risk Monitor with matched supplier_id + headline.",
+    ],
+  },
+  risk: {
+    title: "Risk escalation",
+    lede: "Risk Monitor classifies the wire-story into a supplier-failure " +
+      "event and raises severity for the supplier-assurance orchestrator.",
+    steps: [
+      "Classify event: chapter_11_filed_2026-06-18 → SUPPLIER_FAILURE.",
+      "Resolve supplier: SUP-021 → Northwind Forge & Castings (tier-2).",
+      "Severity: HIGH (Chapter 11 → near-term shipment uncertainty).",
+      "Open investigation in Supplier Assurance orchestrator.",
+    ],
+  },
+  tier1: {
+    title: "Tier-1 buyer discovery",
+    lede: "Orchestrator queries the Knowledge Fabric to find every " +
+      "supplier that buys directly from the failing tier-2.",
+    steps: [
+      "POST /api/graph/subgraph { supplier_id: SUP-021, depth: 4 }.",
+      "Walk SOURCES_FROM edges INTO the anchor node.",
+      "Each source endpoint is a tier-1 buyer of the failing supplier.",
+      "Surface tier-1 list (3 buyers) for downstream impact analysis.",
+    ],
+  },
+  programs: {
+    title: "Downstream programs at risk",
+    lede: "From each tier-1 buyer the orchestrator walks the supply chain " +
+      "forward through POs and SKUs to land on the customer programs at risk.",
+    steps: [
+      "For each tier-1 buyer: walk PLACED → CONTAINS → INCLUDED_IN.",
+      "Reach Program terminals (PRG-* nodes).",
+      "Filter by customer = Aeronova (the case subject).",
+      "Surface 3 flagship programs as the exposed downstream.",
+    ],
+  },
+  alternates: {
+    title: "Alternate supplier candidates",
+    lede: "Orchestrator looks sideways from the failing supplier — siblings " +
+      "under the same holding company, JV partners — for drop-in candidates.",
+    steps: [
+      "From SUP-021's HoldingCompany, walk OWNS → sibling Suppliers.",
+      "Also walk PARTNER_OF for joint-venture alternates.",
+      "Annotate each candidate with current qualification state.",
+      "Surface 2 candidates: Ironcrest (JV) + Stillwater (shared parent).",
+    ],
+  },
+  alt_outreach: {
+    title: "Alternate outreach drafts",
+    lede: "Alternate Outreach sub-agent filters the candidate list by " +
+      "compliance and drafts the outreach package per surviving candidate.",
+    steps: [
+      "Pull qualification state for each candidate.",
+      "Compliance gate: drop expired (Stillwater Alloys · lapsed 2026-04-15).",
+      "Rank survivors by reliability score.",
+      "Draft outreach package for Ironcrest Metalworks (primary).",
+    ],
+  },
+  pm_notify: {
+    title: "Program-manager notifications",
+    lede: "PM Notifier sub-agent pulls the program-manager contact per " +
+      "exposed program and drafts a per-program notification.",
+    steps: [
+      "For each program: lookup MANAGED_BY → ProgramManager.",
+      "Pull PO + SKU + revenue context per program.",
+      "Draft notification naming the PO + revenue stake.",
+      "3 notifications: Mirage, Viper, Comet.",
+    ],
+  },
+};
+
+// Parse the fabric_link URL emitted by the orchestrator into the bits the
+// in-place overlay needs (view + focus ids). The orchestrator's URL shape
+// is /?launch=aeronova&view=graph|pathways&focus=ID,ID,ID; we read view +
+// focus and ignore the rest (no navigation happens — the URL is just data).
+function parseFabricLink(
+  url: string | null | undefined,
+): { view: "network" | "pathways"; focusIds: string[] } | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url, window.location.origin);
+    const view = u.searchParams.get("view");
+    const focus = u.searchParams.get("focus") || "";
+    if (view !== "graph" && view !== "pathways") return null;
+    return {
+      view: view === "graph" ? "network" : "pathways",
+      focusIds: focus.split(",").map((s) => s.trim()).filter(Boolean),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function AgentRun({ onExit }: { onExit?: () => void }) {
   const [state, setState] = useState<RunState>(INITIAL);
   const esRef = useRef<EventSource | null>(null);
+  // In-place graph overlay. When set, a full-screen modal opens on top
+  // of the process flow showing the relevant subgraph with the focus
+  // ids called out + a side panel of process instructions.
+  const [overlay, setOverlay] = useState<{
+    view: "network" | "pathways";
+    focusIds: string[];
+    step: StepKey;
+  } | null>(null);
 
   useEffect(() => () => esRef.current?.close(), []);
 
@@ -74,6 +211,14 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
     setTimeout(() => el.classList.remove("pf-pulse"), 1400);
   };
 
+  const onOpenGraph = (
+    view: "network" | "pathways",
+    focusIds: string[],
+    step: StepKey,
+  ) => {
+    setOverlay({ view, focusIds, step });
+  };
+
   return (
     <div className="pf-page">
       <header className="pf-header">
@@ -86,7 +231,8 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
             A risk-monitoring agent picks up a Reuters wire, escalates to
             the Supplier Assurance orchestrator, which queries the
             Knowledge Fabric and spawns four sub-agents in parallel. Each
-            step is double-clickable to open the matching fabric view.
+            step has an "Open in fabric" button to pop the matching
+            knowledge-graph view with the process instructions alongside.
           </p>
         </div>
         <div className="pf-actions">
@@ -116,17 +262,31 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
       {state.events.length === 0 && !state.error && (
         <div className="pf-empty">
           Click <strong>Start investigation</strong> above. Each phase will
-          land as a node in the process flow below — each node is
-          double-clickable to open the matching Knowledge Fabric view.
+          land as a node in the process flow below — click any
+          "Open in fabric" pill to pop the matching knowledge-graph view
+          right here, with the process instructions in a side panel.
         </div>
       )}
 
       {state.events.length > 0 && (
-        <ProcessFlow events={state.events} onTraceTo={onTraceTo} />
+        <ProcessFlow
+          events={state.events}
+          onTraceTo={onTraceTo}
+          onOpenGraph={onOpenGraph}
+        />
       )}
 
       {state.error && (
         <div className="pf-error">⚠ {state.error}</div>
+      )}
+
+      {overlay && (
+        <AgentGraphOverlay
+          view={overlay.view}
+          focusIds={overlay.focusIds}
+          step={overlay.step}
+          onClose={() => setOverlay(null)}
+        />
       )}
     </div>
   );
@@ -139,9 +299,11 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
 function ProcessFlow({
   events,
   onTraceTo,
+  onOpenGraph,
 }: {
   events: AgentEvent[];
   onTraceTo: (id: string) => void;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
 }) {
   const news = events.find((e) => e.type === "news_source_detected");
   const risk = events.find((e) => e.type === "risk_detected");
@@ -168,9 +330,9 @@ function ProcessFlow({
 
   return (
     <div className="pf-flow">
-      {news && <NewsNode ev={news} />}
+      {news && <NewsNode ev={news} onOpenGraph={onOpenGraph} />}
       {news && (risk || stage === "risk") && <Connector />}
-      {risk && <RiskNode ev={risk} />}
+      {risk && <RiskNode ev={risk} onOpenGraph={onOpenGraph} />}
       {risk && (investigation || stage === "investigation") && <Connector />}
       {(investigation || tier1 || programs || alternates) && (
         <OrchestratorNode
@@ -179,6 +341,7 @@ function ProcessFlow({
           programs={programs}
           alternates={alternates}
           stage={stage}
+          onOpenGraph={onOpenGraph}
         />
       )}
       {(alternates || spawn) && <Connector />}
@@ -187,6 +350,7 @@ function ProcessFlow({
         <SubagentFork
           subagents={subagents}
           onTraceTo={onTraceTo}
+          onOpenGraph={onOpenGraph}
           stage={stage}
         />
       )}
@@ -203,9 +367,9 @@ function Connector() {
   return <div className="pf-connector" />;
 }
 
-// One node is a card with a header row (badge + name + time + optional
-// fabric link) plus an optional body. Double-click on the node opens
-// the fabric link when one is present.
+// Headline card with badge + name + time. Optional "Open in fabric"
+// corner pill (and double-click on the whole card) when an
+// onOpenGraph + step is provided.
 function Node({
   kind,
   badge,
@@ -213,10 +377,13 @@ function Node({
   time,
   lede,
   fabricLink,
+  fabricStep,
+  fabricFocusIds,
   fabricLinkLabel = "↗ Open in fabric",
   id,
   pulsing,
   children,
+  onOpenGraph,
 }: {
   kind: string;
   badge: string;
@@ -224,24 +391,31 @@ function Node({
   time?: string;
   lede?: string;
   fabricLink?: string | null;
+  fabricStep?: StepKey;
+  fabricFocusIds?: string[];
   fabricLinkLabel?: string;
   id?: string;
   pulsing?: boolean;
   children?: React.ReactNode;
+  onOpenGraph?: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
 }) {
-  const onDouble = fabricLink
-    ? () => window.open(fabricLink, "_blank", "noreferrer")
+  const parsed = parseFabricLink(fabricLink);
+  const view = parsed?.view ?? "network";
+  const focusIds = fabricFocusIds ?? parsed?.focusIds ?? [];
+  const canOpen = !!onOpenGraph && !!fabricStep;
+  const onOpen = canOpen
+    ? () => onOpenGraph!(view, focusIds, fabricStep!)
     : undefined;
   return (
     <div
       id={id}
       className={
         `pf-node pf-node-${kind}` +
-        (fabricLink ? " pf-node-clickable" : "") +
+        (canOpen ? " pf-node-clickable" : "") +
         (pulsing ? " pf-node-pulsing" : "")
       }
-      onDoubleClick={onDouble}
-      title={fabricLink ? "Double-click to open in the fabric" : undefined}
+      onDoubleClick={onOpen}
+      title={canOpen ? "Double-click to open the matching graph in-place" : undefined}
     >
       <div className="pf-node-head">
         <div className={`pf-badge pf-badge-${kind}`}>{badge}</div>
@@ -252,16 +426,17 @@ function Node({
           </div>
           {lede && <div className="pf-lede">{lede}</div>}
         </div>
-        {fabricLink && (
-          <a
-            href={fabricLink}
-            target="_blank"
-            rel="noreferrer"
+        {canOpen && (
+          <button
+            type="button"
             className="pf-corner-link"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen!();
+            }}
           >
             {fabricLinkLabel}
-          </a>
+          </button>
         )}
       </div>
       {children && <div className="pf-body">{children}</div>}
@@ -272,7 +447,13 @@ function Node({
 // =============================================================================
 // Node variants
 // =============================================================================
-function NewsNode({ ev }: { ev: AgentEvent }) {
+function NewsNode({
+  ev,
+  onOpenGraph,
+}: {
+  ev: AgentEvent;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
+}) {
   const p = ev.payload;
   return (
     <Node
@@ -281,6 +462,10 @@ function NewsNode({ ev }: { ev: AgentEvent }) {
       name="News Feed Monitor"
       time={ev.at.slice(11, 19)}
       lede="Picked up a wire-story matching the watch list."
+      fabricLink={ev.fabric_link}
+      fabricStep="news"
+      fabricFocusIds={[p.matched_supplier_id as string].filter(Boolean) as string[]}
+      onOpenGraph={onOpenGraph}
     >
       <div className="pf-news-clip">
         <div className="pf-news-src">
@@ -299,7 +484,13 @@ function NewsNode({ ev }: { ev: AgentEvent }) {
   );
 }
 
-function RiskNode({ ev }: { ev: AgentEvent }) {
+function RiskNode({
+  ev,
+  onOpenGraph,
+}: {
+  ev: AgentEvent;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
+}) {
   const p = ev.payload;
   const escalatedFrom = p.triggered_by_source;
   return (
@@ -308,6 +499,10 @@ function RiskNode({ ev }: { ev: AgentEvent }) {
       badge="⚠"
       name="Risk Monitor"
       time={ev.at.slice(11, 19)}
+      fabricLink={ev.fabric_link}
+      fabricStep="risk"
+      fabricFocusIds={[p.supplier_id as string].filter(Boolean) as string[]}
+      onOpenGraph={onOpenGraph}
     >
       {escalatedFrom && (
         <div className="pf-escalated">
@@ -330,12 +525,14 @@ function OrchestratorNode({
   programs,
   alternates,
   stage,
+  onOpenGraph,
 }: {
   investigation: AgentEvent | undefined;
   tier1: AgentEvent | undefined;
   programs: AgentEvent | undefined;
   alternates: AgentEvent | undefined;
   stage: string;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
 }) {
   const time = investigation?.at.slice(11, 19) || tier1?.at.slice(11, 19) || "";
   const pulsing =
@@ -353,7 +550,12 @@ function OrchestratorNode({
       <div className="pf-cols">
         <FindingCol
           eyebrow={`Tier-1 buyers · ${(tier1?.payload?.count as number) ?? "—"}`}
-          link={tier1?.fabric_link}
+          fabricLink={tier1?.fabric_link}
+          fabricStep="tier1"
+          fabricFocusIds={
+            (tier1?.payload?.buyers as any[])?.map((b) => b.supplier_id).filter(Boolean) ?? []
+          }
+          onOpenGraph={onOpenGraph}
         >
           {tier1 && (
             <ul className="pf-list">
@@ -369,7 +571,12 @@ function OrchestratorNode({
 
         <FindingCol
           eyebrow={`Programs at risk · ${(programs?.payload?.count as number) ?? "—"}`}
-          link={programs?.fabric_link}
+          fabricLink={programs?.fabric_link}
+          fabricStep="programs"
+          fabricFocusIds={
+            (programs?.payload?.programs as any[])?.map((p) => p.program_id).filter(Boolean) ?? []
+          }
+          onOpenGraph={onOpenGraph}
           id="agent-card-programs_at_risk_identified"
         >
           {programs && (
@@ -386,7 +593,12 @@ function OrchestratorNode({
 
         <FindingCol
           eyebrow={`Alternate candidates · ${(alternates?.payload?.count as number) ?? "—"}`}
-          link={alternates?.fabric_link}
+          fabricLink={alternates?.fabric_link}
+          fabricStep="alternates"
+          fabricFocusIds={
+            (alternates?.payload?.alternates as any[])?.map((a) => a.supplier_id).filter(Boolean) ?? []
+          }
+          onOpenGraph={onOpenGraph}
         >
           {alternates && (
             <ul className="pf-list">
@@ -414,29 +626,40 @@ function OrchestratorNode({
 
 function FindingCol({
   eyebrow,
-  link,
+  fabricLink,
+  fabricStep,
+  fabricFocusIds,
   id,
   children,
+  onOpenGraph,
 }: {
   eyebrow: string;
-  link?: string | null;
+  fabricLink?: string | null;
+  fabricStep?: StepKey;
+  fabricFocusIds?: string[];
   id?: string;
   children: React.ReactNode;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
 }) {
+  const parsed = parseFabricLink(fabricLink);
+  const view = parsed?.view ?? "network";
+  const ids = fabricFocusIds ?? parsed?.focusIds ?? [];
+  const canOpen = !!fabricStep;
   return (
     <div className="pf-col" id={id}>
       <div className="pf-col-eyebrow">{eyebrow}</div>
       {children}
-      {link && (
-        <a
-          href={link}
-          target="_blank"
-          rel="noreferrer"
+      {canOpen && (
+        <button
+          type="button"
           className="pf-col-link"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenGraph(view, ids, fabricStep!);
+          }}
         >
           ↗ Open in fabric
-        </a>
+        </button>
       )}
     </div>
   );
@@ -452,10 +675,12 @@ function ForkHead({ ev }: { ev: AgentEvent }) {
 function SubagentFork({
   subagents,
   onTraceTo,
+  onOpenGraph,
   stage,
 }: {
   subagents: AgentEvent[];
   onTraceTo: (id: string) => void;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
   stage: string;
 }) {
   const byId = new Map(subagents.map((s) => [s.agent_id, s]));
@@ -479,6 +704,7 @@ function SubagentFork({
             slot={slot}
             ev={ev}
             onTraceTo={onTraceTo}
+            onOpenGraph={onOpenGraph}
             pulsing={pulse && !ev}
           />
         );
@@ -491,33 +717,54 @@ function SubagentTile({
   slot,
   ev,
   onTraceTo,
+  onOpenGraph,
   pulsing,
 }: {
   slot: { id: string; name: string; badge: string };
   ev?: AgentEvent;
   onTraceTo: (id: string) => void;
+  onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
   pulsing: boolean;
 }) {
   const time = ev?.at.slice(11, 19);
-  const fabricLink =
-    (slot.id === "alternate_outreach" || slot.id === "program_manager_notifier") &&
-    ev?.fabric_link
-      ? ev.fabric_link
-      : null;
-  const onDouble = fabricLink
-    ? () => window.open(fabricLink, "_blank", "noreferrer")
+  // Only Alternate Outreach + PM Notifier get an "Open in fabric"
+  // affordance — they're the two sub-agents whose findings overlay
+  // directly on the Decision-pathways graph.
+  const isAltOut = slot.id === "alternate_outreach";
+  const isPM = slot.id === "program_manager_notifier";
+  const step: StepKey | undefined = isAltOut
+    ? "alt_outreach"
+    : isPM
+      ? "pm_notify"
+      : undefined;
+  const parsed = parseFabricLink(ev?.fabric_link);
+  const view = parsed?.view ?? "pathways";
+  const focusIds =
+    isAltOut
+      ? [
+          ...((ev?.payload?.primary as any[]) || []).map((p) => p.supplier_id),
+          ...((ev?.payload?.blocked as any[]) || []).map((p) => p.supplier_id),
+        ].filter(Boolean)
+      : isPM
+        ? ((ev?.payload?.notifications as any[]) || [])
+            .map((n) => n.program_id)
+            .filter(Boolean)
+        : [];
+  const canOpen = !!ev && !!step;
+  const onOpen = canOpen
+    ? () => onOpenGraph(view, focusIds, step!)
     : undefined;
 
   return (
     <div
       className={
         `pf-subnode pf-sub-${slot.id}` +
-        (fabricLink ? " pf-node-clickable" : "") +
+        (canOpen ? " pf-node-clickable" : "") +
         (pulsing ? " pf-node-pulsing" : "") +
         (!ev ? " pf-subnode-pending" : "")
       }
-      onDoubleClick={onDouble}
-      title={fabricLink ? "Double-click to open in the fabric" : undefined}
+      onDoubleClick={onOpen}
+      title={canOpen ? "Double-click to open the matching graph in-place" : undefined}
     >
       <div className="pf-sub-head">
         <div className={`pf-badge pf-badge-${slot.id}`}>{slot.badge}</div>
@@ -528,16 +775,17 @@ function SubagentTile({
             {!ev && <span className="pf-pending"> · pending</span>}
           </div>
         </div>
-        {fabricLink && (
-          <a
-            href={fabricLink}
-            target="_blank"
-            rel="noreferrer"
+        {canOpen && (
+          <button
+            type="button"
             className="pf-corner-link"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen!();
+            }}
           >
             ↗ Open in fabric
-          </a>
+          </button>
         )}
       </div>
       {ev && (
@@ -730,3 +978,254 @@ function CompletedNode({ ev }: { ev: AgentEvent }) {
     </div>
   );
 }
+
+// =============================================================================
+// In-place graph overlay
+// =============================================================================
+// Full-screen modal that pops over the agent-run page when "Open in fabric"
+// is clicked. Fetches the supplier subgraph once (SUP-021, depth 4), renders
+// it via react-cytoscapejs, and applies a focus class to nodes matching the
+// step's focusIds. Left panel: the process instructions for the step — what
+// the agent did to surface this graph view.
+// ----------------------------------------------------------------------------
+const ANCHOR_SUPPLIER_ID = "SUP-021";
+
+function AgentGraphOverlay({
+  view,
+  focusIds,
+  step,
+  onClose,
+}: {
+  view: "network" | "pathways";
+  focusIds: string[];
+  step: StepKey;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<SubgraphResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
+
+  // One-shot fetch on mount. We don't refetch when focus/view change — the
+  // subgraph is the same; only the highlight + framing differ.
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    getSupplierSubgraph(ANCHOR_SUPPLIER_ID)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setError((e as Error).message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Close on Escape so the audience can keep clicking through the flow.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Build cytoscape elements with focus highlighting. The focus set is
+  // small (typically 1–3 ids) so a Set lookup is fine inline.
+  const elements = useMemo(() => {
+    if (!data) return [] as any[];
+    const focusSet = new Set(focusIds);
+    const out: any[] = [];
+    for (const n of data.nodes) {
+      out.push({
+        data: { id: n.id, label: n.label, nodeType: n.type, accent: n.accent || "default" },
+        classes:
+          ["pf-cy-node", `pf-cy-type-${n.type}`, `pf-cy-accent-${n.accent || "default"}`]
+            .concat(focusSet.has(n.id) ? ["pf-cy-focus"] : [])
+            .join(" "),
+      });
+    }
+    for (const e of data.edges) {
+      out.push({
+        data: {
+          id: `${e.source}->${e.target}:${e.type}`,
+          source: e.source,
+          target: e.target,
+          label: e.type,
+        },
+        classes:
+          ["pf-cy-edge"]
+            .concat(
+              focusSet.has(e.source) || focusSet.has(e.target)
+                ? ["pf-cy-edge-focus"]
+                : [],
+            )
+            .join(" "),
+      });
+    }
+    return out;
+  }, [data, focusIds]);
+
+  // Run dagre on element changes (left-to-right reads as a supply walk).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || elements.length === 0) return;
+    const l = cy.layout({
+      name: "dagre",
+      rankDir: "LR",
+      nodeSep: 45,
+      rankSep: 110,
+      edgeSep: 18,
+      padding: 30,
+      animate: false,
+    } as any);
+    l.on("layoutstop", () => {
+      try { cy.fit(undefined, 50); } catch { /* swallow */ }
+    });
+    l.run();
+    // Safety re-fit in case layoutstop fires before the canvas has a real size.
+    const t = setTimeout(() => { try { cy.fit(undefined, 50); } catch {} }, 350);
+    return () => clearTimeout(t);
+  }, [elements]);
+
+  // Pan the viewport so the focused nodes sit roughly centered. Runs
+  // after layout, so the focused nodes have real positions.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || focusIds.length === 0) return;
+    const t = setTimeout(() => {
+      try {
+        const sel = focusIds.map((id) => `node[id = "${id}"]`).join(", ");
+        const matched = cy.nodes(sel);
+        if (matched.length > 0) cy.animate({ fit: { eles: matched, padding: 120 } }, { duration: 400 });
+      } catch { /* swallow */ }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [focusIds, elements]);
+
+  const instructions = STEPS[step];
+  const viewLabel = view === "network" ? "Network" : "Decision pathways";
+
+  return (
+    <div className="pf-overlay" role="dialog" aria-modal="true">
+      <div className="pf-overlay-backdrop" onClick={onClose} />
+      <div className="pf-overlay-shell">
+        <header className="pf-overlay-head">
+          <div>
+            <div className="pf-overlay-eyebrow">
+              Knowledge Fabric · {viewLabel}
+            </div>
+            <h2 className="pf-overlay-title">{instructions.title}</h2>
+          </div>
+          <button type="button" className="pf-overlay-close" onClick={onClose}>
+            ✕ Close
+          </button>
+        </header>
+        <div className="pf-overlay-body">
+          <aside className="pf-instructions">
+            <div className="pf-instructions-eyebrow">Process instructions</div>
+            <p className="pf-instructions-lede">{instructions.lede}</p>
+            <ol className="pf-instructions-list">
+              {instructions.steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ol>
+            {focusIds.length > 0 && (
+              <div className="pf-instructions-focus">
+                <div className="pf-instructions-focus-eyebrow">Called out on graph</div>
+                <ul>
+                  {focusIds.map((id) => (
+                    <li key={id}><code>{id}</code></li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </aside>
+          <div className="pf-graph">
+            {error && <div className="pf-graph-error">⚠ {error}</div>}
+            {!data && !error && (
+              <div className="pf-graph-loading">Loading subgraph…</div>
+            )}
+            {data && (
+              <CytoscapeComponent
+                elements={elements}
+                style={{ width: "100%", height: "100%" }}
+                stylesheet={CY_STYLE}
+                wheelSensitivity={0.2}
+                cy={(cy) => {
+                  if (cyRef.current === cy) return;
+                  cyRef.current = cy;
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Cytoscape stylesheet — kept inline since the overlay uses its own
+// look-and-feel (no shared legend chrome). Focused nodes get an indigo
+// glow + bigger border so the audience eye lands immediately.
+const CY_STYLE: any[] = [
+  {
+    selector: "node",
+    style: {
+      "background-color": "#cbd5e1",
+      "border-width": 1.5,
+      "border-color": "#94a3b8",
+      label: "data(label)",
+      color: "#0f172a",
+      "font-size": 11,
+      "font-family": "Inter, DM Sans, sans-serif",
+      "text-valign": "center",
+      "text-halign": "center",
+      "text-wrap": "wrap",
+      "text-max-width": "120px",
+      width: 60,
+      height: 60,
+      "text-margin-y": 0,
+    },
+  },
+  // Per-type tints so the audience can tell suppliers / programs / etc apart.
+  { selector: "node.pf-cy-type-Supplier", style: { "background-color": "#fbcfe8", "border-color": "#9d174d" } as any },
+  { selector: "node.pf-cy-type-HoldingCompany", style: { "background-color": "#fed7aa", "border-color": "#9a3412" } as any },
+  { selector: "node.pf-cy-type-Program", style: { "background-color": "#bae6fd", "border-color": "#075985" } as any },
+  { selector: "node.pf-cy-type-Product", style: { "background-color": "#e9d5ff", "border-color": "#6b21a8" } as any },
+  { selector: "node.pf-cy-type-PurchaseOrder", style: { "background-color": "#fde68a", "border-color": "#92400e" } as any },
+  { selector: "node.pf-cy-type-Customer", style: { "background-color": "#bbf7d0", "border-color": "#166534" } as any },
+  { selector: "node.pf-cy-type-AlternativeSupplier", style: { "background-color": "#bbf7d0", "border-color": "#166534" } as any },
+  // The failing-supplier anchor — always red.
+  { selector: "node.pf-cy-accent-anchor", style: { "background-color": "#fecaca", "border-color": "#991b1b", "border-width": 2.5 } as any },
+  { selector: "node.pf-cy-accent-risk", style: { "background-color": "#fecaca", "border-color": "#991b1b" } as any },
+  // Focus highlight — indigo glow + bigger border.
+  {
+    selector: "node.pf-cy-focus",
+    style: {
+      "border-width": 4,
+      "border-color": "#4338ca",
+      "overlay-color": "#6366f1",
+      "overlay-opacity": 0.2,
+      "overlay-padding": 8,
+    } as any,
+  },
+  {
+    selector: "edge",
+    style: {
+      width: 1.5,
+      "line-color": "#94a3b8",
+      "target-arrow-color": "#94a3b8",
+      "target-arrow-shape": "triangle",
+      "curve-style": "bezier",
+      label: "data(label)",
+      "font-size": 9,
+      color: "#64748b",
+      "text-rotation": "autorotate",
+      "text-background-color": "#ffffff",
+      "text-background-opacity": 0.85,
+      "text-background-padding": 2,
+    },
+  },
+  {
+    selector: "edge.pf-cy-edge-focus",
+    style: {
+      width: 2.5,
+      "line-color": "#4338ca",
+      "target-arrow-color": "#4338ca",
+    } as any,
+  },
+];
