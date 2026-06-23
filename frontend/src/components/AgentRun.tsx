@@ -14,7 +14,7 @@
 // surfaced in a side panel. The audience stays in the agent flow;
 // the graph pops on top, contextualised by what the agent did.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AgentEvent,
   agentRunStart,
@@ -313,6 +313,24 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
     setOverlay({ view, focusIds, step });
   };
 
+  // Memoised so AgentGraphOverlay's mount-effect doesn't re-fire on
+  // every parent re-render. The orchestrator POSTs aeronova findings
+  // only AFTER its asyncio.gather over the 4 sub-agents resolves; if
+  // the audience clicks Open-in-fabric the moment PM Notifier lands,
+  // the POST may still be in flight. Refetch on every overlay open
+  // + retry once after 1.5s so PM names + outreach overlays render
+  // reliably on the Decision-pathways tab.
+  const refreshFindings = useCallback(() => {
+    getAeronovaFindings()
+      .then((f) => setAeronovaFindings(f))
+      .catch(() => {});
+    setTimeout(() => {
+      getAeronovaFindings()
+        .then((f) => setAeronovaFindings(f))
+        .catch(() => {});
+    }, 1500);
+  }, []);
+
   return (
     <div className="pf-page">
       <header className="pf-header">
@@ -328,6 +346,16 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
             step has an "Open in fabric" button to pop the matching
             knowledge-graph view with the process instructions alongside.
           </p>
+          <div className="pf-context">
+            <span className="pf-context-label">Case subject</span>
+            <span>
+              <strong>Northwind Forge &amp; Castings</strong> ·{" "}
+              <code>SUP-021</code> — a tier-2 aerospace forging supplier
+              that just filed Chapter 11. Aeronova (the case customer)
+              doesn't buy from it directly, but several of Aeronova's
+              tier-1 suppliers do.
+            </span>
+          </div>
         </div>
         <div className="pf-actions">
           {!state.running && !state.done && (
@@ -355,12 +383,17 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
 
       {state.prerolling && <PreRoll onComplete={onPreRollComplete} />}
 
-      {!state.prerolling && state.events.length === 0 && !state.error && (
+      {!state.prerolling && !state.running && state.events.length === 0 && !state.error && (
         <div className="pf-empty">
           Click <strong>Start investigation</strong> above. Each phase will
           land as a node in the process flow below — click any
           "Open in fabric" pill to pop the matching knowledge-graph view
           right here, with the process instructions in a side panel.
+        </div>
+      )}
+      {!state.prerolling && state.running && state.events.length === 0 && !state.error && (
+        <div className="pf-empty pf-empty-waiting">
+          ⟳ Connecting to agent orchestrator · waiting for first event…
         </div>
       )}
 
@@ -383,6 +416,7 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
           step={overlay.step}
           aeronovaCase={aeronovaCase}
           aeronovaFindings={aeronovaFindings}
+          onRefreshFindings={refreshFindings}
           onClose={() => setOverlay(null)}
         />
       )}
@@ -1154,7 +1188,10 @@ function CompletedNode({ ev }: { ev: AgentEvent }) {
       <div className="pf-stats">
         <div className="pf-stat">
           <div className="l">Investigation focus</div>
-          <div className="v">{p.anchor_supplier_id}</div>
+          <div className="v">Northwind Forge</div>
+          <div className="pf-stat-sub">
+            <code>{p.anchor_supplier_id}</code> · failing tier-2
+          </div>
         </div>
         <div className="pf-stat">
           <div className="l">Tier-1 buyers</div>
@@ -1194,6 +1231,7 @@ function AgentGraphOverlay({
   step,
   aeronovaCase,
   aeronovaFindings,
+  onRefreshFindings,
   onClose,
 }: {
   view: "network" | "pathways";
@@ -1201,10 +1239,20 @@ function AgentGraphOverlay({
   step: StepKey;
   aeronovaCase: CaseFull | null;
   aeronovaFindings: AeronovaFindings | null;
+  onRefreshFindings: () => void;
   onClose: () => void;
 }) {
   const [data, setData] = useState<SubgraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Refetch the orchestrator's findings each time the overlay opens
+  // — they're POSTed by the orchestrator AFTER its asyncio.gather
+  // resolves, which can race with the user clicking Open-in-fabric
+  // on PM Notifier. The parent does the actual setState; this just
+  // pokes it.
+  useEffect(() => {
+    onRefreshFindings();
+  }, [onRefreshFindings]);
 
   // One-shot subgraph fetch on mount. Same endpoint the fabric's
   // GraphPanel uses, so the embedded GraphModal sees the same
