@@ -786,11 +786,54 @@ function SubagentFork({
   // Always render all four tiles in 2×2 layout; show pending state when
   // an event hasn't arrived yet so the parallel-fork shape is visible
   // immediately when spawning fires.
-  const slots = [
-    { id: "distribution_optimizer", name: "Distribution Optimizer", badge: "DO" },
-    { id: "alternate_outreach", name: "Alternate Outreach", badge: "AO" },
-    { id: "program_manager_notifier", name: "Program Manager Notifier", badge: "PM" },
-    { id: "financial_summarizer", name: "Financial Summarizer", badge: "FS" },
+  // Per-slot responsibility text shown ONLY while the tile is pending
+  // (i.e. before the sub-agent's completed event has arrived). Tells the
+  // audience what each agent is about to do, so the parallel-fork
+  // moment isn't four blank tiles. Disappears once the result arrives
+  // and the tile renders its full body (Shows / Derived + table).
+  const slots: {
+    id: string;
+    name: string;
+    badge: string;
+    responsibility: string;
+  }[] = [
+    {
+      id: "distribution_optimizer",
+      name: "Distribution Optimizer",
+      badge: "DO",
+      responsibility:
+        "Will rank the 3 exposed programs by revenue + OTD penalty " +
+        "to decide which program gets supply priority if alternate " +
+        "capacity is constrained.",
+    },
+    {
+      id: "alternate_outreach",
+      name: "Alternate Outreach",
+      badge: "AO",
+      responsibility:
+        "Will filter the alternate-supplier candidates through " +
+        "compliance, draft the outreach package for the primary " +
+        "candidate, and flag any candidate whose qualification has " +
+        "lapsed.",
+    },
+    {
+      id: "program_manager_notifier",
+      name: "Program Manager Notifier",
+      badge: "PM",
+      responsibility:
+        "Will draft a per-program notification routed to the " +
+        "responsible program manager, naming the affected PO and " +
+        "revenue at stake.",
+    },
+    {
+      id: "financial_summarizer",
+      name: "Financial Summarizer",
+      badge: "FS",
+      responsibility:
+        "Will roll dollar exposure across all exposed programs — " +
+        "revenue at risk, daily OTD penalty, and the worst-case " +
+        "penalty if mitigation slips.",
+    },
   ];
   return (
     <div className="pf-fork">
@@ -818,7 +861,7 @@ function SubagentTile({
   onOpenGraph,
   pulsing,
 }: {
-  slot: { id: string; name: string; badge: string };
+  slot: { id: string; name: string; badge: string; responsibility: string };
   ev?: AgentEvent;
   onTraceTo: (id: string) => void;
   onOpenGraph: (view: "network" | "pathways", focusIds: string[], step: StepKey) => void;
@@ -886,6 +929,12 @@ function SubagentTile({
           </button>
         )}
       </div>
+      {!ev && (
+        <div className="pf-sub-pending-body">
+          <div className="pf-sub-pending-label">Responsibility</div>
+          <p className="pf-sub-pending-text">{slot.responsibility}</p>
+        </div>
+      )}
       {ev && (
         <div className="pf-sub-body">
           {slot.id === "distribution_optimizer" && (
@@ -943,8 +992,14 @@ function DistOptBody({
           <tr>
             <th>#</th>
             <th>Program</th>
-            <th className="num">$M</th>
-            <th className="num">$k/day</th>
+            <th className="num">
+              Revenue
+              <div className="pf-tbl-unit">($M)</div>
+            </th>
+            <th className="num">
+              OTD penalty
+              <div className="pf-tbl-unit">($k/day)</div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1045,8 +1100,14 @@ function FinSummaryBody({
         <thead>
           <tr>
             <th>Program</th>
-            <th className="num">$M</th>
-            <th className="num">$k/day</th>
+            <th className="num">
+              Revenue
+              <div className="pf-tbl-unit">($M)</div>
+            </th>
+            <th className="num">
+              OTD penalty
+              <div className="pf-tbl-unit">($k/day)</div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -1092,7 +1153,7 @@ function CompletedNode({ ev }: { ev: AgentEvent }) {
       </p>
       <div className="pf-stats">
         <div className="pf-stat">
-          <div className="l">Anchor</div>
+          <div className="l">Investigation focus</div>
           <div className="v">{p.anchor_supplier_id}</div>
         </div>
         <div className="pf-stat">

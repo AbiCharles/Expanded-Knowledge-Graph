@@ -8974,3 +8974,42 @@ details[open] > .suggested-summary .suggested-chevron {
 .pf-sub-derivation-text {
   color: var(--ink-muted);
 }
+
+/* Two-line column-header units for Distribution Optimizer + Financial
+   Summarizer tables. Unit string ($M / $k/day) sits in a small muted
+   second line below the column name so the table doesn't widen. */
+.pf-tbl th .pf-tbl-unit {
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  text-transform: none;
+  margin-top: 2px;
+}
+
+/* "Responsibility" block shown inside each sub-agent tile while it's
+   still pending (no event yet). Disappears the moment the sub-agent's
+   completed event arrives — replaced by the standard pf-sub-body. */
+.pf-sub-pending-body {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px dashed rgba(99, 102, 241, 0.35);
+  border-radius: 5px;
+}
+.pf-sub-pending-label {
+  font-family: "DM Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #4338ca;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.pf-sub-pending-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0;
+}
