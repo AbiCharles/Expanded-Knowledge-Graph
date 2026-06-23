@@ -14,19 +14,21 @@
 // surfaced in a side panel. The audience stays in the agent flow;
 // the graph pops on top, contextualised by what the agent did.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import CytoscapeComponent from "react-cytoscapejs";
-import cytoscape from "cytoscape";
-import dagre from "cytoscape-dagre";
-import { AgentEvent, agentRunStart, agentRunStream, getSupplierSubgraph, SubgraphResponse } from "../api";
-
-// Register dagre once. cytoscape.use is idempotent if already registered
-// at the module level by GraphViz, but guard so HMR doesn't double-call.
-try {
-  (cytoscape as any).use(dagre);
-} catch {
-  /* already registered */
-}
+import { useEffect, useRef, useState } from "react";
+import {
+  AgentEvent,
+  agentRunStart,
+  agentRunStream,
+  confirmCase,
+  createCase,
+  getAeronovaFindings,
+  getCase,
+  getSupplierSubgraph,
+  AeronovaFindings,
+  SubgraphResponse,
+} from "../api";
+import { CaseFull } from "../types";
+import { GraphModal } from "./GraphViz";
 
 interface RunState {
   running: boolean;
@@ -169,8 +171,56 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
     focusIds: string[];
     step: StepKey;
   } | null>(null);
+  // Silently-loaded Aeronova case + findings, used to feed the embedded
+  // GraphModal so it gets the same Network + Decision-pathways treatment
+  // the fabric shows. Loaded once per page lifetime on the first overlay
+  // open and cached for subsequent opens. Promise-cached via a ref so
+  // double-fast clicks don't spawn two background cases.
+  const [aeronovaCase, setAeronovaCase] = useState<CaseFull | null>(null);
+  const [aeronovaFindings, setAeronovaFindings] = useState<AeronovaFindings | null>(null);
+  const caseLoadStarted = useRef(false);
 
   useEffect(() => () => esRef.current?.close(), []);
+
+  // Silent Aeronova case load — fired the first time the audience opens
+  // any "Open in fabric" overlay. Stays in the background; the user
+  // never sees the Console / FlowStage chrome that would otherwise pop
+  // when launching the case. Polls getCase until stages bind so the
+  // Decision-pathways tab has its decisionSupport data when rendered.
+  useEffect(() => {
+    if (!overlay) return;
+    if (aeronovaCase) return;
+    if (caseLoadStarted.current) return;
+    caseLoadStarted.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const prompt =
+          "Northwind Forge just filed Chapter 11 — assess Aeronova supply assurance";
+        const created = await createCase(prompt);
+        if (cancelled) return;
+        await confirmCase(created.case_id);
+        // Poll for stages.bound — give it up to 20s (50 × 400ms).
+        for (let i = 0; i < 50; i++) {
+          if (cancelled) return;
+          await new Promise((r) => setTimeout(r, 400));
+          const c = await getCase(created.case_id);
+          if (cancelled) return;
+          if (c.stages && c.stages.length > 0) {
+            setAeronovaCase(c);
+            getAeronovaFindings()
+              .then((f) => { if (!cancelled) setAeronovaFindings(f); })
+              .catch(() => {});
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("silent aeronova case load failed:", e);
+        caseLoadStarted.current = false; // allow retry on next overlay open
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [overlay, aeronovaCase]);
 
   const start = async () => {
     try {
@@ -285,6 +335,8 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
           view={overlay.view}
           focusIds={overlay.focusIds}
           step={overlay.step}
+          aeronovaCase={aeronovaCase}
+          aeronovaFindings={aeronovaFindings}
           onClose={() => setOverlay(null)}
         />
       )}
@@ -982,11 +1034,15 @@ function CompletedNode({ ev }: { ev: AgentEvent }) {
 // =============================================================================
 // In-place graph overlay
 // =============================================================================
-// Full-screen modal that pops over the agent-run page when "Open in fabric"
-// is clicked. Fetches the supplier subgraph once (SUP-021, depth 4), renders
-// it via react-cytoscapejs, and applies a focus class to nodes matching the
-// step's focusIds. Left panel: the process instructions for the step — what
-// the agent did to surface this graph view.
+// Full-screen overlay on the agent-run page. Left: process instructions
+// describing what the agent did to surface this view. Right: the SAME
+// GraphModal the fabric uses (embedded mode, no backdrop / portal), so
+// the cytoscape look-and-feel, side legend, layout dropdown, Network /
+// Decision-pathways tab strip, ontology-class colors, and all the
+// pathway highlighting match the fabric exactly. The Aeronova case is
+// loaded silently in the background by AgentRun so the embedded
+// GraphModal's Pathways tab gets its decisionSupport data without the
+// audience seeing the case-launch chrome.
 // ----------------------------------------------------------------------------
 const ANCHOR_SUPPLIER_ID = "SUP-021";
 
@@ -994,19 +1050,23 @@ function AgentGraphOverlay({
   view,
   focusIds,
   step,
+  aeronovaCase,
+  aeronovaFindings,
   onClose,
 }: {
   view: "network" | "pathways";
   focusIds: string[];
   step: StepKey;
+  aeronovaCase: CaseFull | null;
+  aeronovaFindings: AeronovaFindings | null;
   onClose: () => void;
 }) {
   const [data, setData] = useState<SubgraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
 
-  // One-shot fetch on mount. We don't refetch when focus/view change — the
-  // subgraph is the same; only the highlight + framing differ.
+  // One-shot subgraph fetch on mount. Same endpoint the fabric's
+  // GraphPanel uses, so the embedded GraphModal sees the same
+  // rawNodes/rawEdges it would in the case page.
   useEffect(() => {
     let cancelled = false;
     setError(null);
@@ -1023,81 +1083,30 @@ function AgentGraphOverlay({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Build cytoscape elements with focus highlighting. The focus set is
-  // small (typically 1–3 ids) so a Set lookup is fine inline.
-  const elements = useMemo(() => {
-    if (!data) return [] as any[];
-    const focusSet = new Set(focusIds);
-    const out: any[] = [];
-    for (const n of data.nodes) {
-      out.push({
-        data: { id: n.id, label: n.label, nodeType: n.type, accent: n.accent || "default" },
-        classes:
-          ["pf-cy-node", `pf-cy-type-${n.type}`, `pf-cy-accent-${n.accent || "default"}`]
-            .concat(focusSet.has(n.id) ? ["pf-cy-focus"] : [])
-            .join(" "),
-      });
-    }
-    for (const e of data.edges) {
-      out.push({
-        data: {
-          id: `${e.source}->${e.target}:${e.type}`,
-          source: e.source,
-          target: e.target,
-          label: e.type,
-        },
-        classes:
-          ["pf-cy-edge"]
-            .concat(
-              focusSet.has(e.source) || focusSet.has(e.target)
-                ? ["pf-cy-edge-focus"]
-                : [],
-            )
-            .join(" "),
-      });
-    }
-    return out;
-  }, [data, focusIds]);
-
-  // Run dagre on element changes (left-to-right reads as a supply walk).
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || elements.length === 0) return;
-    const l = cy.layout({
-      name: "dagre",
-      rankDir: "LR",
-      nodeSep: 45,
-      rankSep: 110,
-      edgeSep: 18,
-      padding: 30,
-      animate: false,
-    } as any);
-    l.on("layoutstop", () => {
-      try { cy.fit(undefined, 50); } catch { /* swallow */ }
-    });
-    l.run();
-    // Safety re-fit in case layoutstop fires before the canvas has a real size.
-    const t = setTimeout(() => { try { cy.fit(undefined, 50); } catch {} }, 350);
-    return () => clearTimeout(t);
-  }, [elements]);
-
-  // Pan the viewport so the focused nodes sit roughly centered. Runs
-  // after layout, so the focused nodes have real positions.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || focusIds.length === 0) return;
-    const t = setTimeout(() => {
-      try {
-        const sel = focusIds.map((id) => `node[id = "${id}"]`).join(", ");
-        const matched = cy.nodes(sel);
-        if (matched.length > 0) cy.animate({ fit: { eles: matched, padding: 120 } }, { duration: 400 });
-      } catch { /* swallow */ }
-    }, 600);
-    return () => clearTimeout(t);
-  }, [focusIds, elements]);
-
   const instructions = STEPS[step];
   const viewLabel = view === "network" ? "Network" : "Decision pathways";
+  // Pathways view needs the case data (decisionSupport reads from
+  // active.stages); Network view doesn't. So gate Pathways on the
+  // silent case load, but let Network render the moment subgraph
+  // arrives.
+  const pathwaysReady = !!aeronovaCase;
+  const isLoading = !data || (view === "pathways" && !pathwaysReady);
+
+  // Hidden-dependency path passed into GraphModal — same derivation
+  // GraphPanel does in the fabric (anchor + alternates + via nodes).
+  const hiddenDepPath = (() => {
+    if (!aeronovaCase) return [ANCHOR_SUPPLIER_ID];
+    const ids = new Set<string>();
+    ids.add(ANCHOR_SUPPLIER_ID);
+    for (const stage of aeronovaCase.stages ?? []) {
+      for (const fact of stage.facts ?? []) {
+        if (fact.ontology_type !== "AlternativeSupplier") continue;
+        if (fact.id) ids.add(fact.id);
+        if ((fact as any).via_node_id) ids.add((fact as any).via_node_id);
+      }
+    }
+    return Array.from(ids);
+  })();
 
   return (
     <div className="pf-overlay" role="dialog" aria-modal="true">
@@ -1133,22 +1142,44 @@ function AgentGraphOverlay({
                 </ul>
               </div>
             )}
-          </aside>
-          <div className="pf-graph">
-            {error && <div className="pf-graph-error">⚠ {error}</div>}
-            {!data && !error && (
-              <div className="pf-graph-loading">Loading subgraph…</div>
+            {view === "pathways" && !pathwaysReady && (
+              <div className="pf-instructions-note">
+                ⟳ Loading decision-pathways data from the fabric…
+              </div>
             )}
-            {data && (
-              <CytoscapeComponent
-                elements={elements}
-                style={{ width: "100%", height: "100%" }}
-                stylesheet={CY_STYLE}
-                wheelSensitivity={0.2}
-                cy={(cy) => {
-                  if (cyRef.current === cy) return;
-                  cyRef.current = cy;
-                }}
+          </aside>
+          <div className="pf-graph-pane">
+            {error && <div className="pf-graph-error">⚠ {error}</div>}
+            {isLoading && !error && (
+              <div className="pf-graph-loading">
+                {!data
+                  ? "Loading supplier subgraph…"
+                  : "Loading decision-pathways data…"}
+              </div>
+            )}
+            {data && !isLoading && (
+              <GraphModal
+                embedded
+                title="Knowledge graph"
+                subtitle={`${ANCHOR_SUPPLIER_ID} · Northwind Forge & Castings`}
+                explainer={
+                  "The corporate ownership + supplier network around Northwind " +
+                  "Forge — the failing tier-2 supplier this investigation centres " +
+                  "on. Pulled live from Neo4j. Each node is a real entity " +
+                  "(supplier, holding company, program, product, PO) and each " +
+                  "line is a real relationship between them."
+                }
+                rawNodes={data.nodes}
+                rawEdges={data.edges}
+                defaultLayout="dagre"
+                onClose={onClose}
+                loading={!data}
+                error={error}
+                active={aeronovaCase}
+                initialViewMode={view}
+                hiddenDepPath={hiddenDepPath}
+                aeronovaFindings={aeronovaFindings}
+                focusIds={focusIds}
               />
             )}
           </div>
@@ -1157,75 +1188,3 @@ function AgentGraphOverlay({
     </div>
   );
 }
-
-// Cytoscape stylesheet — kept inline since the overlay uses its own
-// look-and-feel (no shared legend chrome). Focused nodes get an indigo
-// glow + bigger border so the audience eye lands immediately.
-const CY_STYLE: any[] = [
-  {
-    selector: "node",
-    style: {
-      "background-color": "#cbd5e1",
-      "border-width": 1.5,
-      "border-color": "#94a3b8",
-      label: "data(label)",
-      color: "#0f172a",
-      "font-size": 11,
-      "font-family": "Inter, DM Sans, sans-serif",
-      "text-valign": "center",
-      "text-halign": "center",
-      "text-wrap": "wrap",
-      "text-max-width": "120px",
-      width: 60,
-      height: 60,
-      "text-margin-y": 0,
-    },
-  },
-  // Per-type tints so the audience can tell suppliers / programs / etc apart.
-  { selector: "node.pf-cy-type-Supplier", style: { "background-color": "#fbcfe8", "border-color": "#9d174d" } as any },
-  { selector: "node.pf-cy-type-HoldingCompany", style: { "background-color": "#fed7aa", "border-color": "#9a3412" } as any },
-  { selector: "node.pf-cy-type-Program", style: { "background-color": "#bae6fd", "border-color": "#075985" } as any },
-  { selector: "node.pf-cy-type-Product", style: { "background-color": "#e9d5ff", "border-color": "#6b21a8" } as any },
-  { selector: "node.pf-cy-type-PurchaseOrder", style: { "background-color": "#fde68a", "border-color": "#92400e" } as any },
-  { selector: "node.pf-cy-type-Customer", style: { "background-color": "#bbf7d0", "border-color": "#166534" } as any },
-  { selector: "node.pf-cy-type-AlternativeSupplier", style: { "background-color": "#bbf7d0", "border-color": "#166534" } as any },
-  // The failing-supplier anchor — always red.
-  { selector: "node.pf-cy-accent-anchor", style: { "background-color": "#fecaca", "border-color": "#991b1b", "border-width": 2.5 } as any },
-  { selector: "node.pf-cy-accent-risk", style: { "background-color": "#fecaca", "border-color": "#991b1b" } as any },
-  // Focus highlight — indigo glow + bigger border.
-  {
-    selector: "node.pf-cy-focus",
-    style: {
-      "border-width": 4,
-      "border-color": "#4338ca",
-      "overlay-color": "#6366f1",
-      "overlay-opacity": 0.2,
-      "overlay-padding": 8,
-    } as any,
-  },
-  {
-    selector: "edge",
-    style: {
-      width: 1.5,
-      "line-color": "#94a3b8",
-      "target-arrow-color": "#94a3b8",
-      "target-arrow-shape": "triangle",
-      "curve-style": "bezier",
-      label: "data(label)",
-      "font-size": 9,
-      color: "#64748b",
-      "text-rotation": "autorotate",
-      "text-background-color": "#ffffff",
-      "text-background-opacity": 0.85,
-      "text-background-padding": 2,
-    },
-  },
-  {
-    selector: "edge.pf-cy-edge-focus",
-    style: {
-      width: 2.5,
-      "line-color": "#4338ca",
-      "target-arrow-color": "#4338ca",
-    } as any,
-  },
-];

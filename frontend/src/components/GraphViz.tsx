@@ -359,9 +359,15 @@ type GraphModalProps = {
   // useEffect adds the .cy-call-out class to matching nodes so the
   // Network graph lands with those nodes glowing.
   focusIds?: string[];
+  // W8 — when true, render the modal *inline* into the parent flex/grid
+  // container instead of as a fixed full-screen portal. Used by the
+  // /agent-run overlay which composes the modal next to a process-
+  // instructions side panel. Skips the backdrop, skips createPortal,
+  // and adds the .embedded class for CSS positioning overrides.
+  embedded?: boolean;
 };
 
-function GraphModal({
+export function GraphModal({
   title,
   subtitle,
   defaultLayout,
@@ -380,6 +386,7 @@ function GraphModal({
   initialViewMode = "network",
   aeronovaFindings,
   focusIds,
+  embedded = false,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -918,9 +925,11 @@ function GraphModal({
   // creates a positioning/stacking context. Without this the modal can be
   // clamped to an ancestor's box and visually appear smaller than the viewport.
   const variant = hideFilters ? "evidence" : "knowledge";
-  const modal = (
-    <div className="graph-modal-backdrop" onClick={onClose}>
-      <div className={`graph-modal variant-${variant}`} onClick={(e) => e.stopPropagation()}>
+  const modalInner = (
+    <div
+      className={`graph-modal variant-${variant}${embedded ? " embedded" : ""}`}
+      onClick={(e) => e.stopPropagation()}
+    >
         <header className="graph-modal-stats-bar">
           <div className="graph-modal-stats-left">
             <span className="graph-modal-stats-title">{title}</span>
@@ -1109,6 +1118,16 @@ function GraphModal({
           />
         </div>
       </div>
+  );
+  if (embedded) {
+    // Parent (.pf-overlay-shell on the agent-run page) owns the backdrop
+    // + Escape handler; render inline so it docks next to the process-
+    // instructions side panel.
+    return modalInner;
+  }
+  const modal = (
+    <div className="graph-modal-backdrop" onClick={onClose}>
+      {modalInner}
     </div>
   );
   return createPortal(modal, document.body);
