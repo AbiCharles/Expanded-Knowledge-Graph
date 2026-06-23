@@ -80,9 +80,8 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
     return "running";
   };
 
-  const completed = state.events.find((e) => e.type === "run_completed");
-  const walkthroughLinks: { label: string; url: string }[] =
-    (completed?.payload?.walkthrough_links as any[] | undefined) || [];
+  // Walk-through panel removed — per-card 'Open in fabric' links carry
+  // the audience to the right view directly.
 
   return (
     <div className="agent-run">
@@ -153,31 +152,6 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
           ))}
           {state.error && (
             <div className="agent-run-error">⚠ {state.error}</div>
-          )}
-          {completed && walkthroughLinks.length > 0 && (
-            <div className="agent-run-walkthrough">
-              <div className="agent-run-walkthrough-eyebrow">
-                Walk through the fabric
-              </div>
-              <p className="agent-run-walkthrough-lead">
-                The agents are done. Now open the Knowledge Fabric to
-                walk the audience through each component — the same
-                facts the orchestrator just pulled.
-              </p>
-              <div className="agent-run-walkthrough-buttons">
-                {walkthroughLinks.map((l) => (
-                  <a
-                    key={l.url}
-                    href={l.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="agent-run-walkthrough-btn"
-                  >
-                    {l.label} ↗
-                  </a>
-                ))}
-              </div>
-            </div>
           )}
         </div>
 
@@ -330,7 +304,6 @@ function EventCard({
           kind="fabric-query"
           time={time}
           agent={ev.payload.agent_name}
-          fabricLink={ev.fabric_link}
         >
           <div className="agent-run-card-headline">
             🌐 Querying fabric · <code>{ev.payload.endpoint}</code>
@@ -339,16 +312,6 @@ function EventCard({
           <div className="agent-run-card-code">
             {JSON.stringify(ev.payload.request, null, 2)}
           </div>
-          {ev.fabric_link && (
-            <a
-              href={ev.fabric_link}
-              target="_blank"
-              rel="noreferrer"
-              className="agent-run-card-link"
-            >
-              Open the fabric at this view ↗
-            </a>
-          )}
         </Card>
       );
     case "fabric_response":

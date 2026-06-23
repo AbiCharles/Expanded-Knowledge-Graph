@@ -223,11 +223,15 @@ export default function App() {
       }, 200);
     } else if (pendingView === "pathways") {
       setPathwaysOpenCounter((n) => n + 1);
-      setTimeout(() => setPathwaysOpenCounter((n) => n + 1), 700);
+      setTimeout(() => setPathwaysOpenCounter((n) => n + 1), 600);
+      setTimeout(() => setPathwaysOpenCounter((n) => n + 1), 1800);
+      setTimeout(() => setPathwaysOpenCounter((n) => n + 1), 3500);
       setLaunchStatus("✓ Opening knowledge graph · Decision pathways tab");
     } else if (pendingView === "graph") {
       setNetworkOpenCounter((n) => n + 1);
-      setTimeout(() => setNetworkOpenCounter((n) => n + 1), 700);
+      setTimeout(() => setNetworkOpenCounter((n) => n + 1), 600);
+      setTimeout(() => setNetworkOpenCounter((n) => n + 1), 1800);
+      setTimeout(() => setNetworkOpenCounter((n) => n + 1), 3500);
       setLaunchStatus("✓ Opening knowledge graph · Network tab");
     }
     setPendingView(null);
