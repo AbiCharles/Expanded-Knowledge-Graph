@@ -930,3 +930,26 @@ export function agentRunStream(
   };
   return es;
 }
+
+// =============================================================================
+// W8 — Aeronova findings drop-box. The agent orchestrator POSTs these
+// after each run; the fabric's pathways graph overlays them on the
+// terminal nodes (PM names on Program nodes, ✓/⚠ outreach status on
+// alternate-supplier nodes).
+// =============================================================================
+export interface AeronovaFindings {
+  program_managers: Record<string, string>;  // program_id → "name @ Aeronova (Program)"
+  alternate_outreach: {
+    primary: { supplier_id: string; name: string; via?: string }[];
+    blocked: { supplier_id: string; name: string; via?: string; reason?: string }[];
+  };
+  posted_at?: string;
+  run_id?: string;
+}
+
+export async function getAeronovaFindings(): Promise<AeronovaFindings | null> {
+  const resp = await fetch("/api/aeronova/findings");
+  if (!resp.ok) return null;
+  const body = await resp.json();
+  return body || null;
+}

@@ -129,6 +129,23 @@ class FabricClient:
         """Suggestion-pill URL — opens the Aeronova case launch flow."""
         return f"{self.base_url}/?{urlencode({'prompt': 'Northwind Forge just filed Chapter 11 — assess Aeronova supply assurance'})}"
 
+    async def post_aeronova_findings(self, payload: dict[str, Any]) -> None:
+        """POST findings to the fabric's no-auth /api/aeronova/findings.
+
+        The fabric uses these to overlay PM names + outreach status on
+        the Decision-pathways graph after a deep-link from the agent run.
+        Failures are logged but never raised — a fabric outage shouldn't
+        crash the orchestrator run.
+        """
+        try:
+            await self._http.post(
+                f"{self.base_url}/api/aeronova/findings",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("post_aeronova_findings failed: %s", exc)
+
     # Per-card deep-link URLs. Each one carries `launch=aeronova` to tell
     # the fabric's App.tsx 'auto-launch the Aeronova case + then open the
     # requested view'. The fabric's query-param handler reads `view=` to

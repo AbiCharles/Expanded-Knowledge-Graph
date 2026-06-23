@@ -73,6 +73,7 @@ export function GraphPanel({
   active,
   openPathwaysSignal,
   openNetworkSignal,
+  aeronovaFindings,
 }: {
   active: CaseFull;
   // Counter prop — when its value changes, GraphPanel opens its modal
@@ -85,6 +86,11 @@ export function GraphPanel({
   // (?launch=aeronova&view=graph) so the Alternate Outreach card lands
   // the audience on the supplier topology.
   openNetworkSignal?: number;
+  // W8 — overlays for the pathways graph terminals (PM names on
+  // Program nodes, ✓/⚠ outreach status on alternate-supplier nodes).
+  // Forwarded into GraphModal which threads it through to the
+  // pathways-highlight cytoscape effect.
+  aeronovaFindings?: import("../api").AeronovaFindings | null;
 }) {
   const anchor = useMemo(() => findGraphAnchor(active), [active]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -193,6 +199,7 @@ export function GraphPanel({
           hiddenDepPath={hiddenDepPath}
           active={active}
           initialViewMode={initialViewMode}
+          aeronovaFindings={aeronovaFindings}
         />
       )}
     </>
@@ -335,6 +342,12 @@ type GraphModalProps = {
   // Which tab to open on. Defaults to "network". Used by the post-revision
   // flow in CounterfactualCard to deep-link straight into Decision pathways.
   initialViewMode?: "network" | "pathways";
+  // W8 — agent-orchestrator overlays for the pathways graph. When
+  // present, the pathways-highlight effect appends a PM name (small
+  // dim second line) on each Program terminal label, and ✓/⚠ outreach
+  // status on each alternate-supplier terminal label. Also drives a
+  // new "Outreach status" section in the side legend.
+  aeronovaFindings?: import("../api").AeronovaFindings | null;
 };
 
 function GraphModal({
@@ -354,6 +367,7 @@ function GraphModal({
   explainer,
   hiddenDepPath,
   initialViewMode = "network",
+  aeronovaFindings,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -611,6 +625,18 @@ function GraphModal({
     const impactsByEntity = new Map(
       decisionSupport.impacts.map((p) => [p.entityId, p]),
     );
+    // W8 — fast lookups for the agent-orchestrator overlays.
+    const outreachPrimaryIds = new Set(
+      (aeronovaFindings?.alternate_outreach?.primary ?? []).map((p) => p.supplier_id),
+    );
+    const outreachBlocked = new Map(
+      (aeronovaFindings?.alternate_outreach?.blocked ?? []).map((b) => [
+        b.supplier_id,
+        b,
+      ]),
+    );
+    const pmByProgram = aeronovaFindings?.program_managers ?? {};
+
     for (const [id, step] of Object.entries(nodeStep)) {
       const node = cy.getElementById(id);
       if (!node || node.length === 0) continue;
@@ -624,15 +650,29 @@ function GraphModal({
           if (rec?.positives && rec.positives.length > 0) {
             labelText = `${labelText}\n✓ ${rec.positives.join(" · ")}`;
           }
+          // W8 — outreach status overlay for the green alternate.
+          if (outreachPrimaryIds.has(id)) {
+            labelText = `${labelText}\n📨 PRIMARY OUTREACH`;
+          }
         } else if (cat === "impact") {
           const nr = notRecommendedByEntity.get(id);
           if (nr?.concerns && nr.concerns.length > 0) {
             labelText = `${labelText}\n⚠ ${compactProposedConcerns(nr.concerns)}`;
           }
+          // W8 — blocked outreach status for the red alternate.
+          const blocked = outreachBlocked.get(id);
+          if (blocked) {
+            labelText = `${labelText}\n⛔ OUTREACH BLOCKED`;
+          }
         } else if (cat === "context") {
           const ctx = impactsByEntity.get(id);
           if (ctx?.stake) {
             labelText = `${labelText}\n${compactImpactStake(ctx.stake)}`;
+          }
+          // W8 — Program-manager name overlay (small dim second line).
+          const pm = pmByProgram[id];
+          if (pm) {
+            labelText = `${labelText}\n👤 ${pm}`;
           }
         }
       }
@@ -677,7 +717,7 @@ function GraphModal({
     setTimeout(() => {
       try { cy.fit(cy.elements(":visible"), 40); } catch { /* swallow */ }
     }, 50);
-  }, [viewMode, decisionSupport, elements.length, layout, cyReadyTick]);
+  }, [viewMode, decisionSupport, elements.length, layout, cyReadyTick, aeronovaFindings]);
 
   // Pathway detail card is only meaningful on the Decision pathways tab —
   // dismiss it the moment the user flips to Network so the legend doesn't
@@ -1037,6 +1077,7 @@ function GraphModal({
             decisionSupport={viewMode === "pathways" ? decisionSupport : null}
             pathwayDetail={viewMode === "pathways" ? pathwayDetail : null}
             onDismissPathwayDetail={() => setPathwayDetail(null)}
+            aeronovaFindings={viewMode === "pathways" ? aeronovaFindings : null}
           />
         </div>
       </div>
@@ -1065,6 +1106,7 @@ function GraphModalSideLegend({
   decisionSupport,
   pathwayDetail,
   onDismissPathwayDetail,
+  aeronovaFindings,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -1084,6 +1126,7 @@ function GraphModalSideLegend({
     programs: DecisionPath[];
   } | null;
   onDismissPathwayDetail?: () => void;
+  aeronovaFindings?: import("../api").AeronovaFindings | null;
 }) {
   return (
     <aside className={`graph-modal-side-legend${open ? "" : " collapsed"}`}>
@@ -1107,6 +1150,9 @@ function GraphModalSideLegend({
               has proposed or at-risk pathways to summarise (otherwise the
               panel returns null and nothing is added to the legend). */}
           {decisionSupport && <DecisionSupportPanel support={decisionSupport} />}
+          {aeronovaFindings && (
+            <OutreachStatusPanel findings={aeronovaFindings} />
+          )}
           {explainer && (
             <div className="graph-modal-side-legend-explainer">{explainer}</div>
           )}
@@ -1642,6 +1688,67 @@ function PathwayImpactCard({
         <div className="pathway-impact-card-empty">
           No program-impact chains attached to this node in the current
           case data.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// W8 — Outreach status panel. Lands at the top of the legend on the
+// pathways tab when the agent orchestrator has posted findings. Shows
+// the primary outreach recipient + every blocked candidate with its
+// reason, so the audience can read the agent's outreach decision
+// without leaving the graph.
+function OutreachStatusPanel({
+  findings,
+}: {
+  findings: import("../api").AeronovaFindings;
+}) {
+  const primary = findings.alternate_outreach?.primary ?? [];
+  const blocked = findings.alternate_outreach?.blocked ?? [];
+  if (primary.length === 0 && blocked.length === 0) return null;
+  return (
+    <div className="outreach-status-panel">
+      <div className="outreach-status-eyebrow">
+        📨 Agent outreach status
+      </div>
+      {primary.length > 0 && (
+        <div className="outreach-status-section primary">
+          <div className="outreach-status-label">
+            Primary outreach ({primary.length})
+          </div>
+          {primary.map((p) => (
+            <div key={p.supplier_id} className="outreach-status-row">
+              <div className="outreach-status-name">
+                ✓ {p.name} <code>({p.supplier_id})</code>
+              </div>
+              {p.via && (
+                <div className="outreach-status-via">via {p.via}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {blocked.length > 0 && (
+        <div className="outreach-status-section blocked">
+          <div className="outreach-status-label">
+            Blocked ({blocked.length})
+          </div>
+          {blocked.map((b) => (
+            <div key={b.supplier_id} className="outreach-status-row">
+              <div className="outreach-status-name">
+                ⛔ {b.name} <code>({b.supplier_id})</code>
+              </div>
+              {b.reason && (
+                <div className="outreach-status-reason">{b.reason}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {findings.posted_at && (
+        <div className="outreach-status-footer">
+          Posted by agent run · {findings.posted_at.slice(11, 19)} UTC
         </div>
       )}
     </div>

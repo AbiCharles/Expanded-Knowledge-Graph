@@ -7962,3 +7962,71 @@ details[open] > .suggested-summary .suggested-chevron {
   text-align: left;
 }
 .agent-run-derivation-trace:hover { text-decoration: underline; }
+
+/* W8 — Outreach status panel in the side legend of the pathways tab.
+   Surfaces the agent orchestrator's outreach decisions next to the
+   knowledge graph so the audience can read who got contacted vs blocked. */
+.outreach-status-panel {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(99, 102, 241, 0.40);
+  border-left: 4px solid #6366f1;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.10), rgba(99, 102, 241, 0.02));
+}
+.outreach-status-eyebrow {
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4338ca;
+  margin-bottom: 8px;
+}
+.outreach-status-section {
+  margin-bottom: 8px;
+}
+.outreach-status-section:last-child { margin-bottom: 0; }
+.outreach-status-label {
+  font-family: "DM Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.outreach-status-section.primary .outreach-status-label { color: #166534; }
+.outreach-status-section.blocked .outreach-status-label { color: #7a2424; }
+.outreach-status-row {
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(15, 23, 42, 0.08);
+}
+.outreach-status-row:last-child { border-bottom: 0; }
+.outreach-status-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.outreach-status-name code {
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  background: transparent;
+  padding: 0;
+}
+.outreach-status-via,
+.outreach-status-reason {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+.outreach-status-footer {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(99, 102, 241, 0.20);
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+}

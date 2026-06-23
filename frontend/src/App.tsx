@@ -187,6 +187,16 @@ export default function App() {
   // render, so even if it mounts AFTER the bump, the modal opens.
   const [networkOpenCounter, setNetworkOpenCounter] = useState(0);
   const [pathwaysOpenCounter, setPathwaysOpenCounter] = useState(0);
+  // W8 — Aeronova findings posted by the agent orchestrator, fetched
+  // on the deep-link auto-launch path so the pathways graph can
+  // overlay PM names + outreach status on the terminal nodes.
+  const [aeronovaFindings, setAeronovaFindings] = useState<
+    import("./api").AeronovaFindings | null
+  >(null);
+  useEffect(() => {
+    if (!pendingLaunch) return;
+    api.getAeronovaFindings().then(setAeronovaFindings).catch(() => {});
+  }, [pendingLaunch]);
 
   // Fire the requested view once the active case has stage facts to
   // render against. Bumps the right counter; the signal propagates
@@ -558,6 +568,7 @@ export default function App() {
           }
           externalOpenNetworkSignal={networkOpenCounter}
           externalOpenPathwaysSignal={pathwaysOpenCounter}
+          aeronovaFindings={aeronovaFindings}
         />
         <LineagePanel
           active={active}

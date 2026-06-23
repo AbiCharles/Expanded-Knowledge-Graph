@@ -31,6 +31,7 @@ from .api.cases import router as cases_router
 from .api.datasources import router as datasources_router
 from .api.decisions import router as decisions_router
 from .api.graph import router as graph_router
+from .api.aeronova import router as aeronova_router
 from .api.exports import router as exports_router
 from .api.insights import router as insights_router
 from .api.metrics import router as metrics_router
@@ -212,6 +213,7 @@ def create_app() -> FastAPI:
     app.include_router(ontologies_router, prefix="/api")
     app.include_router(actions_router, prefix="/api")
     app.include_router(graph_router, prefix="/api")
+    app.include_router(aeronova_router, prefix="/api")
 
     @app.get("/api/health")
     def health():

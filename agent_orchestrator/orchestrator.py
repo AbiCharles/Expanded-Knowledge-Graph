@@ -359,7 +359,28 @@ class AgentRun:
             if isinstance(r, dict):
                 summarized.update(r)
 
-        # ---- Step 7: run summary + walk-through links --------------
+        # ---- Step 7: post findings to the fabric so the decision
+        # pathways graph can overlay PM names + outreach status. ----
+        from .agents import program_manager_notifier
+        from datetime import datetime, timezone
+        findings_payload = {
+            "run_id": self.run_id,
+            "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "program_managers": program_manager_notifier.PROGRAM_MANAGERS,
+            "alternate_outreach": {
+                "primary": [
+                    {"supplier_id": p.get("supplier_id"), "name": p.get("name"), "via": p.get("via")}
+                    for p in (summarized.get("alternate_outreach", {}).get("primary") or [])
+                ],
+                "blocked": [
+                    {"supplier_id": b.get("supplier_id"), "name": b.get("name"), "via": b.get("via"), "reason": b.get("reason")}
+                    for b in (summarized.get("alternate_outreach", {}).get("blocked") or [])
+                ],
+            },
+        }
+        await self.fabric.post_aeronova_findings(findings_payload)
+
+        # ---- Step 8: run summary + walk-through links --------------
         walkthrough_links = [
             {
                 "label": "Knowledge graph — supplier subgraph around SUP-021",

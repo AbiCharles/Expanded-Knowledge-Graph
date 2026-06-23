@@ -14,6 +14,10 @@ interface Props {
   // flow; bumped by App.tsx, propagated to GraphPanel via Envelope.
   externalOpenNetworkSignal?: number;
   externalOpenPathwaysSignal?: number;
+  // W8 — overlays for the pathways graph (PM names on Program nodes,
+  // outreach status on alternate-supplier nodes). Pulled from the
+  // agent orchestrator via /api/aeronova/findings.
+  aeronovaFindings?: import("../api").AeronovaFindings | null;
 }
 
 const NODE_ORDER = ["agent", "propose", "review", "execute"] as const;
@@ -37,6 +41,7 @@ export function FlowStage({
   baselineRunningForActive,
   externalOpenNetworkSignal,
   externalOpenPathwaysSignal,
+  aeronovaFindings,
 }: Props) {
   const position = stagePosition(active);
   const isAuto = !!active?.scenario?.autonomous;
@@ -89,6 +94,7 @@ export function FlowStage({
         baselineRunningForActive={baselineRunningForActive}
         externalOpenNetworkSignal={externalOpenNetworkSignal}
         externalOpenPathwaysSignal={externalOpenPathwaysSignal}
+        aeronovaFindings={aeronovaFindings}
       />
     </main>
   );

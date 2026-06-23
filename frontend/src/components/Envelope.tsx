@@ -21,6 +21,7 @@ export function Envelope({
   baselineRunningForActive,
   externalOpenNetworkSignal,
   externalOpenPathwaysSignal,
+  aeronovaFindings,
 }: {
   active: CaseFull | null;
   onRefresh?: () => void;
@@ -36,6 +37,7 @@ export function Envelope({
   // external triggers (agent-orchestrator deep-link).
   externalOpenNetworkSignal?: number;
   externalOpenPathwaysSignal?: number;
+  aeronovaFindings?: import("../api").AeronovaFindings | null;
 }) {
   // W1 / Beat 3 — revision selector. Default to viewing the LATEST
   // revision so users see the freshest decision; users can toggle back
@@ -252,6 +254,7 @@ export function Envelope({
                 (externalOpenPathwaysSignal || 0)
               }
               openNetworkSignal={externalOpenNetworkSignal}
+              aeronovaFindings={aeronovaFindings}
             />
           </>
         )}
