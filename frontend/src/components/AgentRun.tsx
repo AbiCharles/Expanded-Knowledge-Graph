@@ -902,6 +902,25 @@ function SubagentTile({
   );
 }
 
+// Two-line explainer block placed at the top of every sub-agent body:
+// "Shows" = what the tile is showing the audience; "Derived" = how the
+// agent produced it (inputs / logic). Keeps the demo self-narrating so
+// Naresh doesn't have to explain every card from cold.
+function Derivation({ shows, derived }: { shows: string; derived: string }) {
+  return (
+    <div className="pf-sub-derivation">
+      <div>
+        <span className="pf-sub-derivation-label">Shows</span>
+        <span className="pf-sub-derivation-text">{shows}</span>
+      </div>
+      <div>
+        <span className="pf-sub-derivation-label">Derived</span>
+        <span className="pf-sub-derivation-text">{derived}</span>
+      </div>
+    </div>
+  );
+}
+
 function DistOptBody({
   ev,
   onTraceTo,
@@ -912,6 +931,10 @@ function DistOptBody({
   const ranked = (ev.payload.ranked as any[]) || [];
   return (
     <>
+      <Derivation
+        shows="Supply allocation order across the 3 exposed programs if alternate capacity is constrained."
+        derived="Sort programs by revenue stake (biggest dollars first); OTD penalty $/day breaks ties."
+      />
       <div className="pf-sub-headline">
         Allocation order: <strong>{ranked.map((r) => r.name).join(" → ")}</strong>
       </div>
@@ -951,6 +974,10 @@ function AltOutreachBody({ ev }: { ev: AgentEvent }) {
   const blocked = (ev.payload.blocked as any[]) || [];
   return (
     <>
+      <Derivation
+        shows="Which alternate-supplier candidates pass compliance (PRIMARY) and which are blocked, with the blocking reason."
+        derived="Pull qualification state per candidate from kf:graph; expired qualifications drop to BLOCKED; survivors sorted by reliability score."
+      />
       {primary.length > 0 && (
         <div className="pf-row">
           <span className="pf-pill pf-pill-ok">PRIMARY</span>{" "}
@@ -977,6 +1004,10 @@ function PMNotifierBody({ ev }: { ev: AgentEvent }) {
   const notifications = (ev.payload.notifications as any[]) || [];
   return (
     <>
+      <Derivation
+        shows="Per-program notification draft routed to the responsible program manager, naming the affected PO + revenue at stake."
+        derived="For each exposed program: lookup MANAGED_BY → ProgramManager in kf:graph; PO + revenue context from the CONTAINS → INCLUDED_IN walk."
+      />
       <div className="pf-sub-headline">
         {notifications.length} notification{notifications.length === 1 ? "" : "s"} drafted:
       </div>
@@ -1002,6 +1033,10 @@ function FinSummaryBody({
   const breakdown = (p.breakdown as any[]) || [];
   return (
     <>
+      <Derivation
+        shows="Dollar roll-up across all exposed programs — revenue at risk, daily OTD penalty, and the worst-case penalty if mitigation slips."
+        derived="Σ(program revenue), Σ(OTD penalty $/day), and (penalty $/day × days-to-mitigate-worst-case). Per-program rows from the same finding the Distribution Optimizer ranked."
+      />
       <div className="pf-sub-headline">
         <strong>${p.total_revenue_at_risk_usd_m}M</strong> revenue at risk ·{" "}
         <strong>${p.total_otd_penalty_usd_k_per_day}k</strong>/day OTD penalty

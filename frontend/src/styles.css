@@ -8941,3 +8941,36 @@ details[open] > .suggested-summary .suggested-chevron {
   from { opacity: 0; transform: translateX(-6px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* "Shows / Derived" explainer block at the top of every sub-agent body.
+   Two stacked rows with a small indigo label gutter; tight so it
+   doesn't push the headline + table below the fold on the 2x2 tile. */
+.pf-sub-derivation {
+  margin-bottom: 10px;
+  padding: 8px 10px 8px 10px;
+  background: var(--paper-deep);
+  border-left: 2px solid #4338ca;
+  border-radius: 0 4px 4px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.pf-sub-derivation > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0;
+}
+.pf-sub-derivation-label {
+  flex-shrink: 0;
+  font-family: "DM Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  color: #4338ca;
+  text-transform: uppercase;
+  width: 48px;
+}
+.pf-sub-derivation-text {
+  color: var(--ink-muted);
+}
