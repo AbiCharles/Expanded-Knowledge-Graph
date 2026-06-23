@@ -308,7 +308,10 @@ class AgentRun:
                     "count": len(alternates),
                     "alternates": alternates,
                 },
-                fabric_link=self.fabric.graph_url_for_supplier(risk["supplier_id"]),
+                # Decision pathways tab — green chain (Ironcrest) vs red
+                # chain (Stillwater) tells the proposed-vs-avoid story
+                # better than the topology view.
+                fabric_link=self.fabric.aeronova_view_url("pathways"),
             )
         )
         await self._narrate(
