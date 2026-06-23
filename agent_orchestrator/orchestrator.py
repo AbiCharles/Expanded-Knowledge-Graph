@@ -218,7 +218,8 @@ class AgentRun:
                     "node_count": len(subgraph.get("nodes") or []),
                     "edge_count": len(subgraph.get("edges") or []),
                 },
-                fabric_link=self.fabric.graph_url_for_supplier(risk["supplier_id"]),
+                # Open the Network tab — the response IS the network.
+                fabric_link=self.fabric.aeronova_view_url("graph"),
             )
         )
         await asyncio.sleep(PAUSE_BETWEEN_STAGES)
@@ -236,7 +237,12 @@ class AgentRun:
                     "count": len(tier1),
                     "buyers": tier1,
                 },
-                fabric_link=self.fabric.graph_url_for_supplier(risk["supplier_id"]),
+                # Open Network tab with the tier-1 buyer ids "called out"
+                # (highlighted with a glow class on the matching nodes).
+                fabric_link=self.fabric.aeronova_view_url(
+                    "graph",
+                    focus_ids=[b.get("supplier_id") for b in tier1 if b.get("supplier_id")],
+                ),
             )
         )
         await self._narrate(
@@ -267,7 +273,12 @@ class AgentRun:
                     "count": len(programs),
                     "programs": programs,
                 },
-                fabric_link=self.fabric.graph_url_for_supplier(risk["supplier_id"]),
+                # Open Network tab with the Program ids highlighted so
+                # the audience sees exactly which terminals matter.
+                fabric_link=self.fabric.aeronova_view_url(
+                    "graph",
+                    focus_ids=[p.get("program_id") for p in programs if p.get("program_id")],
+                ),
             )
         )
         await self._narrate(

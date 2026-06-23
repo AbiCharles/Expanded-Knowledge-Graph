@@ -74,6 +74,7 @@ export function GraphPanel({
   openPathwaysSignal,
   openNetworkSignal,
   aeronovaFindings,
+  focusIds,
 }: {
   active: CaseFull;
   // Counter prop — when its value changes, GraphPanel opens its modal
@@ -91,6 +92,11 @@ export function GraphPanel({
   // Forwarded into GraphModal which threads it through to the
   // pathways-highlight cytoscape effect.
   aeronovaFindings?: import("../api").AeronovaFindings | null;
+  // W8 — node ids to call out on the Network tab (tier-1 buyers when
+  // launched from the tier1_buyers_found card, programs when launched
+  // from the programs_at_risk_identified card, etc.). Cytoscape gets a
+  // .cy-call-out class on matching nodes.
+  focusIds?: string[];
 }) {
   const anchor = useMemo(() => findGraphAnchor(active), [active]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -200,6 +206,7 @@ export function GraphPanel({
           active={active}
           initialViewMode={initialViewMode}
           aeronovaFindings={aeronovaFindings}
+          focusIds={focusIds}
         />
       )}
     </>
@@ -348,6 +355,10 @@ type GraphModalProps = {
   // status on each alternate-supplier terminal label. Also drives a
   // new "Outreach status" section in the side legend.
   aeronovaFindings?: import("../api").AeronovaFindings | null;
+  // W8 — node ids to "call out" on the Network tab. A separate
+  // useEffect adds the .cy-call-out class to matching nodes so the
+  // Network graph lands with those nodes glowing.
+  focusIds?: string[];
 };
 
 function GraphModal({
@@ -368,6 +379,7 @@ function GraphModal({
   hiddenDepPath,
   initialViewMode = "network",
   aeronovaFindings,
+  focusIds,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
@@ -765,6 +777,22 @@ function GraphModal({
       }
     });
   }, [hiddenDepPath, elements.length, layout]);
+
+  // W8 — "call out" highlight from the agent-orchestrator deep-link.
+  // The Network tab uses .cy-call-out class to wrap matching nodes in
+  // a bright glow + bigger size so the audience sees instantly which
+  // nodes the card was talking about (tier-1 buyer ids, program ids, etc.).
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements().removeClass("cy-call-out");
+    const ids = (focusIds ?? []).filter(Boolean);
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      const n = cy.getElementById(id);
+      if (n && n.length > 0) n.addClass("cy-call-out");
+    }
+  }, [focusIds, elements.length, layout, cyReadyTick, viewMode]);
 
   // Double-click any colored pathway node to surface the downstream
   // program exposure in the side legend. Uses a manual lastTap-timing
@@ -3062,6 +3090,25 @@ const SHARED_INTERACTION: any[] = [
       "z-index": 65,
     },
   },
+  // W8 — "call out" treatment for nodes deep-linked via ?focus=ID,ID.
+  // Bright indigo glow + bigger border so the audience sees instantly
+  // which nodes the agent-run card was referencing.
+  {
+    selector: "node.cy-call-out",
+    style: {
+      "border-width": 4,
+      "border-color": "#6366f1",
+      "border-style": "solid",
+      width: 32,
+      height: 32,
+      "font-weight": 700,
+      "font-size": 11,
+      "z-index": 70,
+      "overlay-color": "#6366f1",
+      "overlay-padding": 8,
+      "overlay-opacity": 0.18,
+    },
+  },
   // Terminal nodes — thicker border + bolder label. text-max-width is
   // bumped from the base 110px to 180px so the second-line WHY suffix
   // ("$48M · $220k/day" / "⚠ qual lapsed 2026-04-15 · shared parent")
@@ -3071,8 +3118,8 @@ const SHARED_INTERACTION: any[] = [
     style: {
       "border-width": 3,
       "font-weight": 700,
-      "font-size": 11,
-      "text-max-width": 180,
+      "font-size": 8,
+      "text-max-width": 200,
     },
   },
   // Pathway view = decision graph, not cypher graph. Edges flagged
@@ -3122,7 +3169,7 @@ const knowledgeStylesheet: any[] = [
       color: "#0f172a",
       "font-family": "Fraunces, Georgia, serif",
       "font-style": "italic",
-      "font-size": 9,
+      "font-size": 7.5,
       "font-weight": 400,
       "text-valign": "bottom",
       "text-halign": "center",
@@ -3142,7 +3189,7 @@ const knowledgeStylesheet: any[] = [
       width: 26,
       height: 26,
       "font-weight": 600,
-      "font-size": 10,
+      "font-size": 8.5,
       color: "#0a4f5c",
     },
   },

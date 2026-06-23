@@ -22,6 +22,7 @@ export function Envelope({
   externalOpenNetworkSignal,
   externalOpenPathwaysSignal,
   aeronovaFindings,
+  graphFocusIds,
 }: {
   active: CaseFull | null;
   onRefresh?: () => void;
@@ -38,6 +39,7 @@ export function Envelope({
   externalOpenNetworkSignal?: number;
   externalOpenPathwaysSignal?: number;
   aeronovaFindings?: import("../api").AeronovaFindings | null;
+  graphFocusIds?: string[];
 }) {
   // W1 / Beat 3 — revision selector. Default to viewing the LATEST
   // revision so users see the freshest decision; users can toggle back
@@ -255,6 +257,7 @@ export function Envelope({
               }
               openNetworkSignal={externalOpenNetworkSignal}
               aeronovaFindings={aeronovaFindings}
+              focusIds={graphFocusIds}
             />
           </>
         )}

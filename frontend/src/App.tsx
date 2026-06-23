@@ -118,6 +118,7 @@ export default function App() {
   const [pendingLaunch, setPendingLaunch] = useState<{
     prompt: string;
     view: string | null;
+    focus: string[];
   } | null>(null);
   const [pendingView, setPendingView] = useState<string | null>(null);
   const [launchedOnce, setLaunchedOnce] = useState(false);
@@ -129,9 +130,14 @@ export default function App() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("launch") === "aeronova") {
+      const focusRaw = params.get("focus") || "";
       setPendingLaunch({
         prompt: params.get("prompt") || "",
         view: params.get("view"),
+        focus: focusRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
       setLaunchStatus("Detected agent-run deep-link · waiting for auth…");
       // Strip the params so a reload doesn't keep re-firing the launch.
@@ -144,6 +150,7 @@ export default function App() {
   useEffect(() => {
     if (!pendingLaunch || !user || launchedOnce) return;
     if (pendingLaunch.view) setPendingView(pendingLaunch.view);
+    if (pendingLaunch.focus.length > 0) setGraphFocusIds(pendingLaunch.focus);
     setLaunchedOnce(true);
     const { prompt } = pendingLaunch;
     if (!prompt) {
@@ -187,6 +194,7 @@ export default function App() {
   // render, so even if it mounts AFTER the bump, the modal opens.
   const [networkOpenCounter, setNetworkOpenCounter] = useState(0);
   const [pathwaysOpenCounter, setPathwaysOpenCounter] = useState(0);
+  const [graphFocusIds, setGraphFocusIds] = useState<string[]>([]);
   // W8 — Aeronova findings posted by the agent orchestrator, fetched
   // on the deep-link auto-launch path so the pathways graph can
   // overlay PM names + outreach status on the terminal nodes.
@@ -569,6 +577,7 @@ export default function App() {
           externalOpenNetworkSignal={networkOpenCounter}
           externalOpenPathwaysSignal={pathwaysOpenCounter}
           aeronovaFindings={aeronovaFindings}
+          graphFocusIds={graphFocusIds}
         />
         <LineagePanel
           active={active}

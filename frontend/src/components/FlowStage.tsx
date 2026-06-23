@@ -18,6 +18,9 @@ interface Props {
   // outreach status on alternate-supplier nodes). Pulled from the
   // agent orchestrator via /api/aeronova/findings.
   aeronovaFindings?: import("../api").AeronovaFindings | null;
+  // W8 — node ids to highlight ("call out") on the Network graph
+  // when launched via ?launch=aeronova&view=graph&focus=ID1,ID2.
+  graphFocusIds?: string[];
 }
 
 const NODE_ORDER = ["agent", "propose", "review", "execute"] as const;
@@ -42,6 +45,7 @@ export function FlowStage({
   externalOpenNetworkSignal,
   externalOpenPathwaysSignal,
   aeronovaFindings,
+  graphFocusIds,
 }: Props) {
   const position = stagePosition(active);
   const isAuto = !!active?.scenario?.autonomous;
@@ -95,6 +99,7 @@ export function FlowStage({
         externalOpenNetworkSignal={externalOpenNetworkSignal}
         externalOpenPathwaysSignal={externalOpenPathwaysSignal}
         aeronovaFindings={aeronovaFindings}
+        graphFocusIds={graphFocusIds}
       />
     </main>
   );
