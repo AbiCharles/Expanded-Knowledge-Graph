@@ -251,16 +251,21 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
     return () => { cancelled = true; };
   }, [overlay, aeronovaCase]);
 
-  const start = async () => {
+  const start = () => {
+    esRef.current?.close();
+    // Pre-roll first; SSE deferred until the ticker + BREAKING
+    // sequence resolves. With PAUSE_BETWEEN_STAGES bumped on the
+    // orchestrator, kicking off SSE on click would queue 4-5 events
+    // by the time the pre-roll ends and dump them all at once —
+    // breaking the "agent is doing work" reveal cadence. Deferring
+    // means each event materialises in the ProcessFlow as the
+    // orchestrator emits it.
+    setState({ ...INITIAL, running: true, prerolling: true });
+  };
+
+  const onPreRollComplete = async () => {
+    setState((s) => ({ ...s, prerolling: false }));
     try {
-      esRef.current?.close();
-      // Flip into pre-roll mode immediately. The Reuters ticker bar
-      // mounts and animates while we kick off the SSE stream in
-      // parallel; events queue up in `state.events` but the
-      // ProcessFlow is gated on `!prerolling` so the audience sees
-      // the ticker → BREAKING → drop sequence first, then the news
-      // card materialises in its expected position.
-      setState({ ...INITIAL, running: true, prerolling: true });
       const { run_id } = await agentRunStart();
       setState((s) => ({ ...s, runId: run_id }));
       const es = agentRunStream(
@@ -279,14 +284,9 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
       setState((s) => ({
         ...s,
         running: false,
-        prerolling: false,
         error: err?.message || String(err),
       }));
     }
-  };
-
-  const onPreRollComplete = () => {
-    setState((s) => ({ ...s, prerolling: false }));
   };
 
   const reset = () => {
@@ -1237,12 +1237,14 @@ function AgentGraphOverlay({
 
 // =============================================================================
 // Pre-roll — Reuters ticker that builds anticipation before the SSE stream
-// surfaces. Three phases on a 3.5s timeline:
-//   - ticker:   2.5s — red "LIVE · REUTERS WIRE" badge + horizontally
+// surfaces. Three phases on a ~10.4s timeline:
+//   - ticker:   3.0s — red "LIVE · REUTERS WIRE" badge + horizontally
 //               scrolling stream of benign aerospace headlines
-//   - breaking: 0.6s — bar flashes red, "BREAKING" badge replaces "LIVE",
-//               Northwind headline replaces the ticker with a quick
-//               typewriter-style entry animation
+//   - breaking: 7.0s — bar flashes red, "BREAKING" badge replaces "LIVE",
+//               Northwind headline drops in; held long enough for the
+//               audience to read both the headline AND the match caption
+//               ("Northwind Forge · SUP-021 · relevance 0.94 · escalating
+//               to Risk Monitor…") before the agent flow takes over
 //   - drop:     0.4s — bar slides up out of frame, then onComplete fires
 //               and AgentRun hands off to ProcessFlow
 // All animation is CSS-driven (transforms + keyframes); JS only flips
@@ -1253,9 +1255,9 @@ function PreRoll({ onComplete }: { onComplete: () => void }) {
   const [phase, setPhase] = useState<"ticker" | "breaking" | "drop">("ticker");
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("breaking"), 2500);
-    const t2 = setTimeout(() => setPhase("drop"), 3100);
-    const t3 = setTimeout(() => onComplete(), 3500);
+    const t1 = setTimeout(() => setPhase("breaking"), 3000);
+    const t2 = setTimeout(() => setPhase("drop"), 10000);
+    const t3 = setTimeout(() => onComplete(), 10400);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);

@@ -8881,7 +8881,7 @@ details[open] > .suggested-summary .suggested-chevron {
 .pf-preroll-stream {
   display: inline-flex;
   white-space: nowrap;
-  animation: pf-preroll-scroll 26s linear infinite;
+  animation: pf-preroll-scroll 14s linear infinite;
 }
 @keyframes pf-preroll-scroll {
   from { transform: translateX(0); }

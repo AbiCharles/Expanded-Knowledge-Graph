@@ -42,11 +42,13 @@ from .agents import (
 
 log = logging.getLogger(__name__)
 
-# Brief pauses between phases so the audience can read each card
-# as it lands. Tunable for the demo — small enough that the run
-# completes in well under a minute.
-PAUSE_AFTER_NARRATION = 0.4
-PAUSE_BETWEEN_STAGES = 0.7
+# Pauses between phases so the audience can read each card as it
+# lands AND so it visibly looks like the agent is doing work between
+# steps (rather than dumping the whole flow at once). Tuned for a
+# live demo where Naresh walks the audience through each section
+# before the next arrives. Total run hits ~30s end-to-end.
+PAUSE_AFTER_NARRATION = 1.4
+PAUSE_BETWEEN_STAGES = 2.2
 
 
 class AgentRun:
