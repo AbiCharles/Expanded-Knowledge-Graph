@@ -121,6 +121,9 @@ export default function App() {
   } | null>(null);
   const [pendingView, setPendingView] = useState<string | null>(null);
   const [launchedOnce, setLaunchedOnce] = useState(false);
+  // Visible status banner during auto-launch so the audience can see
+  // the chain of steps (and so we can debug failures without DevTools).
+  const [launchStatus, setLaunchStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -130,6 +133,7 @@ export default function App() {
         prompt: params.get("prompt") || "",
         view: params.get("view"),
       });
+      setLaunchStatus("Detected agent-run deep-link · waiting for auth…");
       // Strip the params so a reload doesn't keep re-firing the launch.
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -144,19 +148,37 @@ export default function App() {
     const { prompt } = pendingLaunch;
     if (!prompt) {
       setPendingLaunch(null);
+      setLaunchStatus(null);
       return;
     }
+    setLaunchStatus("Auto-launching Aeronova case from the agent run…");
     api
       .createCase(prompt)
       .then((res) => {
+        setLaunchStatus(`Case ${res.case_id} created · confirming…`);
         setActiveId(res.case_id);
         refreshCases();
         return api.confirmCase(res.case_id);
       })
-      .then(() => refreshActive())
-      .catch((e) => console.warn("auto-launch failed:", e))
+      .then(() => {
+        setLaunchStatus("Case confirmed · waiting for stages to bind…");
+        return refreshActive();
+      })
+      .catch((e) => {
+        console.warn("auto-launch failed:", e);
+        setLaunchStatus(`Auto-launch failed: ${(e as Error).message}`);
+      })
       .finally(() => setPendingLaunch(null));
   }, [pendingLaunch, user, launchedOnce]);
+
+  // Clear the launch status banner once the modal opens (or after 8s
+  // failsafe).
+  useEffect(() => {
+    if (!launchStatus) return;
+    if (!launchedOnce) return;
+    const t = setTimeout(() => setLaunchStatus(null), 8000);
+    return () => clearTimeout(t);
+  }, [launchStatus, launchedOnce]);
 
   // Counter signals plumbed down through FlowStage → Envelope →
   // GraphPanel. When bumped, GraphPanel auto-opens its modal on the
@@ -169,6 +191,10 @@ export default function App() {
   // Fire the requested view once the active case has stage facts to
   // render against. Bumps the right counter; the signal propagates
   // down to GraphPanel which opens its modal at the requested tab.
+  // We bump TWICE — once immediately and once on a 700ms timer — to
+  // guard against the case where GraphPanel hasn't fully mounted yet
+  // when the first bump lands. Each bump is a fresh counter value,
+  // so React will re-trigger GraphPanel's useEffect either way.
   useEffect(() => {
     if (!pendingView) return;
     if (!active || (active.stages?.length ?? 0) === 0) return;
@@ -179,8 +205,12 @@ export default function App() {
       }, 200);
     } else if (pendingView === "pathways") {
       setPathwaysOpenCounter((n) => n + 1);
+      setTimeout(() => setPathwaysOpenCounter((n) => n + 1), 700);
+      setLaunchStatus("✓ Opening knowledge graph · Decision pathways tab");
     } else if (pendingView === "graph") {
       setNetworkOpenCounter((n) => n + 1);
+      setTimeout(() => setNetworkOpenCounter((n) => n + 1), 700);
+      setLaunchStatus("✓ Opening knowledge graph · Network tab");
     }
     setPendingView(null);
   }, [pendingView, active]);
@@ -451,6 +481,28 @@ export default function App() {
 
   return (
     <>
+      {launchStatus && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "linear-gradient(135deg, #6366f1, #4338ca)",
+            color: "#ffffff",
+            padding: "10px 18px",
+            borderRadius: 6,
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            boxShadow: "0 8px 24px rgba(99, 102, 241, 0.4)",
+            zIndex: 2000,
+          }}
+        >
+          ⚡ {launchStatus}
+        </div>
+      )}
       <StatusBar
         active={active}
         role={role}
