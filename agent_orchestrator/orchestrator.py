@@ -361,7 +361,9 @@ class AgentRun:
 
         # ---- Step 7: post findings to the fabric so the decision
         # pathways graph can overlay PM names + outreach status. ----
-        from .agents import program_manager_notifier
+        # Module-top imports already cover program_manager_notifier;
+        # a local import here would shadow the global and crash every
+        # reference earlier in the function with UnboundLocalError.
         from datetime import datetime, timezone
         findings_payload = {
             "run_id": self.run_id,
