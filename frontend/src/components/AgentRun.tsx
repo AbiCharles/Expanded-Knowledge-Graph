@@ -214,8 +214,13 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
   // Silent Aeronova case load — fired the first time the audience opens
   // any "Open in fabric" overlay. Stays in the background; the user
   // never sees the Console / FlowStage chrome that would otherwise pop
-  // when launching the case. Polls getCase until stages bind so the
-  // Decision-pathways tab has its decisionSupport data when rendered.
+  // when launching the case. Polls getCase until ProgramImpact facts
+  // appear in the stages — those are what feed decisionSupport.impacts
+  // in GraphModal's pathway view, which is in turn what the PM-name
+  // overlay loops over. Setting aeronovaCase the moment stages.length
+  // > 0 was too eager: the Aeronova scenario binds stages progressively
+  // and ProgramImpact lands in a LATER stage than the intake. Without
+  // it, the pathways graph rendered fine but PM names never appeared.
   useEffect(() => {
     if (!overlay) return;
     if (aeronovaCase) return;
@@ -229,19 +234,39 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
         const created = await createCase(prompt);
         if (cancelled) return;
         await confirmCase(created.case_id);
-        // Poll for stages.bound — give it up to 20s (50 × 400ms).
-        for (let i = 0; i < 50; i++) {
+        // Poll for ProgramImpact facts — give it up to 24s (60 × 400ms).
+        // Falls back to whatever stages are bound after the loop times
+        // out so the user isn't stuck on the loading state forever.
+        let lastSeen: CaseFull | null = null;
+        for (let i = 0; i < 60; i++) {
           if (cancelled) return;
           await new Promise((r) => setTimeout(r, 400));
           const c = await getCase(created.case_id);
           if (cancelled) return;
-          if (c.stages && c.stages.length > 0) {
+          lastSeen = c;
+          const hasProgramImpacts = (c.stages ?? []).some((s) =>
+            (s.facts ?? []).some(
+              (f: any) => f.ontology_type === "ProgramImpact",
+            ),
+          );
+          const settled =
+            c.phase === "review_ready" || c.phase === "complete";
+          if (hasProgramImpacts || settled) {
             setAeronovaCase(c);
             getAeronovaFindings()
               .then((f) => { if (!cancelled) setAeronovaFindings(f); })
               .catch(() => {});
             return;
           }
+        }
+        // Timeout fallback — set whatever we ended up with so the
+        // overlay's "loading decision-pathways data…" state resolves,
+        // even if it means the Pathways view is missing some highlights.
+        if (lastSeen && (lastSeen.stages?.length ?? 0) > 0) {
+          setAeronovaCase(lastSeen);
+          getAeronovaFindings()
+            .then((f) => { if (!cancelled) setAeronovaFindings(f); })
+            .catch(() => {});
         }
       } catch (e) {
         console.warn("silent aeronova case load failed:", e);
@@ -391,11 +416,9 @@ export function AgentRun({ onExit }: { onExit?: () => void }) {
           right here, with the process instructions in a side panel.
         </div>
       )}
-      {!state.prerolling && state.running && state.events.length === 0 && !state.error && (
-        <div className="pf-empty pf-empty-waiting">
-          ⟳ Connecting to agent orchestrator · waiting for first event…
-        </div>
-      )}
+      {/* No 'connecting...' placeholder between pre-roll dismount and
+          the first SSE event landing — any copy in that ~200ms window
+          reads as a flash to the audience. Brief blank is preferable. */}
 
       {!state.prerolling && state.events.length > 0 && (
         <ProcessFlow
