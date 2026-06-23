@@ -458,12 +458,14 @@ class AgentRun:
                     "blocked": result["blocked"],
                     "drafts": result["drafts"],
                 },
-                # Deep-link → fabric's knowledge graph in Network mode,
-                # auto-launched on the Aeronova case. The audience sees
-                # the JV partner edge (SUP-021 ↔ SUP-023, Ironcrest) +
-                # the shared-parent CONTROLLED_BY edges that made
-                # Stillwater the trap alternate.
-                fabric_link=self.fabric.aeronova_view_url("graph"),
+                # Deep-link → fabric's Decision-pathways tab on the
+                # Aeronova case. The audience sees the proposed swap
+                # chain (Ironcrest in green) right next to the avoid
+                # chain (Stillwater in red), with the program-impact
+                # context the alternate selection was reasoned against.
+                # Pathways > Network here because Network only shows
+                # topology; Pathways shows topology + decision overlay.
+                fabric_link=self.fabric.aeronova_view_url("pathways"),
             )
         )
         return {"alternate_outreach": result}
