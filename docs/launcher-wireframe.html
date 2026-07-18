@@ -175,6 +175,30 @@
 </style>
 </head>
 <body>
+<!-- Pre-parse loading screen. Renders IMMEDIATELY (before the 163KB
+     script block parses) so the user sees feedback within one paint
+     rather than a blank white page. Hidden by render() the moment the
+     first screen mounts. Kept inline (no external CSS) so it works
+     even if the rest of the page fails to load. -->
+<div id="pf-boot">
+  <div class="pf-boot-spinner"></div>
+  <div class="pf-boot-title">Loading launcher…</div>
+  <div class="pf-boot-sub">Parsing config screens · this usually takes 1–2 seconds</div>
+</div>
+<style>
+  #pf-boot { position: fixed; inset: 0; z-index: 9999;
+             display: flex; flex-direction: column; align-items: center; justify-content: center;
+             background: #f3f4f6; color: #1E2761;
+             font-family: Calibri, "Helvetica Neue", Arial, sans-serif;
+             transition: opacity 220ms ease; }
+  #pf-boot.hide { opacity: 0; pointer-events: none; }
+  .pf-boot-spinner { width: 42px; height: 42px; border-radius: 50%;
+                     border: 4px solid #d1d5db; border-top-color: #4f46e5;
+                     animation: pf-boot-spin 900ms linear infinite; }
+  @keyframes pf-boot-spin { to { transform: rotate(360deg); } }
+  .pf-boot-title { margin-top: 18px; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .pf-boot-sub   { margin-top: 4px;  font-size: 12px; color: #6b7280; }
+</style>
 <div class="frame">
   <div class="topbar">
     <div class="brand">TCS · KNOWLEDGE FABRIC · INSTANCE LAUNCHER</div>
@@ -249,6 +273,15 @@ const state = {
   reviewerActiveReviewed: 'C-2a3b5d', // selected case in the Reviewed-by-me tab
   reviewerToast: null,      // {decision, caseId} shown briefly after a decision (or 'undo' kind)
   reviewerModal: null,      // null | 'reject' | 'rfi'
+  reviewerRationaleDraft: '', // textarea content inside the rationale modal (persists across quick-picks)
+  reviewerFollowUp: '3 days', // RFI-only: selected follow-up window
+  // Operator prompt-composer draft + submitted cases so the case list
+  // actually grows when the user submits from the console.
+  operatorPrompt: '',
+  operatorCases: [],
+  // Generic 'action saved' toast used by admin buttons that would call
+  // a real API in production but here just confirm the click.
+  comingSoonToast: null,
   // === launcher config the user picks in steps 1–6 ===
   cfg: JSON.parse(JSON.stringify(CONFIG_DEFAULTS)),
 };
@@ -458,7 +491,8 @@ function renderLaunchedInstance() {
       <span style="font-size:11px; color:#6b7280;">Instance opened 14s ago · ${footerNote}</span>
     </div>
     ${state.reviewerToast ? renderToast() : ''}
-    ${state.reviewerModal ? renderRationaleModal() : ''}`;
+    ${state.reviewerModal ? renderRationaleModal() : ''}
+    ${state.comingSoonToast ? renderComingSoonToast() : ''}`;
 }
 
 function renderOperatorConsole() {
@@ -547,19 +581,39 @@ function renderOperatorPopulated() {
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
             <input type="text" placeholder="e.g. onboard Hemlock Precision Castings as tier-1 supplier"
+                   value="${state.operatorPrompt.replace(/"/g,'&quot;')}"
+                   oninput="state.operatorPrompt=this.value"
+                   onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){operatorSubmit();}"
                    style="flex:1; padding:10px 12px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; font-family:inherit;">
-            <button class="small-btn primary" style="padding:9px 18px; font-size:13px; font-weight:600;">Submit →</button>
+            <button class="small-btn primary" onclick="operatorSubmit()"
+                    style="padding:9px 18px; font-size:13px; font-weight:600;">Submit →</button>
           </div>
           <div style="display:flex; gap:6px; margin-top:8px; align-items:center; font-size:11px; color:#6b7280;">
             <span>Recent:</span>
-            <a class="li-link" style="font-size:11px;">"switch S-700412 from ocean to air"</a>
+            <a class="li-link" style="font-size:11px;" onclick="state.operatorPrompt='switch S-700412 from ocean to air'; operatorSubmit();">"switch S-700412 from ocean to air"</a>
             <span>·</span>
-            <a class="li-link" style="font-size:11px;">"carrier scorecard for MSC"</a>
+            <a class="li-link" style="font-size:11px;" onclick="state.operatorPrompt='carrier scorecard for MSC'; operatorSubmit();">"carrier scorecard for MSC"</a>
             <span>·</span>
-            <a class="li-link" style="font-size:11px;">"trace S-700288"</a>
+            <a class="li-link" style="font-size:11px;" onclick="state.operatorPrompt='trace S-700288'; operatorSubmit();">"trace S-700288"</a>
             <span style="margin-left:auto;">Press <code style="background:#e5e7eb; padding:1px 5px; font-size:10px;">⌘ + Enter</code> to submit</span>
           </div>
         </div>
+
+        ${state.operatorCases.length > 0 ? `
+          <!-- Recently submitted cases (this session). Newest first. -->
+          <div style="margin-bottom:14px; padding:12px 14px; background:#f0fdf4; border:1px solid #86efac; border-radius:6px;">
+            <div style="font-size:10px; font-weight:700; color:#166534; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">
+              ${state.operatorCases.length} case${state.operatorCases.length===1?'':'s'} submitted this session
+            </div>
+            ${state.operatorCases.map(c => `
+              <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #86efac; font-size:12px;">
+                <code style="color:#166534; font-size:10px;">${c.id}</code>
+                <span style="flex:1; color:#1f2937;">${c.title}</span>
+                <span class="pill" style="background:${c.phase==='binding'?'#fef3c7':'#dcfce7'}; color:${c.phase==='binding'?'#92400e':'#166534'}; font-size:9px;">
+                  ${c.phase==='binding' ? '⟳ BINDING…' : '✓ REVIEW READY'}
+                </span>
+              </div>`).join('')}
+          </div>` : ''}
 
         <div style="font-size:11px; color:#6b7280; margin-bottom:2px;">CASE · C-3f7a2b · started 4 min ago</div>
         <h2 style="font-family: Georgia, serif; font-size:22px; margin:0 0 4px; color:#1E2761;">
@@ -592,9 +646,9 @@ function renderOperatorPopulated() {
         <div style="margin-top:14px; padding:14px; border:1px solid #e5e7eb; border-radius:6px; background:#fff;">
           <div style="font-size:11px; color:#6b7280; margin-bottom:6px;">REVIEWER ACTIONS · only available in Reviewer mode</div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button class="small-btn" disabled style="opacity:0.4;">Approve</button>
-            <button class="small-btn" disabled style="opacity:0.4;">Reject</button>
-            <button class="small-btn" disabled style="opacity:0.4;">Request more info</button>
+            <button class="small-btn" disabled style="opacity:0.4; cursor:not-allowed;" title="Operators can't approve their own cases · switch to Reviewer mode">Approve</button>
+            <button class="small-btn" disabled style="opacity:0.4; cursor:not-allowed;" title="Operators can't reject their own cases · switch to Reviewer mode">Reject</button>
+            <button class="small-btn" disabled style="opacity:0.4; cursor:not-allowed;" title="Operators can't request info on their own cases · switch to Reviewer mode">Request more info</button>
             <span style="margin-left:auto; font-size:11px; color:#4f46e5;">
               <a class="li-link" onclick="state.launchedView='reviewer'; render();">Switch to Reviewer mode to act on this case →</a>
             </span>
@@ -868,6 +922,86 @@ function undoDecision(caseId) {
   render();
 }
 
+// Commits a reviewer decision: removes case from REVIEWER_INBOX, pushes
+// to REVIEWED_BY_ME with the chosen kind + rationale, fires the toast,
+// and auto-advances state.reviewerActiveCase to the next inbox item.
+// Wired to the Approve button (kind='approve', rationale='') and the
+// modal Submit button (kind='reject'|'rfi', rationale from textarea).
+function decideCase(caseId, kind, rationale) {
+  const idx = REVIEWER_INBOX.findIndex(c => c.id === caseId);
+  if (idx === -1) return;
+  const c = REVIEWER_INBOX[idx];
+  REVIEWER_INBOX.splice(idx, 1);
+  // Push to the top of Reviewed-by-me with fresh minutesAgo so the undo
+  // window fires (5 minutes per UNDO_WINDOW_MINUTES).
+  REVIEWED_BY_ME.unshift({
+    id: c.id, scenario: c.scenario, title: c.title,
+    decision: kind,
+    minutesAgo: 0,
+    rationale: rationale || (kind === 'approve' ? 'Approved — decision within envelope.' : ''),
+    by: c.by,
+  });
+  // Auto-advance the active case pointer to whatever is next in the inbox
+  // so the next card is already loaded when the toast dismisses.
+  const nextCase = REVIEWER_INBOX[Math.min(idx, REVIEWER_INBOX.length - 1)];
+  state.reviewerActiveCase = nextCase ? nextCase.id : null;
+  state.reviewerRationaleDraft = '';
+  state.reviewerModal = null;
+  state.reviewerToast = { decision: kind, caseId: c.id };
+  render();
+}
+window.decideCase = decideCase;
+
+// Operator prompt-composer submit. Adds a fake case to
+// state.operatorCases and clears the composer. New cases render as
+// 'binding' initially, then flip to 'review_ready' after a short delay
+// so the audience sees the progression without a real backend.
+function operatorSubmit() {
+  const p = (state.operatorPrompt || '').trim();
+  if (!p) return;
+  const id = 'C-' + Math.random().toString(16).slice(2, 8);
+  const c = { id, prompt: p, scenario: 'SC-PP-008', title: p.slice(0, 60), phase: 'binding', ageSec: 0 };
+  state.operatorCases.unshift(c);
+  state.operatorPrompt = '';
+  render();
+  // Bump the phase after 1.5s to simulate the fabric binding stages.
+  setTimeout(() => {
+    const hit = state.operatorCases.find(x => x.id === id);
+    if (hit) { hit.phase = 'review_ready'; render(); }
+  }, 1500);
+}
+window.operatorSubmit = operatorSubmit;
+
+// Generic 'action recorded' toast used by admin/config buttons that
+// would call a real API in production (Add class, Bump pack, Export
+// YAML, Edit scenario, etc.). Auto-dismisses after 2.4s. Prevents
+// button clicks from feeling like dead-ends without pretending real
+// side effects happened.
+function comingSoon(msg) {
+  state.comingSoonToast = { msg };
+  render();
+  setTimeout(() => {
+    if (state.comingSoonToast && state.comingSoonToast.msg === msg) {
+      state.comingSoonToast = null;
+      render();
+    }
+  }, 2400);
+}
+window.comingSoon = comingSoon;
+
+function renderComingSoonToast() {
+  const t = state.comingSoonToast;
+  if (!t) return '';
+  return `<div style="position:fixed; bottom:30px; right:30px; background:#1E2761; color:#fff;
+              border-radius:8px; padding:12px 16px; box-shadow:0 10px 30px rgba(0,0,0,0.25);
+              z-index:9998; display:flex; align-items:center; gap:10px; font-size:12.5px;">
+    <span style="font-size:14px;">✓</span>
+    <span>${t.msg}</span>
+    <button class="small-btn" onclick="state.comingSoonToast=null; render();"
+            style="font-size:10px; background:transparent; color:#fff; border-color:rgba(255,255,255,0.3); margin-left:6px;">Dismiss</button>
+  </div>`;
+}
+
 function inboxCard(c, isActive) {
   const cardBg = isActive ? '#eef2ff' : '#fff';
   const cardBorder = isActive ? '#4f46e5' : '#e5e7eb';
@@ -941,11 +1075,11 @@ function reviewerCaseDetail(c) {
       <div style="font-size:11px; color:#92400e; font-weight:600; margin-bottom:6px;">YOUR DECISION · acting as procurement.lead.amorales</div>
       <div style="display:flex; gap:8px; align-items:center;">
         <button class="small-btn" style="background:#10b981; color:#fff; border-color:#10b981; padding:6px 16px; font-weight:600;"
-                onclick="state.reviewerToast={decision:'approve', caseId:'${c.id}'}; render();">✓ Approve</button>
+                onclick="decideCase('${c.id}','approve','')">✓ Approve</button>
         <button class="small-btn" style="background:#dc2626; color:#fff; border-color:#dc2626; padding:6px 16px; font-weight:600;"
-                onclick="state.reviewerModal='reject'; render();">✗ Reject</button>
+                onclick="state.reviewerModal='reject'; state.reviewerRationaleDraft=''; render();">✗ Reject</button>
         <button class="small-btn" style="background:#f59e0b; color:#fff; border-color:#f59e0b; padding:6px 16px; font-weight:600;"
-                onclick="state.reviewerModal='rfi'; render();">? Request more info</button>
+                onclick="state.reviewerModal='rfi'; state.reviewerRationaleDraft=''; render();">? Request more info</button>
         <span style="margin-left:auto; font-size:11px; color:#92400e;">Decision lands on the audit trail with your identity + load-bearing facts.</span>
       </div>
     </div>`;
@@ -991,13 +1125,13 @@ function renderToast() {
   const bgMap    = { approve: '#10b981',   reject: '#dc2626',   rfi: '#f59e0b',                 undo: '#4f46e5' };
   const iconMap  = { approve: '✓',         reject: '✗',         rfi: '?',                       undo: '↺' };
 
-  // Auto-advance only for forward decisions (not for undo).
+  // Auto-dismiss forward-decision toast after 2.2s. decideCase() has
+  // already moved state.reviewerActiveCase to the next inbox item, so
+  // this just clears the toast — the underlying page is already
+  // showing the next case.
   if (!isUndo) {
     setTimeout(() => {
       if (!state.reviewerToast || state.reviewerToast.decision === 'undo') return;
-      const idx = REVIEWER_INBOX.findIndex(c => c.id === t.caseId);
-      const next = REVIEWER_INBOX[idx === -1 ? 0 : (idx + 1) % REVIEWER_INBOX.length];
-      state.reviewerActiveCase = next.id;
       state.reviewerToast = null;
       render();
     }, 2200);
@@ -1036,6 +1170,10 @@ function renderRationaleModal() {
   const reasons = isReject
     ? ['Sanctions proximity too close — 3-hop OFAC SDN indirect ownership.', 'Carrier-alliance concentration: all preferred carriers in one alliance.', 'Reliability score below tier-1 threshold for this category.']
     : ['Need beneficial-ownership disclosure for Apex Holdings International.', 'Clarify ESG audit date — last documented audit > 12 months old.', 'Request second-source feasibility for primary SKU.'];
+  // Default draft to the first quick-pick so the textarea is never
+  // empty on open. Quick-pick clicks overwrite the draft.
+  if (!state.reviewerRationaleDraft) state.reviewerRationaleDraft = reasons[0];
+  const followUps = ['No follow-up','24 hours','3 days','1 week'];
 
   return `<div onclick="if(event.target===this){state.reviewerModal=null; render();}"
               style="position:fixed; inset:0; background:rgba(31,41,55,0.6); z-index:9000;
@@ -1052,17 +1190,19 @@ function renderRationaleModal() {
       <div style="padding:18px;">
         <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Quick-pick reasons</div>
         <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:14px;">
-          ${reasons.map(r => `<button class="small-btn" style="text-align:left; padding:8px 12px; font-weight:normal; font-size:12px; line-height:1.4;">${r}</button>`).join('')}
+          ${reasons.map((r, i) => `<button class="small-btn${state.reviewerRationaleDraft === r ? ' primary' : ''}" style="text-align:left; padding:8px 12px; font-weight:normal; font-size:12px; line-height:1.4;" onclick="state.reviewerRationaleDraft=${JSON.stringify(r)}; render();">${r}</button>`).join('')}
         </div>
         <div style="font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Reason</div>
-        <textarea style="width:100%; min-height:80px; padding:8px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit; font-size:12px;" placeholder="Type or edit your rationale…">${reasons[0]}</textarea>
+        <textarea oninput="state.reviewerRationaleDraft=this.value"
+                  style="width:100%; min-height:80px; padding:8px 10px; border:1px solid #d1d5db; border-radius:4px; font-family:inherit; font-size:12px;"
+                  placeholder="Type or edit your rationale…">${state.reviewerRationaleDraft}</textarea>
         ${isReject ? '' : `<div style="margin-top:12px; font-size:10px; font-weight:700; color:#1E2761; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Follow-up reminder</div>
-        <div style="display:flex; gap:6px;">${['No follow-up','24 hours','3 days','1 week'].map((l,i)=>`<button class="small-btn${i===2?' primary':''}" style="font-size:11px;">${l}</button>`).join('')}</div>`}
+        <div style="display:flex; gap:6px;">${followUps.map(l => `<button class="small-btn${state.reviewerFollowUp === l ? ' primary' : ''}" style="font-size:11px;" onclick="state.reviewerFollowUp=${JSON.stringify(l)}; render();">${l}</button>`).join('')}</div>`}
       </div>
       <div style="padding:14px 18px; background:#f9fafb; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:8px;">
         <button class="small-btn" onclick="state.reviewerModal=null; render();">← Back to review</button>
         <button class="small-btn" style="background:${accentBg}; color:#fff; border-color:${accentBg}; font-weight:600; padding:6px 18px;"
-                onclick="state.reviewerToast={decision:'${kind}', caseId:state.reviewerActiveCase}; state.reviewerModal=null; render();">
+                onclick="decideCase(state.reviewerActiveCase, '${kind}', state.reviewerRationaleDraft)">
           ${isReject ? 'Submit rejection' : 'Send back'}
         </button>
       </div>
@@ -1112,7 +1252,7 @@ function renderOperatorEmpty() {
 
         <div style="margin-top:18px; padding:14px; border:1px dashed #d1d5db; border-radius:6px; background:#fafafa;">
           <div style="font-size:11px; color:#6b7280; margin-bottom:8px;">PROMPT · disabled until scenarios exist</div>
-          <input disabled style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:4px; background:#fff; color:#9ca3af; font-size:13px; font-family:inherit;" placeholder="What do you need? — add scenarios in Admin to enable">
+          <input disabled title="Add scenarios in Admin to enable this composer" style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:4px; background:#fff; color:#9ca3af; font-size:13px; font-family:inherit; cursor:not-allowed;" placeholder="What do you need? — add scenarios in Admin to enable">
         </div>
       </div>
     </div>`;
@@ -1161,9 +1301,9 @@ function tabHomePopulated() {
     </table>
 
     <div style="margin-top: 22px; display:flex; gap:8px;">
-      <button class="small-btn primary">Bump pack to v5</button>
-      <button class="small-btn">Export pack as YAML</button>
-      <button class="small-btn">View instance config</button>
+      <button class="small-btn primary" onclick="comingSoon('Pack bumped to v5 · lineage.pack.bumped audit event written')">Bump pack to v5</button>
+      <button class="small-btn" onclick="comingSoon('Pack exported as YAML · would trigger a file download in production')">Export pack as YAML</button>
+      <button class="small-btn" onclick="comingSoon('Instance config: showing the generated instance.yaml for this launched instance')">View instance config</button>
     </div>`;
 }
 
@@ -1176,20 +1316,20 @@ function tabOntologyPopulated() {
     <table class="admin-table">
       <thead><tr><th>Class</th><th>Attributes</th><th>Bound to source</th><th>Used by</th><th></th></tr></thead>
       <tbody>
-        <tr><td><b>Supplier</b></td><td>supplier_id (id), name, country, tier, reliability_score</td><td>neo4j_default, products_csv</td><td>SC-PP-008 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SanctionsProximity</b></td><td>entity_id (id), hop_distance, program, risk_tier</td><td>neo4j_default</td><td>SC-PP-008 +2 more</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>Carrier</b></td><td>carrier_id (id), scac, alliance, reliability</td><td>carriers_csv</td><td>SC-LN-002 +4 more</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>Lane</b></td><td>lane_id (id), origin, destination, mode</td><td>lanes_csv</td><td>SC-LN-002 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>Port</b></td><td>port_code (id), name, operational_state</td><td>ports_csv</td><td>SC-LN-PORT-DISRUPTION-020</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>Shipment</b></td><td>shipment_id (id), booking_id, origin, destination, status</td><td>shipments_csv, logistics_sqlite</td><td>SC-LN-* (8 scenarios)</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>FreightRate</b></td><td>rate_id (id), lane_id, carrier_id, container_type, cost_usd</td><td>freight_rates_csv</td><td>SC-LN-002 +1 more</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>DemurrageCharge</b></td><td>charge_id (id), shipment_id, amount_usd, days_overage</td><td>logistics_sqlite</td><td>SC-LN-DEMURRAGE-*</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>PriorOverride</b></td><td>case_id (id), scenario_id, outcome, rationale</td><td>governance_sqlite</td><td>All HITL scenarios</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>PolicyExcerpt</b></td><td>id, text, title</td><td>policy_corpus (vector)</td><td>SC-PP-008 +3 more</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>Supplier</b></td><td>supplier_id (id), name, country, tier, reliability_score</td><td>neo4j_default, products_csv</td><td>SC-PP-008 +3 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SanctionsProximity</b></td><td>entity_id (id), hop_distance, program, risk_tier</td><td>neo4j_default</td><td>SC-PP-008 +2 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>Carrier</b></td><td>carrier_id (id), scac, alliance, reliability</td><td>carriers_csv</td><td>SC-LN-002 +4 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>Lane</b></td><td>lane_id (id), origin, destination, mode</td><td>lanes_csv</td><td>SC-LN-002 +3 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>Port</b></td><td>port_code (id), name, operational_state</td><td>ports_csv</td><td>SC-LN-PORT-DISRUPTION-020</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>Shipment</b></td><td>shipment_id (id), booking_id, origin, destination, status</td><td>shipments_csv, logistics_sqlite</td><td>SC-LN-* (8 scenarios)</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>FreightRate</b></td><td>rate_id (id), lane_id, carrier_id, container_type, cost_usd</td><td>freight_rates_csv</td><td>SC-LN-002 +1 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>DemurrageCharge</b></td><td>charge_id (id), shipment_id, amount_usd, days_overage</td><td>logistics_sqlite</td><td>SC-LN-DEMURRAGE-*</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>PriorOverride</b></td><td>case_id (id), scenario_id, outcome, rationale</td><td>governance_sqlite</td><td>All HITL scenarios</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>PolicyExcerpt</b></td><td>id, text, title</td><td>policy_corpus (vector)</td><td>SC-PP-008 +3 more</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
         <tr><td colspan="5" style="text-align:center; color:#6b7280; font-size:11px;">+ 6 more · <a class="li-link">show all 16</a></td></tr>
       </tbody>
     </table>
-    <div style="margin-top: 18px;"><button class="small-btn primary">+ Add class</button> <button class="small-btn" style="margin-left:6px;">Import classes from another pack…</button></div>`;
+    <div style="margin-top: 18px;"><button class="small-btn primary" onclick="comingSoon('Add class · opens the ontology class authoring form (name, fields, sources)')">+ Add class</button> <button class="small-btn" style="margin-left:6px;" onclick="comingSoon('Import classes from another pack · shows a picker of your other domain packs')">Import classes from another pack…</button></div>`;
 }
 
 function tabScenariosPopulated() {
@@ -1201,20 +1341,20 @@ function tabScenariosPopulated() {
     <table class="admin-table">
       <thead><tr><th>Scenario id</th><th>Title</th><th>Mode</th><th>Status</th><th>Cases (30d)</th><th></th></tr></thead>
       <tbody>
-        <tr><td><b>SC-PP-008</b></td><td>Supplier onboarding — multi-source risk review</td><td>HITL</td><td><span class="pill green">Live</span></td><td>23</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-002</b></td><td>Mode-switch ocean → air on critical lane</td><td>HITL</td><td><span class="pill green">Live</span></td><td>11</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>Port disruption — recommend reroute</td><td>HITL</td><td><span class="pill green">Live</span></td><td>4</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>Customer SLA risk — expedite or accept penalty</td><td>HITL</td><td><span class="pill green">Live</span></td><td>17</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-TENDER-021</b></td><td>Re-tender a booking to a new carrier</td><td>HITL</td><td><span class="pill green">Live</span></td><td>9</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>Dispute a demurrage charge</td><td>HITL</td><td><span class="pill green">Live</span></td><td>6</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-DEMURRAGE-AUTO-025</b></td><td>Auto-dispute small demurrage charges</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>52</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-ETA-PUSH-023</b></td><td>Push updated ETA to customer system</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>184</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-STATUS-009</b></td><td>Shipment status lookup</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>431</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-TRACE-018</b></td><td>Shipment trace — full event history</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>89</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-CARRIER-SCORECARD-019</b></td><td>Carrier overview (scorecard + recent shipments)</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>27</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-PP-008</b></td><td>Supplier onboarding — multi-source risk review</td><td>HITL</td><td><span class="pill green">Live</span></td><td>23</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-002</b></td><td>Mode-switch ocean → air on critical lane</td><td>HITL</td><td><span class="pill green">Live</span></td><td>11</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>Port disruption — recommend reroute</td><td>HITL</td><td><span class="pill green">Live</span></td><td>4</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>Customer SLA risk — expedite or accept penalty</td><td>HITL</td><td><span class="pill green">Live</span></td><td>17</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TENDER-021</b></td><td>Re-tender a booking to a new carrier</td><td>HITL</td><td><span class="pill green">Live</span></td><td>9</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>Dispute a demurrage charge</td><td>HITL</td><td><span class="pill green">Live</span></td><td>6</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-AUTO-025</b></td><td>Auto-dispute small demurrage charges</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>52</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-ETA-PUSH-023</b></td><td>Push updated ETA to customer system</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>184</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-STATUS-009</b></td><td>Shipment status lookup</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>431</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TRACE-018</b></td><td>Shipment trace — full event history</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>89</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-CARRIER-SCORECARD-019</b></td><td>Carrier overview (scorecard + recent shipments)</td><td>AUTO</td><td><span class="pill green">Live</span></td><td>27</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
       </tbody>
     </table>
-    <div style="margin-top: 18px;"><button class="small-btn primary">+ Draft new scenario</button> <button class="small-btn" style="margin-left:6px;">Import from another pack…</button></div>`;
+    <div style="margin-top: 18px;"><button class="small-btn primary" onclick="comingSoon('Draft new scenario · opens the 4-stage authoring form (binders + facts + review + execute)')">+ Draft new scenario</button> <button class="small-btn" style="margin-left:6px;" onclick="comingSoon('Import from another pack · shows a picker of scenarios in your other packs')">Import from another pack…</button></div>`;
 }
 
 function tabActionsPopulated() {
@@ -1222,17 +1362,17 @@ function tabActionsPopulated() {
     <table class="admin-table">
       <thead><tr><th>Action id</th><th>Target</th><th>Reversibility</th><th>Used by</th><th>Last fired</th><th></th></tr></thead>
       <tbody>
-        <tr><td><b>retender_booking</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-002, SC-LN-TENDER-021</td><td>22 min ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>waive_demurrage</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-DEMURRAGE-AUTO-025, SC-LN-DEMURRAGE-DISPUTE-024</td><td>34 min ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>push_eta</b></td><td>HTTP · customer webhook</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-ETA-PUSH-023</td><td>2 min ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>recommend_reroute</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-PORT-DISRUPTION-020</td><td>4 h ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>supplier_onboarding_review</b></td><td>governance_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-PP-008</td><td>4 min ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>expedite_shipment</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-SLA-RISK-022</td><td>1 h ago</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>log_status_query</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-STATUS-009, SC-LN-TRACE-018</td><td>just now</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>log_carrier_view</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-CARRIER-SCORECARD-019</td><td>14 min ago</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>retender_booking</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-002, SC-LN-TENDER-021</td><td>22 min ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>waive_demurrage</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-DEMURRAGE-AUTO-025, SC-LN-DEMURRAGE-DISPUTE-024</td><td>34 min ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>push_eta</b></td><td>HTTP · customer webhook</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-ETA-PUSH-023</td><td>2 min ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>recommend_reroute</b></td><td>logistics_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-LN-PORT-DISRUPTION-020</td><td>4 h ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>supplier_onboarding_review</b></td><td>governance_sqlite</td><td><span class="pill amber">Compensatable</span></td><td>SC-PP-008</td><td>4 min ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>expedite_shipment</b></td><td>logistics_sqlite</td><td><span class="pill red">Irreversible</span></td><td>SC-LN-SLA-RISK-022</td><td>1 h ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>log_status_query</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-STATUS-009, SC-LN-TRACE-018</td><td>just now</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>log_carrier_view</b></td><td>governance_sqlite</td><td><span class="pill green">Idempotent</span></td><td>SC-LN-CARRIER-SCORECARD-019</td><td>14 min ago</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
       </tbody>
     </table>
-    <div style="margin-top: 18px;"><button class="small-btn primary">+ Add action</button></div>`;
+    <div style="margin-top: 18px;"><button class="small-btn primary" onclick="comingSoon('Add write action · opens the action authoring form (target · reversibility class · args)')">+ Add action</button></div>`;
 }
 
 function tabReviewersPopulated() {
@@ -1242,12 +1382,12 @@ function tabReviewersPopulated() {
     <table class="admin-table" style="margin-bottom: 22px;">
       <thead><tr><th>Scenario</th><th>Mode</th><th>Reviewer group</th><th>Escalation</th><th></th></tr></thead>
       <tbody>
-        <tr><td><b>SC-PP-008</b> Supplier onboarding</td><td>HITL</td><td>Hemlock-Procurement-Reviewers</td><td>after 48h → procurement-leads</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-002</b> Mode-switch</td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 4h → on-call-planner</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-TENDER-021</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 24h → procurement-leads</td><td><button class="small-btn">Edit</button></td></tr>
-        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>HITL</td><td>Hemlock-Finance-Reviewers</td><td>none</td><td><button class="small-btn">Edit</button></td></tr>
+        <tr><td><b>SC-PP-008</b> Supplier onboarding</td><td>HITL</td><td>Hemlock-Procurement-Reviewers</td><td>after 48h → procurement-leads</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-002</b> Mode-switch</td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-PORT-DISRUPTION-020</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 4h → on-call-planner</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-SLA-RISK-022</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>none</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-TENDER-021</b></td><td>HITL</td><td>Hemlock-Logistics-Planners</td><td>after 24h → procurement-leads</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
+        <tr><td><b>SC-LN-DEMURRAGE-DISPUTE-024</b></td><td>HITL</td><td>Hemlock-Finance-Reviewers</td><td>none</td><td><button class="small-btn" onclick="comingSoon('Opened row edit form · would open the authoring modal in production')">Edit</button></td></tr>
       </tbody>
     </table>
 
@@ -1261,8 +1401,8 @@ function tabReviewersPopulated() {
     <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
       <div style="font-size: 12px; color: #15803d;"><b>Status: LIVE.</b> Operators submitting cases since 2026-05-22. Last go-live event: 2026-05-22 09:14 UTC.</div>
       <div>
-        <button class="small-btn" style="margin-right: 6px;">Pause instance</button>
-        <button class="small-btn" style="border-color:#b91c1c; color:#b91c1c;">Take offline</button>
+        <button class="small-btn" style="margin-right: 6px;" onclick="comingSoon('Instance paused · new prompts blocked, in-flight cases run to completion')">Pause instance</button>
+        <button class="small-btn" style="border-color:#b91c1c; color:#b91c1c;" onclick="if(confirm(\'Take instance offline? All prompts and in-flight cases will halt.\')){comingSoon(\'Instance offline · Fly machine stopped · admin URL still reachable\');}">Take offline</button>
       </div>
     </div>`;
 }
@@ -1390,7 +1530,7 @@ function tabOntology() {
         </div>
         <label>Identifier</label><div style="font-size: 12px;">request_id</div>
         <label>Bind to source</label><select><option>postgres_pricing</option><option>(no binding yet)</option></select>
-        <label></label><div><button class="small-btn primary">Save class</button> <button class="small-btn" style="margin-left: 6px;">Save &amp; add another</button></div>
+        <label></label><div><button class="small-btn primary" onclick="comingSoon('Class saved · added to ontology · lineage.class.added audit event written')">Save class</button> <button class="small-btn" style="margin-left: 6px;" onclick="comingSoon('Class saved · form reset to add another')">Save &amp; add another</button></div>
       </div>
     </div>`;
 }
@@ -1432,7 +1572,7 @@ function tabScenarios() {
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · inline facts only · no ontology queries</div>
             </div>
             <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[1]=!state.expandedStages[1]; render();">${state.expandedStages[1] ? 'Edit ▾' : 'Edit ▸'}</button>
-            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;" onclick="if(confirm('Remove this fact from the stage? It will drop from the scenario draft.')){comingSoon('Fact removed from stage · draft updated');}">Remove</button>
           </div>
           ${state.expandedStages[1] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Tell the agent (and downstream stages) what it's doing + who's responsible. Reviewer sees these as the "Policy &amp; scope" envelope cards.</div>
@@ -1456,7 +1596,7 @@ function tabScenarios() {
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · the bulk of evidence · pulled from ontology classes you defined</div>
             </div>
             <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[2]=!state.expandedStages[2]; render();">${state.expandedStages[2] ? 'Edit ▾' : 'Edit ▸'}</button>
-            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;" onclick="if(confirm('Remove this fact from the stage? It will drop from the scenario draft.')){comingSoon('Fact removed from stage · draft updated');}">Remove</button>
           </div>
           ${state.expandedStages[2] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Run live ontology queries to gather the facts the reviewer needs to see. Each row below produces fact cards in the operator + reviewer UI.</div>
@@ -1480,7 +1620,7 @@ function tabScenarios() {
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · prior cases + policy excerpts · anchors the reviewer's call</div>
             </div>
             <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[3]=!state.expandedStages[3]; render();">${state.expandedStages[3] ? 'Edit ▾' : 'Edit ▸'}</button>
-            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;" onclick="if(confirm('Remove this fact from the stage? It will drop from the scenario draft.')){comingSoon('Fact removed from stage · draft updated');}">Remove</button>
           </div>
           ${state.expandedStages[3] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Show the reviewer "what similar decisions looked like" + the SOP text that applies. Frames their call.</div>
@@ -1504,7 +1644,7 @@ function tabScenarios() {
               <div style="font-size:11px; color:#6b7280; margin-top:2px;">Default · what fires after the decision · closing messages + executor binding + canned reasons</div>
             </div>
             <button class="small-btn" style="font-size:11px;" onclick="state.expandedStages[4]=!state.expandedStages[4]; render();">${state.expandedStages[4] ? 'Edit ▾' : 'Edit ▸'}</button>
-            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;">Remove</button>
+            <button class="small-btn" style="font-size:11px; border-color:#b91c1c; color:#b91c1c;" onclick="if(confirm('Remove this fact from the stage? It will drop from the scenario draft.')){comingSoon('Fact removed from stage · draft updated');}">Remove</button>
           </div>
           ${state.expandedStages[4] ? `<div style="padding:10px 14px; font-size:12px; color:#4b5563; line-height:1.55;">
             <div><b>Purpose:</b> Define what happens when the reviewer (or the platform) decides. Closing message text, the executor action that runs on Approve, and the canned rationale options reviewers can pick from all live here.</div>
@@ -1548,7 +1688,7 @@ function tabScenarios() {
         </div>
 
         <div style="margin-top:10px; padding:10px 12px; background:#eef2ff; border-left:3px solid #4f46e5; border-radius:0 4px 4px 0;">
-          <button class="small-btn" style="font-size:11px;">+ Add another stage</button>
+          <button class="small-btn" style="font-size:11px;" onclick="comingSoon('Stage 5 form opened · binder + facts + oracle rules')">+ Add another stage</button>
           <span style="margin-left:10px; font-size:11px; color:#4338ca; line-height:1.5;">
             <b>Most scenarios have all 4 stages.</b> When you can drop one:
             <br>· <b>No stage 4 outcome</b> → read-only scenarios (status lookup, trace) — nothing changes after the decision, so there's no executor or closing message to author.
@@ -1558,7 +1698,7 @@ function tabScenarios() {
           </span>
         </div>
       </div>
-      <div style="margin-top: 14px;"><button class="small-btn primary">Save scenario</button> <button class="small-btn" style="margin-left: 6px;">Test with sample prompt…</button></div>
+      <div style="margin-top: 14px;"><button class="small-btn primary" onclick="comingSoon('Scenario saved as draft · click Go live to publish')">Save scenario</button> <button class="small-btn" style="margin-left: 6px;" onclick="comingSoon('Test with sample prompt · runs the scenario against a dry-run prompt, shows the bound facts')">Test with sample prompt…</button></div>
     </div>`;
 }
 
@@ -1618,7 +1758,7 @@ function tabActions() {
             <label style="display:block; font-weight:normal; font-size:12px;"><input type="radio" name="rmode" checked> Dry run · show the SQL + diff without executing</label>
             <label style="display:block; font-weight:normal; font-size:12px;"><input type="radio" name="rmode"> Execute against test DB · sandbox copy of <code>postgres_pricing</code></label>
           </div>
-          <div style="margin-top:10px;"><button class="small-btn primary" style="font-size:12px; padding:6px 16px;">Run test →</button> <button class="small-btn" style="margin-left:6px;">Reset</button></div>
+          <div style="margin-top:10px;"><button class="small-btn primary" style="font-size:12px; padding:6px 16px;" onclick="comingSoon('Test run started · results panel opens below with bound facts + oracle verdict')">Run test →</button> <button class="small-btn" style="margin-left:6px;" onclick="comingSoon('Test panel reset · form cleared')">Reset</button></div>
         </div>
 
         <!-- RIGHT: last result -->
@@ -1767,7 +1907,7 @@ function tabReviewers() {
         <label>Group name</label>
         <div style="display:flex; gap:6px;">
           <input value="logistics-planners" style="flex:1;">
-          <button class="small-btn" style="font-size:11px;">Lookup in IDP →</button>
+          <button class="small-btn" style="font-size:11px;" onclick="comingSoon('Looking up user in the enterprise identity provider · would return name, email, group memberships')">Lookup in IDP →</button>
         </div>
 
         <label style="align-self:start;">Lookup result</label>
@@ -1790,8 +1930,8 @@ function tabReviewers() {
 
         <label></label>
         <div style="display:flex; gap:8px;">
-          <button class="small-btn primary" style="font-size:12px; padding:6px 16px;">Add group →</button>
-          <button class="small-btn" style="font-size:12px;">Cancel</button>
+          <button class="small-btn primary" style="font-size:12px; padding:6px 16px;" onclick="comingSoon('Reviewer group added · members can now be assigned as reviewers on scenarios')">Add group →</button>
+          <button class="small-btn" style="font-size:12px;" onclick="comingSoon('Add-group form cancelled')">Cancel</button>
           <span style="margin-left:auto; font-size:11px; color:#6b7280; font-style:italic;">Saving creates an audit event · group becomes available for scenario mapping immediately.</span>
         </div>
       </div>
@@ -1816,7 +1956,7 @@ function tabReviewers() {
     <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center;">
       <div style="font-size: 12px; color: #b91c1c;"><b>4 of 5 checks pending.</b> Go live is disabled until ontology + scenarios + actions exist (groups are ready).</div>
       <div>
-        <button class="small-btn" style="margin-right: 6px;">Save as draft</button>
+        <button class="small-btn" style="margin-right: 6px;" onclick="comingSoon('Scenario saved as draft · Go-live button unlocks when validation passes')">Save as draft</button>
         <button class="small-btn" disabled style="opacity:0.4; cursor:not-allowed;">Go live →</button>
       </div>
     </div>`;
@@ -2287,6 +2427,16 @@ function render() {
   };
 }
 render();
+
+// Dismiss the pre-parse loading screen once the first render lands.
+// Small fadeout so the transition isn't jarring; then hard-remove so
+// it can't accidentally re-appear via z-index shenanigans downstream.
+(function dismissBoot() {
+  const boot = document.getElementById('pf-boot');
+  if (!boot) return;
+  boot.classList.add('hide');
+  setTimeout(() => boot.remove(), 260);
+})();
 
 // Esc cancels the reviewer's auto-advance or closes the rationale modal.
 document.addEventListener('keydown', (e) => {
