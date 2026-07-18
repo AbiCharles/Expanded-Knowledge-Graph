@@ -36,6 +36,9 @@ COPY backend/ ./backend/
 # when Aeronova / SUP-021 entities are missing. Run from /app:
 #   python3 share/tcs_kf_graph_data/seed_neo4j.py
 COPY share/tcs_kf_graph_data/ ./share/tcs_kf_graph_data/
+# Launcher wireframe served at /launcher (no auth). Self-contained HTML
+# that emits an instance.yaml the operator can hand to bin/kf-launch.
+COPY docs/launcher-wireframe.html ./docs/launcher-wireframe.html
 RUN pip install --no-cache-dir -e ./hitl-context && \
     pip install --no-cache-dir -e .
 

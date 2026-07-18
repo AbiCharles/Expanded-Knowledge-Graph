@@ -192,14 +192,21 @@
 // The CLI (bin/kf-launch) reads that same yaml to spin up a real Fly
 // app, so this state → yaml → CLI chain is the launcher's contract.
 // ============================================================
+// Demo-friendly defaults: every screen lands pre-filled so Skip-to-
+// Review produces a valid, launchable yaml with zero clicks. Match the
+// Welcome screen's promise: "Shipping pack · US East · Production ·
+// GDPR · Standard gate · all connectors except enterprise systems".
+// The instance-name + customer values echo the wireframe's original
+// hardcoded example so screenshots and docs stay consistent.
 const CONFIG_DEFAULTS = {
   // Step 1
-  pack: null,                    // 'shipping' | 'legal' | 'healthcare' | 'finance' | 'hr' | 'custom'
+  pack: 'shipping',              // 'shipping' | 'legal' | 'healthcare' | 'finance' | 'hr' | 'custom'
   customPackName: 'acme-pricing-ops',
   customVisibility: 'private',   // 'private' | 'shared'
-  // Step 2
-  instanceName: '',              // e.g. hemlock-shipping-prod (blocks Launch if empty)
-  customerName: '',              // e.g. Hemlock Manufacturing (blocks Launch if empty)
+  // Step 2 — demo defaults. Users overwrite in the input; the value=""
+  // binding in screenBasics() renders these on load.
+  instanceName: 'hemlock-shipping-prod',
+  customerName: 'Hemlock Manufacturing',
   region: 'us-east',             // 'us-east' | 'eu-west' | 'apac-south'
   deployment: 'dedicated',       // 'dedicated' | 'shared' | 'onprem'
   scaleTier: 'production',       // 'demo' | 'production' | 'enterprise'

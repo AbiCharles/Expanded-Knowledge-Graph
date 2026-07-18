@@ -219,6 +219,24 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
+    # Static-serve the launcher wireframe at /launcher (no auth, no
+    # frontend routing). The wireframe is a self-contained HTML that
+    # produces an instance.yaml the operator can hand to bin/kf-launch.
+    # Copied into the Docker image at repo_root/docs/launcher-wireframe.html
+    # by the Dockerfile. NO_CACHE so an updated wireframe propagates
+    # on the next hard-refresh without a browser cache flush.
+    launcher_path = (
+        Path(__file__).resolve().parent.parent / "docs" / "launcher-wireframe.html"
+    )
+    if launcher_path.is_file():
+        @app.get("/launcher")
+        def _launcher():
+            return FileResponse(
+                launcher_path,
+                media_type="text/html",
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            )
+
     # Serve the built frontend at / when present (Docker / Fly). Skipped in
     # local dev where the Vite dev server runs on its own port.
     dist_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"
