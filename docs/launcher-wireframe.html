@@ -186,6 +186,44 @@
 
 <script>
 // ----- per-screen state -----
+// ============================================================
+// CONFIG STATE — every field the user picks across steps 1–6.
+// screenReview() reads these to build the generated instance.yaml.
+// The CLI (bin/kf-launch) reads that same yaml to spin up a real Fly
+// app, so this state → yaml → CLI chain is the launcher's contract.
+// ============================================================
+const CONFIG_DEFAULTS = {
+  // Step 1
+  pack: null,                    // 'shipping' | 'legal' | 'healthcare' | 'finance' | 'hr' | 'custom'
+  customPackName: 'acme-pricing-ops',
+  customVisibility: 'private',   // 'private' | 'shared'
+  // Step 2
+  instanceName: '',              // e.g. hemlock-shipping-prod (blocks Launch if empty)
+  customerName: '',              // e.g. Hemlock Manufacturing (blocks Launch if empty)
+  region: 'us-east',             // 'us-east' | 'eu-west' | 'apac-south'
+  deployment: 'dedicated',       // 'dedicated' | 'shared' | 'onprem'
+  scaleTier: 'production',       // 'demo' | 'production' | 'enterprise'
+  // Step 3 — per-scenario autonomy + graduation rules. Defaults set
+  // from the scenarios table so a user who never touches this screen
+  // still gets a valid yaml.
+  autonomy: {
+    'SC-PP-008':                'propose',
+    'SC-LN-002':                'propose',
+    'SC-LN-DEMURRAGE-AUTO-025': 'auto-act',
+    'SC-LN-ETA-PUSH-023':       'auto-act',
+  },
+  gradRules: {
+    'SC-PP-008':                { approvals: 5, admin: true,  nofm: false, local: true,  siem: false },
+    'SC-LN-DEMURRAGE-AUTO-025': { approvals: 3, admin: true,  nofm: false, local: true,  siem: true  },
+  },
+  // Step 4 — which connector kinds are enabled.
+  connectors: { csv: true, sqlite: true, neo4j: true, vector: true, enterprise: false, http: false },
+  // Step 5
+  compliance: 'gdpr',            // 'none' | 'soc2' | 'gdpr' | 'hipaa' | 'fedramp' | 'custom'
+  // Step 6
+  gate: 'standard',              // 'loose' | 'standard' | 'strict'
+};
+
 const state = {
   cur: 0,
   customMode: false,        // step 1: are we in the Custom sub-flow?
@@ -204,6 +242,37 @@ const state = {
   reviewerActiveReviewed: 'C-2a3b5d', // selected case in the Reviewed-by-me tab
   reviewerToast: null,      // {decision, caseId} shown briefly after a decision (or 'undo' kind)
   reviewerModal: null,      // null | 'reject' | 'rfi'
+  // === launcher config the user picks in steps 1–6 ===
+  cfg: JSON.parse(JSON.stringify(CONFIG_DEFAULTS)),
+};
+
+// Convenience — set state.cfg[k]=v then re-render. Used by every wired
+// control across screens 1–6. Nested keys use dot syntax:
+// setCfg('connectors.csv', true).
+function setCfg(path, value) {
+  const parts = path.split('.');
+  let obj = state.cfg;
+  for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+  obj[parts[parts.length - 1]] = value;
+  render();
+}
+function toggleCfg(path) {
+  const parts = path.split('.');
+  let obj = state.cfg;
+  for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]];
+  const key = parts[parts.length - 1];
+  obj[key] = !obj[key];
+  render();
+}
+window.setCfg = setCfg;
+window.toggleCfg = toggleCfg;
+
+// Region label → Fly PRIMARY_REGION code so the CLI can `fly deploy`
+// straight from the yaml without a second lookup table.
+const REGION_TO_FLY = {
+  'us-east':    { label: 'US East (Ashburn)',       fly: 'iad' },
+  'eu-west':    { label: 'EU West (Dublin)',        fly: 'dub' },
+  'apac-south': { label: 'APAC South (Singapore)',  fly: 'sin' },
 };
 
 // ----- screen renderers -----
@@ -255,16 +324,26 @@ const ENABLES_PHRASES = {
 
 function screenDomainPack() {
   if (state.customMode) return screenCustomPack();
+  const PACKS = [
+    { id: 'shipping',   title: 'Shipping',    meta: '11 scenarios · 16 ontology classes', items: ['Supplier onboarding','Mode-switch / re-tender','Demurrage dispute','+ 8 more'] },
+    { id: 'legal',      title: 'Legal',       meta: '6 scenarios · 12 classes',           items: ['Contract clause review','NDA triage','Discovery prioritization','+ 3 more'] },
+    { id: 'healthcare', title: 'Healthcare',  meta: '8 scenarios · 14 classes',           items: ['Prior-auth review','Care-plan adherence','Coding audit','+ 5 more'] },
+    { id: 'finance',    title: 'Finance ops', meta: '7 scenarios · 10 classes',           items: ['Invoice exception','Expense audit','Reconciliation','+ 4 more'] },
+    { id: 'hr',         title: 'HR',          meta: '5 scenarios · 8 classes',            items: ['Hiring decision','Promotion review','Offboard checklist','+ 2 more'] },
+  ];
+  const cards = PACKS.map(p => `
+    <div class="card${state.cfg.pack === p.id ? ' selected' : ''}" onclick="setCfg('pack','${p.id}')">
+      <h3>${p.title}</h3>
+      <div class="count">${p.meta}</div>
+      <ul>${p.items.map(i => `<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
+  const customSel = state.cfg.pack === 'custom' ? ' selected' : '';
   return `<div class="eyebrow">Step 1 of 6</div>
    <h1>Pick a domain pack</h1>
    <p class="lede">Each pack bundles an ontology, ~5–15 starter scenarios, a default review UI, and recommended policies. Pick the closest fit — you can fork and customize after launch.</p>
    <div class="cards">
-     <div class="card selected"><h3>Shipping</h3><div class="count">11 scenarios · 16 ontology classes</div><ul><li>Supplier onboarding</li><li>Mode-switch / re-tender</li><li>Demurrage dispute</li><li>+ 8 more</li></ul></div>
-     <div class="card"><h3>Legal</h3><div class="count">6 scenarios · 12 classes</div><ul><li>Contract clause review</li><li>NDA triage</li><li>Discovery prioritization</li><li>+ 3 more</li></ul></div>
-     <div class="card"><h3>Healthcare</h3><div class="count">8 scenarios · 14 classes</div><ul><li>Prior-auth review</li><li>Care-plan adherence</li><li>Coding audit</li><li>+ 5 more</li></ul></div>
-     <div class="card"><h3>Finance ops</h3><div class="count">7 scenarios · 10 classes</div><ul><li>Invoice exception</li><li>Expense audit</li><li>Reconciliation</li><li>+ 4 more</li></ul></div>
-     <div class="card"><h3>HR</h3><div class="count">5 scenarios · 8 classes</div><ul><li>Hiring decision</li><li>Promotion review</li><li>Offboard checklist</li><li>+ 2 more</li></ul></div>
-     <div class="card custom" onclick="state.customMode=true; render();"><h3>Custom →</h3><div class="count">Build your own</div><ul><li>Name your pack</li><li>Fork an existing pack or start blank</li><li>Choose visibility</li><li><b>Click to configure</b></li></ul></div>
+     ${cards}
+     <div class="card custom${customSel}" onclick="state.customMode=true; setCfg('pack','custom');"><h3>Custom →</h3><div class="count">Build your own</div><ul><li>Name your pack</li><li>Fork an existing pack or start blank</li><li>Choose visibility</li><li><b>Click to configure</b></li></ul></div>
    </div>
    ${enablesCallout(ENABLES_PHRASES[1])}`;
 }
@@ -290,6 +369,8 @@ function screenCustomPack() {
          You picked a fork. After launch, your pack starts with the forked pack's ontology + scenarios — your domain expert customises in the admin UI from there. Changes stay private to this instance.
        </div>`;
 
+  const privSel = state.cfg.customVisibility === 'private' ? ' selected' : '';
+  const shrSel  = state.cfg.customVisibility === 'shared'  ? ' selected' : '';
   return `<div class="eyebrow">Step 1 of 6 · Custom pack</div>
    <div class="crumb"><a onclick="state.customMode=false; state.customBase='shipping'; render();">← Back to pack picker</a></div>
    <h1>Build a custom domain pack</h1>
@@ -297,7 +378,7 @@ function screenCustomPack() {
 
    <div class="form-row" style="max-width: 500px;">
      <label>Pack name</label>
-     <input value="acme-pricing-ops">
+     <input value="${state.cfg.customPackName}" oninput="setCfg('customPackName', this.value)">
      <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0;">Used in audit logs, version history, and as a key in the config file.</p>
    </div>
 
@@ -309,8 +390,8 @@ function screenCustomPack() {
    <div style="margin-top: 22px;">
      <label style="font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase; letter-spacing: 0.06em;">Visibility</label>
      <div class="radio-group">
-       <div class="radio-row selected"><div class="marker"></div><div><div class="title">Private to this instance</div><div class="desc">Only this customer can see / use this pack. Audit changes stay tenant-local.</div></div></div>
-       <div class="radio-row"><div class="marker"></div><div><div class="title">Shared (other tenants can fork)</div><div class="desc">Pack appears in the picker for future instances on the platform. Useful for internal templates.</div></div></div>
+       <div class="radio-row${privSel}" onclick="setCfg('customVisibility','private')"><div class="marker"></div><div><div class="title">Private to this instance</div><div class="desc">Only this customer can see / use this pack. Audit changes stay tenant-local.</div></div></div>
+       <div class="radio-row${shrSel}"  onclick="setCfg('customVisibility','shared')" ><div class="marker"></div><div><div class="title">Shared (other tenants can fork)</div><div class="desc">Pack appears in the picker for future instances on the platform. Useful for internal templates.</div></div></div>
      </div>
    </div>
 
@@ -1753,14 +1834,33 @@ function tabAudit() {
 }
 
 function screenBasics() {
+  const opt = (v, label, cur) => `<option value="${v}"${v===cur?' selected':''}>${label}</option>`;
   return `<div class="eyebrow">Step 2 of 6</div>
    <h1>Instance basics</h1>
    <p class="lede">Name and region tell us where the instance runs and how it's identified. The region drives data residency for cases, decisions, and the audit log.</p>
-   <div class="form-row"><label>Instance name</label><input value="hemlock-shipping-prod"></div>
-   <div class="form-row"><label>Customer organisation</label><input value="Hemlock Manufacturing"></div>
-   <div class="form-row"><label>Region (data residency)</label><select><option>US East (Ashburn)</option><option>EU West (Dublin)</option><option>APAC South (Singapore)</option></select></div>
-   <div class="form-row"><label>Deployment shape</label><select><option>Dedicated single-tenant (recommended)</option><option>Shared multi-tenant</option><option>On-prem / air-gapped</option></select></div>
-   <div class="form-row"><label>Scale tier</label><select><option>Demo (5 users · 100 cases/day)</option><option selected>Production (500 users · 10k cases/day)</option><option>Enterprise (10k users · 100k cases/day)</option></select></div>
+   <div class="form-row"><label>Instance name</label><input value="${state.cfg.instanceName}" placeholder="e.g. hemlock-shipping-prod" oninput="setCfg('instanceName', this.value.trim().toLowerCase().replace(/[^a-z0-9-]/g,'-'))"></div>
+   <div class="form-row"><label>Customer organisation</label><input value="${state.cfg.customerName}" placeholder="e.g. Hemlock Manufacturing" oninput="setCfg('customerName', this.value)"></div>
+   <div class="form-row"><label>Region (data residency)</label>
+     <select onchange="setCfg('region', this.value)">
+       ${opt('us-east',    'US East (Ashburn)',       state.cfg.region)}
+       ${opt('eu-west',    'EU West (Dublin)',        state.cfg.region)}
+       ${opt('apac-south', 'APAC South (Singapore)',  state.cfg.region)}
+     </select>
+   </div>
+   <div class="form-row"><label>Deployment shape</label>
+     <select onchange="setCfg('deployment', this.value)">
+       ${opt('dedicated', 'Dedicated single-tenant (recommended)', state.cfg.deployment)}
+       ${opt('shared',    'Shared multi-tenant',                   state.cfg.deployment)}
+       ${opt('onprem',    'On-prem / air-gapped',                  state.cfg.deployment)}
+     </select>
+   </div>
+   <div class="form-row"><label>Scale tier</label>
+     <select onchange="setCfg('scaleTier', this.value)">
+       ${opt('demo',       'Demo (5 users · 100 cases/day)',        state.cfg.scaleTier)}
+       ${opt('production', 'Production (500 users · 10k cases/day)', state.cfg.scaleTier)}
+       ${opt('enterprise', 'Enterprise (10k users · 100k cases/day)', state.cfg.scaleTier)}
+     </select>
+   </div>
    ${enablesCallout(ENABLES_PHRASES[2])}`;
 }
 
@@ -1774,49 +1874,53 @@ function screenDecisionLadder() {
   ];
 
   const rows = scenarios.map(s => {
-    const cells = ['observe','propose','auto-act'].map(state => {
-      const disabled = (state === 'auto-act' && s.autoBlocked) ? ' disabled' : '';
-      const sel = (s.ladder === state && !disabled) ? ' selected' : '';
-      const label = (state === 'auto-act' && s.autoBlocked) ? 'Blocked<br>(irreversible)'
-                  : (state === 'auto-act' && s.id === 'SC-LN-DEMURRAGE-AUTO-025') ? 'Auto-act<br>≤ $500 + prior win'
-                  : state[0].toUpperCase() + state.slice(1);
-      return `<div class="ladder-cell${sel}${disabled}">${label}</div>`;
+    const currentLadder = state.cfg.autonomy[s.id] || s.ladder;
+    const cells = ['observe','propose','auto-act'].map(mode => {
+      const disabled = (mode === 'auto-act' && s.autoBlocked) ? ' disabled' : '';
+      const sel = (currentLadder === mode && !disabled) ? ' selected' : '';
+      const label = (mode === 'auto-act' && s.autoBlocked) ? 'Blocked<br>(irreversible)'
+                  : (mode === 'auto-act' && s.id === 'SC-LN-DEMURRAGE-AUTO-025') ? 'Auto-act<br>≤ $500 + prior win'
+                  : mode[0].toUpperCase() + mode.slice(1);
+      const click = disabled ? '' : ` onclick="setCfg('autonomy.${s.id}','${mode}')"`;
+      return `<div class="ladder-cell${sel}${disabled}"${click}>${label}</div>`;
     }).join('');
 
     const showGrad = state.expandedGrad === s.id;
+    // Live values come from state.cfg.gradRules[s.id] if the user has
+    // touched this row; otherwise fall back to the scenario's default.
+    const g = state.cfg.gradRules[s.id] || s.defaultGrad;
     let gradPanel = '';
-    if (showGrad && s.defaultGrad) {
-      const g = s.defaultGrad;
+    if (showGrad && g) {
       gradPanel = `
         <div class="grad-panel">
           <h4>Graduation rule · ${s.id}</h4>
           <p style="font-size: 11px; color: #6b7280; margin: 0 0 10px;">
             Conditions under which an admin can lift this scenario from Propose to Auto-act. Recorded as an audit event when the lift happens.
           </p>
-          <div class="grad-field"><label>Successful HITL approvals required</label><input type="number" value="${g.approvals}"></div>
+          <div class="grad-field"><label>Successful HITL approvals required</label><input type="number" value="${g.approvals}" oninput="setCfg('gradRules.${s.id}.approvals', parseInt(this.value||'0',10))"></div>
           <div class="grad-field"><label>Sign-off model</label>
             <div>
-              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.admin?'checked':''}> Admin must approve the lift</label><br>
-              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.nofm?'checked':''}> N-of-M reviewers must agree (N=2)</label>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.admin?'checked':''} onclick="toggleCfg('gradRules.${s.id}.admin')"> Admin must approve the lift</label><br>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.nofm?'checked':''}  onclick="toggleCfg('gradRules.${s.id}.nofm')" > N-of-M reviewers must agree (N=2)</label>
             </div>
           </div>
           <div class="grad-field"><label>Audit destination</label>
             <div>
-              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.local?'checked':''}> Local audit log</label><br>
-              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.siem?'checked':''}> Stream to enterprise SIEM</label>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.local?'checked':''} onclick="toggleCfg('gradRules.${s.id}.local')"> Local audit log</label><br>
+              <label style="font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px;"><input type="checkbox" ${g.siem?'checked':''}  onclick="toggleCfg('gradRules.${s.id}.siem')" > Stream to enterprise SIEM</label>
             </div>
           </div>
           <div class="grad-actions">
             <button class="primary" onclick="state.expandedGrad=null; render();">Save</button>
             <button onclick="state.expandedGrad=null; render();">Cancel</button>
-            <button onclick="state.expandedGrad=null; render();" style="margin-left: auto; border-color: #b91c1c; color: #b91c1c;">Reset to platform default</button>
+            <button onclick="delete state.cfg.gradRules['${s.id}']; state.expandedGrad=null; render();" style="margin-left: auto; border-color: #b91c1c; color: #b91c1c;">Reset to platform default</button>
           </div>
         </div>`;
     }
 
     const editLink = s.defaultGrad
-      ? `<div class="grad-line">Graduation rule: <b>${s.defaultGrad.approvals} HITL approvals</b> + ${s.defaultGrad.admin ? 'admin sign-off' : 'reviewer sign-off'}. <a onclick="state.expandedGrad='${state.expandedGrad === s.id ? '' : s.id}'; render();">${showGrad ? 'Close' : 'Edit ▾'}</a></div>`
-      : `<div class="grad-line"><i>No graduation needed — already at ${s.ladder === 'auto-act' ? 'Auto-act' : s.ladder}.</i></div>`;
+      ? `<div class="grad-line">Graduation rule: <b>${g.approvals} HITL approvals</b> + ${g.admin ? 'admin sign-off' : 'reviewer sign-off'}. <a onclick="state.expandedGrad='${state.expandedGrad === s.id ? '' : s.id}'; render();">${showGrad ? 'Close' : 'Edit ▾'}</a></div>`
+      : `<div class="grad-line"><i>No graduation needed — already at ${currentLadder === 'auto-act' ? 'Auto-act' : currentLadder}.</i></div>`;
 
     return `
       <div class="scenario-row">
@@ -1841,37 +1945,59 @@ function screenDecisionLadder() {
 }
 
 function screenConnectors() {
+  const CONNS = [
+    { id: 'csv',        title: 'Spreadsheets (CSV / Excel)',   count: 'Read-only',    items: ['Master data: products, carriers, lanes','Reversibility: N/A (read-only)'] },
+    { id: 'sqlite',     title: 'Operational SQLite / Postgres', count: 'Read + write', items: ['Bookings, cases, decisions','Default reversibility: compensatable'] },
+    { id: 'neo4j',      title: 'Graph (Neo4j)',                 count: 'Read-only',    items: ['Supplier networks, sanctions walks','Connection: bolt+s:// (TLS)'] },
+    { id: 'vector',     title: 'Vector store (semantic search)', count: 'Read-only',    items: ['Policy / SOP corpus','Embeddings: OpenAI / Azure OpenAI'] },
+    { id: 'enterprise', title: 'Enterprise systems',            count: 'SAP · Salesforce · ServiceNow', items: ['Default reversibility: irreversible','Requires admin approval to write'] },
+    { id: 'http',       title: 'HTTP webhooks',                 count: 'Outbound notifications',        items: ['Slack · Teams · custom URLs','Per-tenant rate limits'] },
+  ];
+  const cards = CONNS.map(c => `
+    <div class="card${state.cfg.connectors[c.id] ? ' selected' : ''}" onclick="toggleCfg('connectors.${c.id}')">
+      <h3>${c.title}</h3><div class="count">${c.count}</div>
+      <ul>${c.items.map(i => `<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
   return `<div class="eyebrow">Step 4 of 6</div>
    <h1>Connectors</h1>
-   <p class="lede">Which data-source kinds is the agent allowed to read from and write to? Each kind ships with a default reversibility class for any write actions. Enable only what you need.</p>
-   <div class="cards" style="grid-template-columns: repeat(2, 1fr);">
-     <div class="card selected"><h3>Spreadsheets (CSV / Excel)</h3><div class="count">Read-only</div><ul><li>Master data: products, carriers, lanes</li><li>Reversibility: N/A (read-only)</li></ul></div>
-     <div class="card selected"><h3>Operational SQLite / Postgres</h3><div class="count">Read + write</div><ul><li>Bookings, cases, decisions</li><li>Default reversibility: compensatable</li></ul></div>
-     <div class="card selected"><h3>Graph (Neo4j)</h3><div class="count">Read-only</div><ul><li>Supplier networks, sanctions walks</li><li>Connection: bolt+s:// (TLS)</li></ul></div>
-     <div class="card selected"><h3>Vector store (semantic search)</h3><div class="count">Read-only</div><ul><li>Policy / SOP corpus</li><li>Embeddings: OpenAI / Azure OpenAI</li></ul></div>
-     <div class="card"><h3>Enterprise systems</h3><div class="count">SAP · Salesforce · ServiceNow</div><ul><li>Default reversibility: irreversible</li><li>Requires admin approval to write</li></ul></div>
-     <div class="card"><h3>HTTP webhooks</h3><div class="count">Outbound notifications</div><ul><li>Slack · Teams · custom URLs</li><li>Per-tenant rate limits</li></ul></div>
-   </div>
+   <p class="lede">Which data-source kinds is the agent allowed to read from and write to? Each kind ships with a default reversibility class for any write actions. Enable only what you need. Click a card to toggle.</p>
+   <div class="cards" style="grid-template-columns: repeat(2, 1fr);">${cards}</div>
    ${enablesCallout(ENABLES_PHRASES[4])}`;
 }
 
 function screenCompliance() {
+  const TEMPLATES = [
+    { id: 'none',    title: 'None',    count: 'Demos only',         items: ['30-day audit retention','No PII handling','Mutable cases'] },
+    { id: 'soc2',    title: 'SOC 2',   count: 'Baseline production', items: ['1-year retention','PII masking in logs','SIEM export'] },
+    { id: 'gdpr',    title: 'GDPR',    count: 'EU customers',        items: ['Right-to-erasure handler','PII tokenization','Data-residency lock'] },
+    { id: 'hipaa',   title: 'HIPAA',   count: 'Healthcare',          items: ['7-year retention','BAA-required connectors only','Immutable decisions'] },
+    { id: 'fedramp', title: 'FedRAMP', count: 'US Government',       items: ['Air-gap option','All actions logged','FIPS-compliant crypto'] },
+    { id: 'custom',  title: 'Custom',  count: 'Pick à la carte',     items: ['Mix individual policies','(advanced — admin only)'] },
+  ];
+  const cards = TEMPLATES.map(t => `
+    <div class="card${state.cfg.compliance === t.id ? ' selected' : ''}" onclick="setCfg('compliance','${t.id}')">
+      <h3>${t.title}</h3><div class="count">${t.count}</div>
+      <ul>${t.items.map(i => `<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
   return `<div class="eyebrow">Step 5 of 6</div>
    <h1>Compliance + policy plane</h1>
    <p class="lede">Pick a compliance template — flips audit retention, PII handling, immutability, and SIEM streaming together. Policies live <b>separate</b> from scenarios so customers can tighten governance without forking scenario YAML.</p>
-   <div class="cards">
-     <div class="card"><h3>None</h3><div class="count">Demos only</div><ul><li>30-day audit retention</li><li>No PII handling</li><li>Mutable cases</li></ul></div>
-     <div class="card"><h3>SOC 2</h3><div class="count">Baseline production</div><ul><li>1-year retention</li><li>PII masking in logs</li><li>SIEM export</li></ul></div>
-     <div class="card selected"><h3>GDPR</h3><div class="count">EU customers</div><ul><li>Right-to-erasure handler</li><li>PII tokenization</li><li>Data-residency lock</li></ul></div>
-     <div class="card"><h3>HIPAA</h3><div class="count">Healthcare</div><ul><li>7-year retention</li><li>BAA-required connectors only</li><li>Immutable decisions</li></ul></div>
-     <div class="card"><h3>FedRAMP</h3><div class="count">US Government</div><ul><li>Air-gap option</li><li>All actions logged</li><li>FIPS-compliant crypto</li></ul></div>
-     <div class="card"><h3>Custom</h3><div class="count">Pick à la carte</div><ul><li>Mix individual policies</li><li>(advanced — admin only)</li></ul></div>
-   </div>
+   <div class="cards">${cards}</div>
    <p class="footer-tip">Selected template auto-attaches a versioned policy bundle. Admins can view + override individual policies after launch.</p>
    ${enablesCallout(ENABLES_PHRASES[5])}`;
 }
 
 function screenLearnedRules() {
+  const GATES = [
+    { id: 'loose',    title: 'Loose',    count: 'Demo / sandbox',    items: ['Admin click → rule goes live','No replay against past cases','No regression check',"(matches today's default)"] },
+    { id: 'standard', title: 'Standard', count: 'Recommended',       items: ['Replay against last 10 closed cases','≥ 70% of decisions would still match','Highlight any regressions before approval','Single admin sign-off'] },
+    { id: 'strict',   title: 'Strict',   count: 'Regulated domains', items: ['Replay against last 100 closed cases','≥ 90% would still match','2 reviewer signoffs (N-of-M)','Mandatory rollback window'] },
+  ];
+  const cards = GATES.map(g => `
+    <div class="card${state.cfg.gate === g.id ? ' selected' : ''}" onclick="setCfg('gate','${g.id}')">
+      <h3>${g.title}</h3><div class="count">${g.count}</div>
+      <ul>${g.items.map(i => `<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
   return `<div class="eyebrow">Step 6 of 6</div>
    <h1>Evaluation gate for learned rules</h1>
    <p class="lede">
@@ -1879,11 +2005,7 @@ function screenLearnedRules() {
      <br><br>
      <b>This step asks how strictly the platform should evaluate a learned rule before it goes live.</b> Stricter = fewer surprises but slower learning.
    </p>
-   <div class="cards">
-     <div class="card"><h3>Loose</h3><div class="count">Demo / sandbox</div><ul><li>Admin click → rule goes live</li><li>No replay against past cases</li><li>No regression check</li><li>(matches today's default)</li></ul></div>
-     <div class="card selected"><h3>Standard</h3><div class="count">Recommended</div><ul><li>Replay against last 10 closed cases</li><li>≥ 70% of decisions would still match</li><li>Highlight any regressions before approval</li><li>Single admin sign-off</li></ul></div>
-     <div class="card"><h3>Strict</h3><div class="count">Regulated domains</div><ul><li>Replay against last 100 closed cases</li><li>≥ 90% would still match</li><li>2 reviewer signoffs (N-of-M)</li><li>Mandatory rollback window</li></ul></div>
-   </div>
+   <div class="cards">${cards}</div>
    <div class="info-box">
      A <b>learned rule</b> is a "the reviewer almost always does X when Y is true" pattern that the platform proposes as a future-case hint. Admins still have to approve it. Demoting a learned rule is a one-click action with a full audit trail.
    </div>
@@ -1891,67 +2013,222 @@ function screenLearnedRules() {
    ${enablesCallout(ENABLES_PHRASES[6])}`;
 }
 
+// ============================================================
+// YAML generation + validation
+// ============================================================
+// Compliance-template → policy bundle. Keeps step 5 → yaml in sync.
+const COMPLIANCE_POLICIES = {
+  none:    { audit_retention_days:  30, pii_handling: 'passthrough', decision_immutability: false, siem_export: false },
+  soc2:    { audit_retention_days: 365, pii_handling: 'mask',        decision_immutability: true,  siem_export: true  },
+  gdpr:    { audit_retention_days: 365, pii_handling: 'tokenize',    decision_immutability: true,  siem_export: true  },
+  hipaa:   { audit_retention_days: 2555 /* 7y */, pii_handling: 'tokenize', decision_immutability: true, siem_export: true },
+  fedramp: { audit_retention_days: 1825 /* 5y */, pii_handling: 'tokenize', decision_immutability: true, siem_export: true },
+  custom:  { audit_retention_days: 365, pii_handling: 'mask',        decision_immutability: true,  siem_export: false },
+};
+// Gate id → learned-rule replay/threshold/signoff/rollback settings.
+const GATE_SETTINGS = {
+  loose:    { replay_window:  0,  match_threshold_pct:  0, reviewer_signoffs: 1, rollback_window_days: 0  },
+  standard: { replay_window: 10, match_threshold_pct: 70, reviewer_signoffs: 1, rollback_window_days: 7  },
+  strict:   { replay_window: 100, match_threshold_pct: 90, reviewer_signoffs: 2, rollback_window_days: 30 },
+};
+// Pack id → default ontology bundle version. Matches what the domain-
+// pack ships in the fabric today; the CLI seeds this version.
+const PACK_VERSIONS = {
+  shipping: 4, legal: 2, healthcare: 2, finance: 3, hr: 1, custom: 1,
+};
+
+// Which fields must be non-empty for Launch to enable.
+function validateCfg(cfg) {
+  const missing = [];
+  if (!cfg.pack) missing.push('domain pack (step 1)');
+  if (!cfg.instanceName) missing.push('instance name (step 2)');
+  if (!cfg.customerName) missing.push('customer organisation (step 2)');
+  // At least one connector must be enabled or the fabric has no data.
+  if (!Object.values(cfg.connectors).some(Boolean)) missing.push('at least one connector (step 4)');
+  return missing;
+}
+
+// Build the actual yaml string from live state. Used by the on-screen
+// preview AND the Download / Launch buttons — one source of truth.
+function buildYaml(cfg) {
+  const isCustom = cfg.pack === 'custom';
+  const packId = isCustom ? cfg.customPackName : cfg.pack;
+  const packVer = PACK_VERSIONS[isCustom ? 'custom' : cfg.pack] || 1;
+  const overlay = isCustom ? `${cfg.customPackName}/${cfg.customVisibility}/v1` : `${cfg.instanceName || 'instance'}-private/v1`;
+  const enabledConnectors = Object.entries(cfg.connectors).filter(([, v]) => v).map(([k]) => k);
+  const externals = cfg.connectors.enterprise ? ['sap','salesforce','servicenow'] : [];
+  const pol = COMPLIANCE_POLICIES[cfg.compliance] || COMPLIANCE_POLICIES.none;
+  const gate = GATE_SETTINGS[cfg.gate] || GATE_SETTINGS.standard;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const perScenario = Object.entries(cfg.autonomy)
+    .map(([sid, mode]) => `    ${sid}: ${mode}`)
+    .join('\n');
+  const gradPerScenario = Object.entries(cfg.gradRules)
+    .map(([sid, g]) => {
+      const audit = [g.local && 'local', g.siem && 'siem'].filter(Boolean).join(', ');
+      return `    ${sid}:\n` +
+             `      required_hitl_approvals: ${g.approvals}\n` +
+             `      admin_sign_off: ${g.admin}\n` +
+             `      nofm_reviewers: ${g.nofm}\n` +
+             `      audit: [${audit}]`;
+    }).join('\n');
+
+  return `# Generated by KF Launcher · ${today} · review before commit
+# Identity is provided by the enterprise platform — not configured here.
+instance:
+  name: ${cfg.instanceName || '<not-set>'}
+  customer: ${cfg.customerName ? JSON.stringify(cfg.customerName) : '<not-set>'}
+  region: ${cfg.region}
+  fly_region: ${(REGION_TO_FLY[cfg.region] || {}).fly || 'iad'}
+  deployment: ${cfg.deployment}
+  scale_tier: ${cfg.scaleTier}
+
+domain_pack:
+  id: ${packId}
+  version: ${packVer}
+  overlay: ${overlay}${isCustom ? `
+  visibility: ${cfg.customVisibility}` : ''}
+
+autonomy:
+  default_state: propose
+  per_scenario:
+${perScenario}
+
+graduation_rules:             # conditions to lift Propose → Auto-act
+  default:
+    required_hitl_approvals: 5
+    admin_sign_off: true
+    nofm_reviewers: false
+    audit: [local]
+  per_scenario:
+${gradPerScenario || '    {}'}
+
+connectors:
+  enabled: [${enabledConnectors.join(', ')}]
+  external_systems: [${externals.join(', ')}]
+  reversibility_default: compensatable
+
+compliance:
+  template: ${cfg.compliance}
+  policies:
+    audit_retention_days: ${pol.audit_retention_days}
+    pii_handling: ${pol.pii_handling}
+    decision_immutability: ${pol.decision_immutability}
+    siem_export: ${pol.siem_export}
+
+learned_rules:
+  evaluation_gate: ${cfg.gate}
+  replay_window: ${gate.replay_window}
+  match_threshold_pct: ${gate.match_threshold_pct}
+  reviewer_signoffs: ${gate.reviewer_signoffs}
+  rollback_window_days: ${gate.rollback_window_days}
+`;
+}
+
+// Simple regex-based syntax highlighter so the rendered yaml keeps the
+// same look as the previous hardcoded <span> markup.
+function highlightYaml(yaml) {
+  return yaml
+    .split('\n')
+    .map(line => {
+      // Full comment line
+      const commentOnly = line.match(/^(\s*)(#.*)$/);
+      if (commentOnly) return commentOnly[1] + `<span class="c">${commentOnly[2]}</span>`;
+      // key: value with optional trailing comment
+      const kv = line.match(/^(\s*)([A-Za-z0-9_-]+):(.*?)(\s+#.*)?$/);
+      if (kv) {
+        const [, indent, key, valuePart, trailing] = kv;
+        let out = `${indent}<span class="k">${key}:</span>`;
+        if (valuePart && valuePart.trim()) out += `<span class="v">${valuePart}</span>`;
+        if (trailing) out += `<span class="c">${trailing}</span>`;
+        return out;
+      }
+      return line;
+    })
+    .join('\n');
+}
+
+// Trigger a browser download of the current yaml. Fires from the
+// Download button on the Review screen AND from the Launch button
+// (both write the file so the CLI can pick it up).
+function downloadYaml(filename) {
+  const yaml = buildYaml(state.cfg);
+  const blob = new Blob([yaml], { type: 'application/x-yaml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || `${state.cfg.instanceName || 'instance'}.yaml`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+window.downloadYaml = downloadYaml;
+
+// Fired when the user clicks Launch. Saves the yaml locally (so the
+// CLI has something to read) AND swaps the launcher chrome for the
+// launched-instance simulation. Real deploys happen out-of-band via
+// the CLI once the operator runs it on their laptop.
+function doLaunch() {
+  const missing = validateCfg(state.cfg);
+  if (missing.length) {
+    alert('Cannot launch — missing:\n  • ' + missing.join('\n  • '));
+    return;
+  }
+  downloadYaml();
+  state.launched = true;
+  state.adminTab = 'overview';
+  render();
+}
+window.doLaunch = doLaunch;
+
 function screenReview() {
+  const missing = validateCfg(state.cfg);
+  const yaml = buildYaml(state.cfg);
+  const highlighted = highlightYaml(yaml);
+  const missingBox = missing.length ? `
+    <div style="margin-top: 12px; padding: 12px 16px; background: #fef2f2; border: 1.5px solid #dc2626; border-radius: 6px;">
+      <div style="font-size: 12px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.06em;">
+        ⚠ ${missing.length} required field${missing.length === 1 ? '' : 's'} missing
+      </div>
+      <ul style="margin: 8px 0 0; padding-left: 22px; font-size: 12px; color: #7f1d1d; line-height: 1.6;">
+        ${missing.map(m => `<li>${m}</li>`).join('')}
+      </ul>
+      <div style="font-size: 11px; color: #7f1d1d; margin-top: 8px; font-style: italic;">
+        Go back and fill these in — Launch is disabled until they're set.
+      </div>
+    </div>` : `
+    <div style="margin-top: 12px; padding: 10px 14px; background: #ecfdf5; border-left: 3px solid #059669; border-radius: 0 4px 4px 0;">
+      <span style="font-size: 12px; color: #065f46; font-weight: 600;">✓ Config complete — ready to launch.</span>
+    </div>`;
+
+  const cliCmd = `./bin/kf-launch ${state.cfg.instanceName || '&lt;instance-name&gt;'}.yaml`;
+  const launchDisabled = missing.length > 0;
+  const launchStyle = launchDisabled
+    ? 'font-size: 14px; padding: 10px 24px; opacity: 0.4; cursor: not-allowed;'
+    : 'font-size: 14px; padding: 10px 24px;';
+  const launchHandler = launchDisabled ? '' : 'onclick="doLaunch()"';
+
   return `<div class="eyebrow">Almost done</div>
    <h1>Review &amp; launch</h1>
-   <p class="lede">Here's the generated <code>instance.yaml</code>. Nothing has been deployed yet. Commit this to git, then run <code>./bin/kf-launch hemlock-shipping-prod</code> when ready.</p>
-   <div class="yaml"><span class="c"># Generated by KF Launcher · 2026-06-17 · review before commit
-# Identity is provided by the enterprise platform — not configured here.</span>
-<span class="k">instance:</span>
-  <span class="k">name:</span> <span class="v">hemlock-shipping-prod</span>
-  <span class="k">customer:</span> <span class="v">Hemlock Manufacturing</span>
-  <span class="k">region:</span> <span class="v">us-east</span>
-  <span class="k">deployment:</span> <span class="v">dedicated</span>
-  <span class="k">scale_tier:</span> <span class="v">production</span>
-
-<span class="k">domain_pack:</span>
-  <span class="k">id:</span> <span class="v">shipping</span>
-  <span class="k">version:</span> <span class="v">4</span>
-  <span class="k">overlay:</span> <span class="v">hemlock-private/v1</span>
-
-<span class="k">autonomy:</span>
-  <span class="k">default_state:</span> <span class="v">propose</span>
-  <span class="k">per_scenario:</span>
-    <span class="k">SC-PP-008:</span> <span class="v">propose</span>
-    <span class="k">SC-LN-002:</span> <span class="v">propose</span>     <span class="c"># auto-act blocked (irreversible action)</span>
-    <span class="k">SC-LN-DEMURRAGE-AUTO-025:</span> <span class="v">auto-act</span>
-    <span class="k">SC-LN-ETA-PUSH-023:</span> <span class="v">auto-act</span>
-
-<span class="k">graduation_rules:</span>             <span class="c"># conditions to lift Propose → Auto-act</span>
-  <span class="k">default:</span>
-    <span class="k">required_hitl_approvals:</span> <span class="v">5</span>
-    <span class="k">admin_sign_off:</span> <span class="v">true</span>
-    <span class="k">nofm_reviewers:</span> <span class="v">false</span>
-    <span class="k">audit:</span> <span class="v">[local]</span>
-  <span class="k">per_scenario:</span>                <span class="c"># inline overrides from the ladder screen</span>
-    <span class="k">SC-LN-DEMURRAGE-AUTO-025:</span>
-      <span class="k">required_hitl_approvals:</span> <span class="v">3</span>
-      <span class="k">audit:</span> <span class="v">[local, siem]</span>
-
-<span class="k">connectors:</span>
-  <span class="k">enabled:</span> <span class="v">[csv, sqlite, postgres, neo4j, vector_store]</span>
-  <span class="k">external_systems:</span> <span class="v">[]</span>   <span class="c"># SAP/Salesforce disabled</span>
-  <span class="k">reversibility_default:</span> <span class="v">compensatable</span>
-
-<span class="k">compliance:</span>
-  <span class="k">template:</span> <span class="v">gdpr</span>
-  <span class="k">policies:</span>
-    <span class="k">audit_retention_days:</span> <span class="v">365</span>
-    <span class="k">pii_handling:</span> <span class="v">tokenize</span>
-    <span class="k">decision_immutability:</span> <span class="v">true</span>
-    <span class="k">siem_export:</span> <span class="v">true</span>
-
-<span class="k">learned_rules:</span>
-  <span class="k">evaluation_gate:</span> <span class="v">standard</span>
-  <span class="k">replay_window:</span> <span class="v">10</span>
-  <span class="k">match_threshold_pct:</span> <span class="v">70</span>
-  <span class="k">reviewer_signoffs:</span> <span class="v">1</span>
-  <span class="k">rollback_window_days:</span> <span class="v">7</span></div>
+   <p class="lede">Here's the generated <code>instance.yaml</code>, built live from the picks you made in steps 1–6. Nothing has been deployed yet. Commit this to git, then run <code>${cliCmd}</code> when ready.</p>
+   ${missingBox}
+   <div class="yaml" style="margin-top: 14px;">${highlighted}</div>
    <p style="margin-top: 20px;">
-     <button class="btn primary" style="font-size: 14px; padding: 10px 24px;" onclick="state.launched=true; state.adminTab='overview'; render();">Launch instance →</button>
-     <button class="btn" style="margin-left: 8px;">Download config (.yaml)</button>
-     <button class="btn" style="margin-left: 8px;">Edit a step</button>
-   </p>`;
+     <button class="btn primary" style="${launchStyle}" ${launchHandler} ${launchDisabled ? 'disabled' : ''}>Launch instance →</button>
+     <button class="btn" style="margin-left: 8px;" onclick="downloadYaml()">Download config (.yaml)</button>
+     <button class="btn" style="margin-left: 8px;" onclick="state.cur=1; render();">Edit a step</button>
+   </p>
+   <div style="margin-top: 22px; padding: 14px 18px; background: #f3f4f6; border-radius: 6px; font-size: 12px; line-height: 1.55;">
+     <div style="font-weight: 700; color: #1E2761; margin-bottom: 6px;">🚀 Then run this on your laptop</div>
+     <pre style="margin: 0; padding: 10px 12px; background: #1f2937; color: #d1d5db; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; overflow-x: auto;">$ flyctl auth login
+$ ./bin/kf-launch ${state.cfg.instanceName || '<instance>'}.yaml</pre>
+     <div style="color: #4b5563; margin-top: 8px;">
+       The CLI reads the yaml, templates a per-instance <code>fly.toml</code>, creates the Fly app + Neo4j companion,
+       sets secrets, deploys, and prints the URL. Takes ~2–3 minutes end-to-end.
+     </div>
+   </div>`;
 }
 
 // ----- screen orchestration -----
