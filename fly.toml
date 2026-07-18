@@ -25,9 +25,12 @@ primary_region = 'iad'
 [http_service]
   internal_port = 8001
   force_https = true
+  # Keep at least one machine warm so the /launcher page and every /api
+  # call return in <500 ms instead of triggering a ~12 s cold start.
+  # Cost trade: one shared-1x machine running 24/7 (~$5/mo on Fly).
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]

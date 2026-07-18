@@ -175,30 +175,12 @@
 </style>
 </head>
 <body>
-<!-- Pre-parse loading screen. Renders IMMEDIATELY (before the 163KB
-     script block parses) so the user sees feedback within one paint
-     rather than a blank white page. Hidden by render() the moment the
-     first screen mounts. Kept inline (no external CSS) so it works
-     even if the rest of the page fails to load. -->
-<div id="pf-boot">
-  <div class="pf-boot-spinner"></div>
-  <div class="pf-boot-title">Loading launcher…</div>
-  <div class="pf-boot-sub">Parsing config screens · this usually takes 1–2 seconds</div>
-</div>
-<style>
-  #pf-boot { position: fixed; inset: 0; z-index: 9999;
-             display: flex; flex-direction: column; align-items: center; justify-content: center;
-             background: #f3f4f6; color: #1E2761;
-             font-family: Calibri, "Helvetica Neue", Arial, sans-serif;
-             transition: opacity 220ms ease; }
-  #pf-boot.hide { opacity: 0; pointer-events: none; }
-  .pf-boot-spinner { width: 42px; height: 42px; border-radius: 50%;
-                     border: 4px solid #d1d5db; border-top-color: #4f46e5;
-                     animation: pf-boot-spin 900ms linear infinite; }
-  @keyframes pf-boot-spin { to { transform: rotate(360deg); } }
-  .pf-boot-title { margin-top: 18px; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
-  .pf-boot-sub   { margin-top: 4px;  font-size: 12px; color: #6b7280; }
-</style>
+<!-- Loading spinner lives in the shell HTML served by GET /launcher
+     (backend/main.py). This body is fetched by that shell and injected
+     into #stage, at which point the wireframe's own render() takes
+     over. When the wireframe is opened directly as a file:// URL, the
+     shell isn't involved — the frame renders immediately with no
+     spinner, which is fine for that non-network use case. -->
 <div class="frame">
   <div class="topbar">
     <div class="brand">TCS · KNOWLEDGE FABRIC · INSTANCE LAUNCHER</div>
@@ -304,8 +286,9 @@ function toggleCfg(path) {
   obj[key] = !obj[key];
   render();
 }
-window.setCfg = setCfg;
-window.toggleCfg = toggleCfg;
+// setCfg/toggleCfg exposed at file bottom alongside every other
+// inline-onclick target — see the single Object.assign(window, ...)
+// block above render().
 
 // Region label → Fly PRIMARY_REGION code so the CLI can `fly deploy`
 // straight from the yaml without a second lookup table.
@@ -950,7 +933,7 @@ function decideCase(caseId, kind, rationale) {
   state.reviewerToast = { decision: kind, caseId: c.id };
   render();
 }
-window.decideCase = decideCase;
+// (window export handled at file bottom)
 
 // Operator prompt-composer submit. Adds a fake case to
 // state.operatorCases and clears the composer. New cases render as
@@ -970,7 +953,7 @@ function operatorSubmit() {
     if (hit) { hit.phase = 'review_ready'; render(); }
   }, 1500);
 }
-window.operatorSubmit = operatorSubmit;
+// (window export handled at file bottom)
 
 // Generic 'action recorded' toast used by admin/config buttons that
 // would call a real API in production (Add class, Bump pack, Export
@@ -987,7 +970,7 @@ function comingSoon(msg) {
     }
   }, 2400);
 }
-window.comingSoon = comingSoon;
+// (window export handled at file bottom)
 
 function renderComingSoonToast() {
   const t = state.comingSoonToast;
@@ -2311,7 +2294,7 @@ function downloadYaml(filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-window.downloadYaml = downloadYaml;
+// (window export handled at file bottom)
 
 // Fired when the user clicks Launch. Saves the yaml locally (so the
 // CLI has something to read) AND swaps the launcher chrome for the
@@ -2328,7 +2311,17 @@ function doLaunch() {
   state.adminTab = 'overview';
   render();
 }
-window.doLaunch = doLaunch;
+// Every helper referenced from an inline onclick="..." attribute
+// must live on `window` so the HTML parser can find it. Consolidated
+// here rather than sprinkled next to each definition — one file-wide
+// export table is easier to audit than seven scattered assignments.
+Object.assign(window, {
+  setCfg, toggleCfg,           // launcher config screens (steps 1–6)
+  downloadYaml, doLaunch,      // Review screen actions
+  decideCase, undoDecision,    // Reviewer inbox flow
+  operatorSubmit,              // Operator console prompt composer
+  comingSoon,                  // Admin buttons that would call a real API in production
+});
 
 function screenReview() {
   const missing = validateCfg(state.cfg);
@@ -2427,16 +2420,6 @@ function render() {
   };
 }
 render();
-
-// Dismiss the pre-parse loading screen once the first render lands.
-// Small fadeout so the transition isn't jarring; then hard-remove so
-// it can't accidentally re-appear via z-index shenanigans downstream.
-(function dismissBoot() {
-  const boot = document.getElementById('pf-boot');
-  if (!boot) return;
-  boot.classList.add('hide');
-  setTimeout(() => boot.remove(), 260);
-})();
 
 // Esc cancels the reviewer's auto-advance or closes the rationale modal.
 document.addEventListener('keydown', (e) => {

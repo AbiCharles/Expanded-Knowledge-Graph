@@ -15,7 +15,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from tcs_hitl_context import FakeLLMClient, build_llm_client_from_env
@@ -181,6 +181,92 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Tiny (~2 KB) shell served at GET /launcher. Renders a centered spinner
+# on the FIRST paint, then fetch()es /launcher/frame (the 165 KB wireframe
+# body) and swaps its <body> markup + <script> execution into the page.
+# Split out so the user sees feedback in <100 ms even during a cold-start
+# request that takes several seconds to hand back the full wireframe.
+_LAUNCHER_SHELL_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loading launcher · TCS Knowledge Fabric</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%;
+               font-family: Calibri, "Helvetica Neue", Arial, sans-serif;
+               background: #f3f4f6; color: #1E2761; }
+  #shell { position: fixed; inset: 0; display: flex; flex-direction: column;
+           align-items: center; justify-content: center;
+           transition: opacity 220ms ease; }
+  #shell.hide { opacity: 0; pointer-events: none; }
+  .spinner { width: 42px; height: 42px; border-radius: 50%;
+             border: 4px solid #d1d5db; border-top-color: #4f46e5;
+             animation: spin 900ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .title  { margin-top: 18px; font-size: 15px; font-weight: 600; }
+  .sub    { margin-top: 4px;  font-size: 12px; color: #6b7280; max-width: 360px;
+            text-align: center; padding: 0 24px; line-height: 1.5; }
+  #err    { max-width: 420px; padding: 14px 18px; background: #fef2f2;
+            border: 1.5px solid #dc2626; border-radius: 6px;
+            font-size: 12px; color: #7f1d1d; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="shell">
+  <div class="spinner"></div>
+  <div class="title">Loading launcher…</div>
+  <div class="sub">Fetching the 6-step config wizard · usually 1–2 seconds after the machine wakes</div>
+</div>
+<div id="stage"></div>
+<script>
+(async function boot() {
+  // Fetch the wireframe body. On a cold Fly start this can take up to
+  // ~15 s while the machine boots; the spinner keeps the user informed
+  // during that wait. Once the response lands we extract the <body>
+  // markup and execute any inline <script> tags manually (setting
+  // innerHTML does NOT run scripts).
+  try {
+    const res = await fetch('/launcher/frame', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const html = await res.text();
+    const doc  = new DOMParser().parseFromString(html, 'text/html');
+
+    // Hoist <style> + <link> from the fetched <head> so the wireframe
+    // renders with its own CSS instead of inheriting the shell's.
+    doc.head.querySelectorAll('style, link[rel="stylesheet"]').forEach(function (n) {
+      document.head.appendChild(n);
+    });
+
+    // Swap in the wireframe's <body> children.
+    const stage = document.getElementById('stage');
+    while (doc.body.firstChild) stage.appendChild(doc.body.firstChild);
+
+    // Execute inline scripts. innerHTML-inserted scripts don't run;
+    // we clone each into a fresh <script> so the browser picks them up.
+    stage.querySelectorAll('script').forEach(function (old) {
+      const s = document.createElement('script');
+      if (old.src) s.src = old.src;
+      else s.textContent = old.textContent;
+      old.replaceWith(s);
+    });
+
+    // Fade the shell spinner out; wireframe takes over.
+    const shell = document.getElementById('shell');
+    shell.classList.add('hide');
+    setTimeout(function () { shell.remove(); }, 260);
+  } catch (err) {
+    document.getElementById('shell').innerHTML =
+      '<div id="err"><b>Couldn\\u2019t load the launcher.</b><br>' + err.message +
+      '<br><br>The fabric machine may be cold-starting. Please refresh in a few seconds.</div>';
+  }
+})();
+</script>
+</body>
+</html>
+"""
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="HITL Context Framework", version="0.1.0", lifespan=lifespan)
     # CORS — open to all origins since the Fly API is hit from external
@@ -219,18 +305,26 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
-    # Static-serve the launcher wireframe at /launcher (no auth, no
-    # frontend routing). The wireframe is a self-contained HTML that
-    # produces an instance.yaml the operator can hand to bin/kf-launch.
-    # Copied into the Docker image at repo_root/docs/launcher-wireframe.html
-    # by the Dockerfile. NO_CACHE so an updated wireframe propagates
-    # on the next hard-refresh without a browser cache flush.
+    # Launcher wireframe at /launcher (no auth). The wireframe itself
+    # is 165 KB of self-contained HTML; instead of shipping that in one
+    # blob (during which the browser tab shows a blank page), we serve
+    # a ~2 KB shell here that paints a loading spinner in the first
+    # frame, then fetches the body from /launcher/frame and swaps it
+    # into the DOM. Cold-start latency now shows as an animated spinner
+    # instead of a white void.
+    #
+    # File lives at repo_root/docs/launcher-wireframe.html and is
+    # copied into the image by the Dockerfile.
     launcher_path = (
         Path(__file__).resolve().parent.parent / "docs" / "launcher-wireframe.html"
     )
     if launcher_path.is_file():
-        @app.get("/launcher")
-        def _launcher():
+        @app.get("/launcher", response_class=HTMLResponse)
+        def _launcher_shell() -> str:
+            return _LAUNCHER_SHELL_HTML
+
+        @app.get("/launcher/frame")
+        def _launcher_frame() -> FileResponse:
             return FileResponse(
                 launcher_path,
                 media_type="text/html",
