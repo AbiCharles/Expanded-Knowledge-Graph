@@ -266,6 +266,17 @@ const state = {
   comingSoonToast: null,
   // === launcher config the user picks in steps 1–6 ===
   cfg: JSON.parse(JSON.stringify(CONFIG_DEFAULTS)),
+  // === post-launch first-run state ===
+  // True from doLaunch() until the admin either dismisses the launch
+  // summary panel OR completes the smoke-test. Drives the launch
+  // banner + health strip + checklist that render on top of
+  // Admin/Overview. Cleared on a re-visit so returning admins see the
+  // normal ops dashboard, not the first-run onboarding.
+  launchJustHappened: false,
+  launchedAt: null,          // ISO timestamp stamped by doLaunch()
+  smokeTestSubmitted: false, // flips true when 'Run smoke test' fires
+  urlCopied: false,          // 'Share operator URL' checklist item
+  checklistDismissed: false, // manual dismiss of the launch summary
 };
 
 // Convenience — set state.cfg[k]=v then re-render. Used by every wired
@@ -451,12 +462,17 @@ function renderLaunchedInstance() {
     view === 'reviewer' ? `Reviewer mode — ${pendingCount} case(s) awaiting your decision.` :
     'Admin / build area — only admins reach this view.';
 
+  // Topbar breadcrumb reflects what the launcher actually configured.
+  // Falls back to defaults only if the wizard was skipped in some odd
+  // way that left cfg blank (validation should prevent that, but
+  // defensive here so the topbar never renders as `undefined`).
+  const instanceName = state.cfg.instanceName || 'unnamed-instance';
   return `
     <div class="li-topbar">
       <div style="display:flex; align-items:center; gap:12px;">
         <b>TCS · KNOWLEDGE FABRIC</b>
         <span style="opacity:0.5;">/</span>
-        <span style="opacity:0.85;">hemlock-shipping-prod</span>
+        <span style="opacity:0.85;">${instanceName}</span>
         <span class="pill" style="background:#dcfce7; color:#166534; font-size:9px;">LIVE</span>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
@@ -1256,7 +1272,268 @@ function emptyChecklist(n, title, status, adminTab) {
 // ============================================================
 // Populated admin tabs — Shipping pack v4 already loaded
 // ============================================================
+// Admin/Overview has two modes:
+//   1. First-run summary (state.launchJustHappened) — shows a launch
+//      banner, health strip, verify-end-to-end card, and "first 5
+//      minutes" checklist. This is where admin lands right after the
+//      wizard.
+//   2. Ops dashboard (default) — stat cards + recent activity + admin
+//      actions. What admins see on every subsequent visit.
+// tabHomePopulated dispatches between the two.
 function tabHomePopulated() {
+  const showLaunchSummary =
+    state.launchJustHappened && !state.checklistDismissed;
+  const summary = showLaunchSummary ? renderLaunchSummaryPanel() : '';
+  return summary + renderOpsDashboard();
+}
+
+// ---- 1. First-run launch summary panel ----
+function renderLaunchSummaryPanel() {
+  return `
+    <div style="margin-bottom: 22px;">
+      ${renderLaunchBanner()}
+      ${renderHealthStrip()}
+      ${renderVerifyCard()}
+      ${renderFirstRunChecklist()}
+      <div style="text-align:right; margin-top:8px;">
+        <a class="li-link" style="font-size:11px;"
+           onclick="state.checklistDismissed=true; render();">
+          Dismiss · already familiar with the fabric →
+        </a>
+      </div>
+    </div>
+    <hr style="border:0; border-top:1px solid #e5e7eb; margin: 22px 0;">`;
+}
+
+// Compute the instance's deployed URL from the wizard state. Matches
+// what bin/kf-launch actually creates (<name>.fly.dev).
+function launchedUrl() {
+  return `https://${state.cfg.instanceName || 'instance'}.fly.dev`;
+}
+
+function renderLaunchBanner() {
+  const name = state.cfg.instanceName || 'unnamed-instance';
+  const customer = state.cfg.customerName || 'your organisation';
+  const url = launchedUrl();
+  const region = (REGION_TO_FLY[state.cfg.region] || {}).label || state.cfg.region;
+  const at = state.launchedAt ? new Date(state.launchedAt).toLocaleTimeString() : '';
+  return `
+    <div style="background: linear-gradient(180deg, #dcfce7 0%, #f0fdf4 100%);
+                border: 1.5px solid #16a34a; border-radius: 8px;
+                padding: 18px 22px; display: flex; align-items: center; gap: 18px;">
+      <div style="width: 42px; height: 42px; border-radius: 50%; background: #16a34a;
+                  color: #fff; display: flex; align-items: center; justify-content: center;
+                  font-size: 22px; font-weight: 700; flex-shrink: 0;">✓</div>
+      <div style="flex: 1;">
+        <div style="font-size: 10px; font-weight: 700; color: #15803d;
+                    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;">
+          Instance live · launched ${at}
+        </div>
+        <div style="font-family: Georgia, serif; font-size: 20px; font-weight: 600; color: #15803d;">
+          <b>${name}</b> is live for <b>${customer}</b>
+        </div>
+        <div style="font-size: 12px; color: #15803d; margin-top: 4px;">
+          <code style="background: rgba(255,255,255,0.6); padding: 2px 8px; border-radius: 3px;">${url}</code>
+          · ${region}
+        </div>
+      </div>
+      <button class="small-btn" style="background: #16a34a; color: #fff; border-color: #16a34a; font-weight: 600;"
+              onclick="navigator.clipboard.writeText('${url}'); state.urlCopied=true; comingSoon('Instance URL copied to clipboard'); render();">
+        📋 Copy URL
+      </button>
+    </div>`;
+}
+
+// ---- 2. Health strip (six traffic-light chips) ----
+function renderHealthStrip() {
+  const c = state.cfg;
+  const isCustom = c.pack === 'custom';
+  const chips = [
+    healthChip('Neo4j graph',      c.connectors.neo4j ? 'green' : 'grey',
+                c.connectors.neo4j ? 'bolt+s reachable · seeded' : 'not enabled', 'ontology'),
+    healthChip('Ontology + pack',  isCustom ? 'amber' : 'green',
+                isCustom ? 'Blank slate — author scenarios' : `${c.pack} pack loaded`, 'ontology'),
+    healthChip('Connectors',       Object.values(c.connectors).some(Boolean) ? 'green' : 'red',
+                Object.values(c.connectors).filter(Boolean).length + ' enabled', 'ontology'),
+    healthChip('JWT + admin auth', 'green', 'secrets set by launcher', 'reviewers'),
+    healthChip('LLM configured',   'green', 'OpenAI key provisioned', 'ontology'),
+    healthChip('First case run',   state.smokeTestSubmitted ? 'green' : 'grey',
+                state.smokeTestSubmitted ? 'smoke test complete' : 'not yet · run below', null),
+  ];
+  return `
+    <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+      ${chips.join('')}
+    </div>`;
+}
+
+function healthChip(label, color, sub, deepLink) {
+  // grey/amber/red/green → pill colors + a subtle left border so the
+  // status reads at a glance even if the user is colour-vision blind.
+  const dotColor  = { green: '#16a34a', amber: '#d97706', red: '#dc2626', grey: '#9ca3af' }[color];
+  const bgTint    = { green: '#f0fdf4', amber: '#fffbeb', red: '#fef2f2', grey: '#f9fafb' }[color];
+  const borderCol = { green: '#86efac', amber: '#fbbf24', red: '#fca5a5', grey: '#e5e7eb' }[color];
+  const click = deepLink
+    ? `onclick="state.launchedView='admin'; state.adminTab='${deepLink}'; render();"`
+    : '';
+  const cursor = deepLink ? 'pointer' : 'default';
+  return `
+    <div style="padding: 10px 12px; background: ${bgTint}; border: 1px solid ${borderCol};
+                border-left: 3px solid ${dotColor}; border-radius: 4px; cursor: ${cursor};"
+         ${click}>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;"></span>
+        <span style="font-size: 12px; font-weight: 600; color: #1f2937;">${label}</span>
+      </div>
+      <div style="font-size: 11px; color: #6b7280; margin-top: 3px; padding-left: 14px;">${sub}</div>
+    </div>`;
+}
+
+// ---- 3. Verify end-to-end card (primary CTA) ----
+function renderVerifyCard() {
+  const isCustom = state.cfg.pack === 'custom';
+  const starterPrompt = smokeTestPrompt();
+  const disabled = isCustom;
+  const btnStyle = disabled
+    ? 'background: #cbd5e1; color: #64748b; border-color: #cbd5e1; cursor: not-allowed;'
+    : 'background: #4f46e5; color: #fff; border-color: #4f46e5;';
+  const btnAttrs = disabled
+    ? 'disabled title="Blank-slate packs have no scenarios yet — draft one first"'
+    : `onclick="runSmokeTest()"`;
+  const done = state.smokeTestSubmitted && state.operatorCases.length > 0;
+  const lastCase = state.operatorCases[0];
+  const progress = done ? `
+    <div style="margin-top: 14px; padding: 12px 14px; background: #f0fdf4; border: 1px solid #86efac;
+                border-radius: 6px; font-size: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <code style="color: #166534; font-size: 11px;">${lastCase.id}</code>
+        <span style="flex: 1; color: #1f2937;">${lastCase.title}</span>
+        <span class="pill" style="background: ${lastCase.phase === 'binding' ? '#fef3c7' : '#dcfce7'};
+                                  color: ${lastCase.phase === 'binding' ? '#92400e' : '#166534'}; font-size: 9px;">
+          ${lastCase.phase === 'binding' ? '⟳ BINDING…' : '✓ REVIEW READY'}
+        </span>
+      </div>
+      ${lastCase.phase === 'review_ready' ? `
+        <div style="margin-top: 8px; font-size: 11px; color: #166534;">
+          Smoke test passed. Switch to <a class="li-link" onclick="state.launchedView='reviewer'; state.reviewerTab='inbox'; render();">Reviewer mode</a> to see the case in the inbox.
+        </div>` : ''}
+    </div>` : '';
+  return `
+    <div style="margin-top: 16px; padding: 18px 20px; background: #ffffff; border: 2px solid #4f46e5;
+                border-radius: 8px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.10);">
+      <div style="font-size: 10px; font-weight: 700; color: #4f46e5; text-transform: uppercase;
+                  letter-spacing: 0.08em; margin-bottom: 6px;">Verify your instance</div>
+      <div style="font-family: Georgia, serif; font-size: 17px; font-weight: 600; color: #1E2761; margin-bottom: 4px;">
+        Run an end-to-end smoke test
+      </div>
+      <div style="font-size: 12.5px; color: #4b5563; line-height: 1.55; margin-bottom: 14px;">
+        Fires a starter prompt against the pack. The case will bind its stages, produce a proposal,
+        and land in the Reviewer inbox — proving connectors + ontology + scenarios + review routing
+        all work end-to-end before anyone else touches the instance.
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <button class="small-btn" style="${btnStyle} padding: 9px 18px; font-size: 13px; font-weight: 600;" ${btnAttrs}>
+          ▶ Run smoke test
+        </button>
+        <code style="font-size: 11px; color: #6b7280; background: #f3f4f6; padding: 4px 8px; border-radius: 3px; flex: 1;">${starterPrompt}</code>
+      </div>
+      ${progress}
+    </div>`;
+}
+
+// Starter prompt per pack. Matches a scenario the pack ships so the
+// case actually binds instead of bouncing on interpretation.
+function smokeTestPrompt() {
+  return {
+    shipping:   'Onboard Hemlock Precision Castings as tier-1 supplier',
+    legal:      'Review NDA draft for Apex Holdings',
+    healthcare: 'Prior-auth review for Patient 43102',
+    finance:    'Reconcile invoice INV-88213 exception',
+    hr:         'Review promotion decision for E-9812',
+    custom:     '(draft your first scenario to enable this)',
+  }[state.cfg.pack] || '(no starter prompt)';
+}
+
+function runSmokeTest() {
+  // Pipe through the existing operator flow so the case list, phase
+  // transitions, and Reviewer-inbox handoff all reuse code paths that
+  // are already wired.
+  state.operatorPrompt = smokeTestPrompt();
+  operatorSubmit();
+  state.smokeTestSubmitted = true;
+  // Also drop the case into REVIEWER_INBOX so switching to Reviewer
+  // mode surfaces it immediately (the operatorSubmit case list is
+  // Admin-Overview-local; the reviewer inbox is a separate array).
+  const c = state.operatorCases[0];
+  if (c) {
+    REVIEWER_INBOX.unshift({
+      id: c.id, scenario: 'SC-PP-008', title: c.title,
+      age: 'just now', sla: '4h', slaPill: 'green', by: 'system.smoketest',
+    });
+  }
+  render();
+}
+window.runSmokeTest = runSmokeTest;
+
+// ---- 4. First 5 minutes checklist ----
+function renderFirstRunChecklist() {
+  const isCustom = state.cfg.pack === 'custom';
+  const items = [
+    checklistItem(true,  'Instance configured', 'You just finished the 6-step wizard.', null),
+    checklistItem(!isCustom, 'Domain pack installed',
+      isCustom ? 'Blank slate — draft your first scenario.' : `${state.cfg.pack} pack ready with starter scenarios.`,
+      isCustom ? { label: 'Draft scenario →', tab: 'scenarios' } : null),
+    checklistItem(state.smokeTestSubmitted, 'Submit a test prompt',
+      state.smokeTestSubmitted ? 'Smoke test complete.' : 'Fires the "Run smoke test" button above.', null),
+    checklistItem(false, 'Invite a reviewer',
+      'Route decisions to a real human via IdP group.',
+      { label: 'Open reviewer settings →', tab: 'reviewers' }),
+    checklistItem(state.urlCopied, 'Share the operator URL',
+      state.urlCopied ? 'URL copied earlier.' : 'Send it to the operators who will submit cases.',
+      { label: 'Copy URL', copy: launchedUrl() }),
+    checklistItem(false, 'Review the audit log',
+      'Every decision + revision + write action lands there.',
+      { label: 'Open audit →', tab: 'audit' }),
+  ];
+  return `
+    <div style="margin-top: 18px; padding: 18px 20px; background: #f9fafb;
+                border: 1px solid #e5e7eb; border-radius: 8px;">
+      <div style="font-size: 10px; font-weight: 700; color: #1E2761; text-transform: uppercase;
+                  letter-spacing: 0.06em; margin-bottom: 12px;">First 5 minutes</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${items.join('')}
+      </div>
+    </div>`;
+}
+
+function checklistItem(done, label, sub, action) {
+  const box = done
+    ? '<span style="color: #16a34a; font-size: 16px; font-weight: 700;">✓</span>'
+    : '<span style="display: inline-block; width: 14px; height: 14px; border: 1.5px solid #9ca3af; border-radius: 3px;"></span>';
+  const titleColor = done ? '#16a34a' : '#1f2937';
+  const titleDeco = done ? 'text-decoration: line-through; opacity: 0.7;' : '';
+  let btn = '';
+  if (action && !done) {
+    if (action.copy) {
+      btn = `<button class="small-btn" style="font-size: 11px;"
+                     onclick="navigator.clipboard.writeText('${action.copy}'); state.urlCopied=true; comingSoon('URL copied'); render();">${action.label}</button>`;
+    } else if (action.tab) {
+      btn = `<button class="small-btn" style="font-size: 11px;"
+                     onclick="state.launchedView='admin'; state.adminTab='${action.tab}'; render();">${action.label}</button>`;
+    }
+  }
+  return `
+    <div style="display: flex; align-items: center; gap: 12px; padding: 6px 4px;">
+      <div style="width: 22px; flex-shrink: 0; text-align: center;">${box}</div>
+      <div style="flex: 1;">
+        <div style="font-size: 13px; font-weight: 600; color: ${titleColor}; ${titleDeco}">${label}</div>
+        <div style="font-size: 11.5px; color: #6b7280; margin-top: 1px;">${sub}</div>
+      </div>
+      ${btn}
+    </div>`;
+}
+
+// ---- 5. Ops dashboard (existing content — what admins see on return) ----
+function renderOpsDashboard() {
   return `
     <div style="background:#dcfce7; border:1px solid #16a34a; padding:14px 18px; border-radius:6px; margin-bottom:22px;">
       <div style="font-size:10px; font-weight:700; color:#15803d; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Pack is LIVE</div>
@@ -2308,7 +2585,19 @@ function doLaunch() {
   }
   downloadYaml();
   state.launched = true;
+  // Admin persona just finished config — land them in Admin/Overview,
+  // not Operator (was the previous default, which surfaced the wrong
+  // persona's queue and disabled every action button).
+  state.launchedView = 'admin';
   state.adminTab = 'overview';
+  // First-run flags — drive the launch summary panel rendered at the
+  // top of tabHomePopulated. Cleared once the admin either dismisses
+  // the panel or completes the smoke-test.
+  state.launchJustHappened = true;
+  state.launchedAt = new Date().toISOString();
+  state.smokeTestSubmitted = false;
+  state.urlCopied = false;
+  state.checklistDismissed = false;
   render();
 }
 // Every helper referenced from an inline onclick="..." attribute
@@ -2320,6 +2609,7 @@ Object.assign(window, {
   downloadYaml, doLaunch,      // Review screen actions
   decideCase, undoDecision,    // Reviewer inbox flow
   operatorSubmit,              // Operator console prompt composer
+  runSmokeTest,                // Admin/Overview first-run verify card
   comingSoon,                  // Admin buttons that would call a real API in production
 });
 
