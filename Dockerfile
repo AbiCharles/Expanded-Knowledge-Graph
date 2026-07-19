@@ -31,6 +31,10 @@ COPY hitl-context/pyproject.toml ./hitl-context/pyproject.toml
 COPY hitl-context/src/ ./hitl-context/src/
 COPY hitl-context/docs/ ./hitl-context/docs/
 COPY backend/ ./backend/
+# Local RCA vision/RAG service — runs as a co-process on :8000 (started by
+# docker-entrypoint.sh) so the fabric's rca_vision / rca_knowledge http
+# sources resolve in-cluster. Point base_url at a real RCA_agent to swap it.
+COPY rca_service/ ./rca_service/
 # Ship the Neo4j seed (cypher + python applier) alongside the backend so
 # operators can re-seed the supply-chain graph from inside the container
 # when Aeronova / SUP-021 entities are missing. Run from /app:

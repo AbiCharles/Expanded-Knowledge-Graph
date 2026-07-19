@@ -119,14 +119,26 @@ export function ParetoChart({ data }: { data: RcaPareto }) {
           ))}
           {/* cumulative line */}
           <polyline points={linePts} className="pc-cum-line" />
-          {rows.map((r, i) => (
-            <g key={`pt-${i}`}>
-              <circle cx={cx(i)} cy={y(r.cum)} r={3.5} className="pc-cum-dot" />
-              <text x={cx(i)} y={y(r.cum) - 8} className="pc-cum-val" textAnchor="middle">
-                {Math.round(r.cum)}%
-              </text>
-            </g>
-          ))}
+          {rows.map((r, i) => {
+            // The first point's cumulative == its bar %, so its dot sits on the
+            // bar top and its label would collide with the bar-value label.
+            // Push the cumulative label clear of the bar label only when the
+            // dot is within ~16px of the bar top (i.e. the first bar).
+            const nearBarTop = Math.abs(y(r.cum) - y(r.pct)) < 16;
+            return (
+              <g key={`pt-${i}`}>
+                <circle cx={cx(i)} cy={y(r.cum)} r={3.5} className="pc-cum-dot" />
+                <text
+                  x={cx(i)}
+                  y={y(r.cum) - (nearBarTop ? 22 : 9)}
+                  className="pc-cum-val"
+                  textAnchor="middle"
+                >
+                  {Math.round(r.cum)}%
+                </text>
+              </g>
+            );
+          })}
           {/* axes */}
           <line x1={m.left} y1={m.top} x2={m.left} y2={m.top + plotH} className="pc-axis" />
           <line x1={m.left} y1={m.top + plotH} x2={m.left + plotW} y2={m.top + plotH} className="pc-axis" />
@@ -241,6 +253,15 @@ export function FishboneDiagram({
           <strong>Primary cause ({data.confidence}):</strong> {data.primary_root_cause}
         </div>
       )}
+      <div className="rca-chart-help">
+        <strong>How to read it:</strong> the horizontal spine points to the{" "}
+        <em>effect</em> (the defect, on the right). Each angled branch is a cause{" "}
+        <em>category</em> — Machines, Methods, Materials, Measurement, People,
+        Environment. The bullets on a branch are the specific causes the analysis
+        attributed to that category; an empty branch had no supporting evidence.
+        The <em>primary cause</em> is the single most likely driver across all
+        categories.
+      </div>
     </div>
   );
 }
@@ -289,7 +310,12 @@ export function FiveWhyChain({ data }: { data: RcaFiveWhy }) {
 // =============================================================================
 export function VisualFinding({ analysis }: { analysis: RcaAnalysis }) {
   const vision = analysis.vision;
-  const hasImage = !!vision?.image_url;
+  // Prefer the inline SVG (fetched server-side → data URI, works everywhere);
+  // fall back to a direct image_url, then the placeholder.
+  const imgSrc = vision?.image_svg
+    ? `data:image/svg+xml;utf8,${encodeURIComponent(vision.image_svg)}`
+    : vision?.image_url || "";
+  const hasImage = !!imgSrc;
   const visualNode = analysis.evidence_graph.nodes.find((n) => n.node_type === "visual");
   const finding =
     vision?.observations || visualNode?.description || "C-scan visual finding";
@@ -303,7 +329,7 @@ export function VisualFinding({ analysis }: { analysis: RcaAnalysis }) {
           {hasImage ? (
             <img
               className="rca-visual-img"
-              src={vision!.image_url as string}
+              src={imgSrc}
               alt={`C-scan for ${analysis.part_id}`}
             />
           ) : (
@@ -358,6 +384,14 @@ export function VisualFinding({ analysis }: { analysis: RcaAnalysis }) {
             {analysis.part_id} · {analysis.defect_type}
           </div>
         </div>
+      </div>
+      <div className="rca-chart-help">
+        <strong>How to read a C-scan:</strong> it is an ultrasonic amplitude map
+        of the part. Cool colours (blue/teal) are healthy laminate where the sound
+        passes cleanly through; warm colours (amber → red) mark where the return
+        signal drops — an internal flaw. The red region here is the delamination.
+        The strip on the right is the amplitude scale (low → high); the axes are
+        the scan position in millimetres.
       </div>
     </div>
   );

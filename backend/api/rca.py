@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,29 @@ router = APIRouter(prefix="/rca", tags=["rca"])
 class RcaAnalysisRequest(BaseModel):
     case_id: str = Field("", description="Case whose scenario carries the part_id + evidence")
     part_id: str = Field("", description="Override the part_id from the case scenario")
+
+
+def _rca_vision_base(state) -> str:
+    """The rca_vision http source's base_url (points at the RCA service)."""
+    for spec in state.data_sources.specs():
+        if spec.id == "rca_vision":
+            return (spec.config.get("base_url") or "").rstrip("/")
+    return "http://localhost:8000"
+
+
+def _fetch_cscan_svg(state, part_id: str) -> str | None:
+    """Fetch the C-scan SVG server-side and return it inline, so the browser
+    renders it as a data URI (works cross-origin and on Fly without exposing
+    the internal RCA service or needing an authed image request)."""
+    base = _rca_vision_base(state)
+    if not base:
+        return None
+    try:
+        r = httpx.get(f"{base}/api/cscan/{part_id}.svg", timeout=6.0)
+        r.raise_for_status()
+        return r.text
+    except httpx.HTTPError:
+        return None
 
 
 @router.post("/analysis")
@@ -81,6 +105,7 @@ async def rca_analysis(
             p = f.payload
             vision = {
                 "image_url": p.get("image_url"),
+                "image_svg": _fetch_cscan_svg(state, action_payload.get("part_id", "")),
                 "defect_type": p.get("defect_type"),
                 "severity": p.get("severity"),
                 "location": p.get("location"),

@@ -2723,6 +2723,32 @@ details[open] > .suggested-summary .suggested-chevron {
   color: #94a3b8;
 }
 .graph-type-detail-label { font-size: 12px; line-height: 1.35; color: #1e293b; }
+
+/* Evidence graph: floating class-spec panel shown when a node is clicked. */
+.graph-class-detail {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 320px;
+  max-height: 72%;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid var(--rule, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15,23,42,0.14);
+  z-index: 6;
+  padding: 4px 10px 10px;
+}
+.graph-class-detail-eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  padding: 8px 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .graph-modal-stats-right {
   display: flex;
   align-items: center;
@@ -9239,6 +9265,19 @@ details[open] > .suggested-summary .suggested-chevron {
   color: #64748b;
   margin-bottom: 16px;
 }
+/* "How to read it" explainer under a chart. */
+.rca-chart-help {
+  margin-top: 16px;
+  max-width: 720px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border-left: 3px solid #94a3b8;
+  border-radius: 0 4px 4px 0;
+}
+.rca-chart-help strong { color: #1e293b; }
 
 /* Documents panel ------------------------------------------------------- */
 .rca-docs {

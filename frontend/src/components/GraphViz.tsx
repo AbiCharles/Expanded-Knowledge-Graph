@@ -531,6 +531,12 @@ export function GraphModal({
   const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
   // RCA method tabs: which analysis is showing ("graph" = the network canvas).
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("graph");
+  // RCA evidence graph: the ontology class of the node the user last clicked.
+  const [selectedNodeClass, setSelectedNodeClass] = useState<{
+    ontologyId: string;
+    className: string;
+    nodeLabel: string;
+  } | null>(null);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
   const [selectedClassFacts, setSelectedClassFacts] = useState<SelectedClassFacts | null>(null);
@@ -577,9 +583,9 @@ export function GraphModal({
 
   const elements = useMemo(() => {
     if (precomputed) return precomputed;
-    if (rawNodes && rawEdges) return toCyElements(rawNodes, rawEdges, hidden);
+    if (rawNodes && rawEdges) return toCyElements(rawNodes, rawEdges, hidden, typeTabs);
     return [];
-  }, [precomputed, rawNodes, rawEdges, hidden]);
+  }, [precomputed, rawNodes, rawEdges, hidden, typeTabs]);
 
   // Close on Escape.
   useEffect(() => {
@@ -961,6 +967,40 @@ export function GraphModal({
     });
   }, [selectedNodeType, elements.length, cyReadyTick, layout]);
 
+  // RCA evidence graph — clicking a node reveals its manufacturing_rca ontology
+  // class (name + description + attributes) in a floating panel.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !typeTabs) return;
+    const onNode = (evt: any) => {
+      const n = evt.target;
+      const ont = n.data("ontology");
+      const cls = n.data("ontologyClass");
+      if (ont && cls) {
+        setSelectedNodeClass({
+          ontologyId: ont,
+          className: cls,
+          nodeLabel: n.data("label") || n.id(),
+        });
+      }
+    };
+    const onBg = (evt: any) => {
+      if (evt.target === cy) setSelectedNodeClass(null);
+    };
+    cy.on("tap", "node", onNode);
+    cy.on("tap", onBg);
+    return () => {
+      cy.removeListener("tap", "node", onNode);
+      cy.removeListener("tap", onBg);
+    };
+  }, [typeTabs, cyReadyTick, elements.length, analysisTab]);
+
+  // Clear per-tab selections when switching method tabs.
+  useEffect(() => {
+    setSelectedNodeClass(null);
+    setSelectedNodeType(null);
+  }, [analysisTab]);
+
   // Double-click any colored pathway node to surface the downstream
   // program exposure in the side legend. Uses a manual lastTap-timing
   // detector (same pattern as attachEvidenceMapBehaviour) instead of
@@ -1317,6 +1357,18 @@ export function GraphModal({
                       </div>
                     ))}
                 </div>
+              </div>
+            )}
+            {typeTabs && selectedNodeClass && (
+              <div className="graph-class-detail">
+                <div className="graph-class-detail-eyebrow">
+                  {selectedNodeClass.nodeLabel}
+                </div>
+                <ClassDetailsPanel
+                  className={selectedNodeClass.className}
+                  ontologyId={selectedNodeClass.ontologyId}
+                  onDismiss={() => setSelectedNodeClass(null)}
+                />
               </div>
             )}
           </div>
@@ -2696,6 +2748,7 @@ function toCyElements(
   nodes: ApiNode[],
   edges: ApiEdge[],
   hidden: Set<GraphFilterType>,
+  wrap = false,
 ): CyElement[] {
   const out: CyElement[] = [];
   const dropped = new Set<string>();
@@ -2704,14 +2757,20 @@ function toCyElements(
       dropped.add(n.id);
       continue;
     }
+    // Evidence graph (wrap): keep the full name and let cytoscape wrap it;
+    // other graphs keep the compact single-line label.
+    const classes = ["graph-node", `accent-${n.accent || "default"}`, `type-${n.type}`];
+    if (wrap) classes.push("cy-wrap");
     out.push({
       data: {
         id: n.id,
-        label: shortenLabel(n.label, 24),
+        label: shortenLabel(n.label, wrap ? 90 : 24),
         nodeType: n.type,
         accent: n.accent || "default",
+        ontology: n.ontology || "",
+        ontologyClass: n.ontology_class || "",
       },
-      classes: ["graph-node", `accent-${n.accent || "default"}`, `type-${n.type}`].join(" "),
+      classes: classes.join(" "),
     });
   }
   for (const e of edges) {
@@ -3410,6 +3469,11 @@ const SHARED_INTERACTION: any[] = [
   // the selected nodes pop while their surroundings stay for context.
   { selector: "node.cy-type-dim", style: { opacity: 0.12 } },
   { selector: "edge.cy-type-dim", style: { opacity: 0.05 } },
+  // Evidence graph: wrap the full node name across lines instead of truncating.
+  {
+    selector: "node.cy-wrap",
+    style: { "text-wrap": "wrap", "text-max-width": "140px", "font-size": 8 },
+  },
 ];
 
 // =============================================================================

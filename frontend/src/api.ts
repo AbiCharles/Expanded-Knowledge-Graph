@@ -815,6 +815,10 @@ export interface GraphNode {
   label: string;
   type: string;
   accent?: "" | "anchor" | "risk" | "risk_path" | "alt";
+  // Ontology binding (evidence graph): the manufacturing_rca class this node
+  // represents, so the UI can open its class spec on click.
+  ontology?: string;
+  ontology_class?: string;
 }
 export interface GraphEdge {
   source: string;
@@ -885,6 +889,7 @@ export interface RcaEvidenceGraph {
 }
 export interface RcaVision {
   image_url: string | null;
+  image_svg?: string | null;
   defect_type: string | null;
   severity: string | null;
   location: string | null;

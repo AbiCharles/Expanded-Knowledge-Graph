@@ -38,6 +38,10 @@ class GraphNode(BaseModel):
     label: str
     type: str
     accent: str = ""   # "anchor" | "risk" | "risk_path" | "alt"
+    # Ontology binding (populated by the evidence subgraph so the UI can open
+    # the class spec when a node is clicked). Empty for the supplier subgraph.
+    ontology: str = ""
+    ontology_class: str = ""
 
 
 class GraphEdge(BaseModel):
@@ -334,6 +338,13 @@ def _evidence_style(typ: str, kind: str) -> tuple[str, str]:
     return _EVIDENCE_STYLE.get((kind or "").strip().lower(), ("Evidence", "default"))
 
 
+def _evidence_class(typ: str) -> str:
+    """The manufacturing_rca ontology class a graph node maps to."""
+    if typ in ("Part", "Defect"):
+        return typ
+    return "EvidenceNode"
+
+
 @router.post("/evidence", response_model=SubgraphResponse)
 def evidence_subgraph(
     payload: EvidenceRequest,
@@ -372,7 +383,10 @@ def evidence_subgraph(
             return ""
         display_type, accent = _evidence_style(typ, kind)
         if nid not in nodes:
-            nodes[nid] = GraphNode(id=nid, label=name or nid, type=display_type, accent=accent)
+            nodes[nid] = GraphNode(
+                id=nid, label=name or nid, type=display_type, accent=accent,
+                ontology="manufacturing_rca", ontology_class=_evidence_class(typ),
+            )
         return nid
 
     res = source.run_cypher(_EVIDENCE_CYPHER, {"part_id": part_id})

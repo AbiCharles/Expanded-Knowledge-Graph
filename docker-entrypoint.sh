@@ -72,4 +72,14 @@ if [ -d "$SEED" ]; then
   cp -Rn "$SEED"/. "$DATA"/ 2>/dev/null || true
 fi
 
+# Start the local RCA vision/RAG service (co-process) on 127.0.0.1:8000 so the
+# fabric's rca_vision / rca_knowledge http sources resolve in-cluster. The
+# vision Defect + PriorNCR/CAPARecommendation bindings and the C-scan image
+# come from here. Best-effort — the fabric degrades gracefully if it's down.
+if [ -d /app/rca_service ]; then
+  echo "[entrypoint] starting RCA vision/RAG service on :8000…"
+  (cd /app && python3 -m uvicorn rca_service.main:app --host 127.0.0.1 --port 8000 \
+      >/tmp/rca_service.log 2>&1 &)
+fi
+
 exec "$@"
