@@ -651,9 +651,12 @@ export function GraphModal({
     const cy = cyRef.current;
     if (!cy || elements.length === 0) return;
     let cancelled = false;
+    // cy.resize() BEFORE fit() re-reads the real container box — dagre node
+    // positions are size-independent, but fit()'s zoom/pan is not, so a stale
+    // container size (captured mid-modal-animation) frames the graph wrong.
     const safeFit = () => {
       if (cancelled) return;
-      try { cy.fit(undefined, 40); } catch { /* swallow */ }
+      try { cy.resize(); cy.fit(undefined, 40); } catch { /* swallow */ }
     };
     const runOne = (name: LayoutName) => {
       const l = cy.layout(layoutOptions(name));
@@ -667,12 +670,13 @@ export function GraphModal({
       try { runOne("cose"); } catch { /* swallow */ }
     }
     // Belt-and-braces: even if layoutstop fires too early or never, these
-    // timers guarantee a fit after the browser has painted. Two delays
-    // because react-cytoscapejs mount + dagre on 15+ nodes can exceed
-    // 300 ms on a cold start.
+    // timers guarantee a fit after the browser has painted. Multiple delays
+    // because react-cytoscapejs mount + dagre + the modal's open animation
+    // (scale, 220 ms) can leave the canvas still settling on a cold start.
     const t1 = setTimeout(safeFit, 300);
     const t2 = setTimeout(safeFit, 650);
-    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
+    const t3 = setTimeout(safeFit, 950);
+    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [elements.length, layout]);
 
   // Apply the Decision-pathways highlight. Runs when viewMode flips to
@@ -1371,16 +1375,29 @@ export function GraphModal({
                   // idempotent against re-invocation of the cy callback.
                   if (!cy.scratch("_kfInitLayoutDone") && cy.elements().length > 0) {
                     cy.scratch("_kfInitLayoutDone", true);
+                    // The modal opens with a scale animation, so the canvas can
+                    // still be settling to its final size when cytoscape first
+                    // captures container dimensions. dagre positions are size-
+                    // independent, but fit()'s zoom/pan is NOT — a stale size
+                    // makes the graph open zoomed/panned wrong until the user
+                    // interacts. cy.resize() re-reads the real container box
+                    // before each fit so it comes up correctly framed.
+                    const fitNow = () => {
+                      try { cy.resize(); cy.fit(undefined, 40); } catch { /* swallow */ }
+                    };
                     try {
+                      cy.resize();
                       const l = cy.layout(layoutOptions(layout));
-                      l.on("layoutstop", () => {
-                        try { cy.fit(undefined, 40); } catch { /* swallow */ }
-                      });
+                      l.on("layoutstop", fitNow);
                       l.run();
-                      // Belt-and-braces fit timers in case layoutstop fires
-                      // before the canvas finished sizing.
-                      setTimeout(() => { try { cy.fit(undefined, 40); } catch {} }, 300);
-                      setTimeout(() => { try { cy.fit(undefined, 40); } catch {} }, 650);
+                      // Re-fit after paint + after the open animation (220 ms)
+                      // has settled, across a few frames so a slow cold mount
+                      // still lands correctly framed instead of needing a
+                      // manual Refresh/Reset.
+                      requestAnimationFrame(fitNow);
+                      setTimeout(fitNow, 260);
+                      setTimeout(fitNow, 650);
+                      setTimeout(fitNow, 950);
                     } catch (e) {
                       console.warn("Initial layout failed:", e);
                     }
