@@ -21,6 +21,7 @@ import {
 } from "./components/Modals";
 import { StatusBar } from "./components/StatusBar";
 import { AgentRun } from "./components/AgentRun";
+import { WorkingModal } from "./components/WorkingModal";
 import { useCaseStream } from "./hooks/useCaseStream";
 import { CaseFull, CaseSummary, DecisionKind, ScenarioRow } from "./types";
 
@@ -291,7 +292,13 @@ export default function App() {
     onStageBound: () => refreshActive(),
     onReviewReady: () => refreshActive(),
     onAutoApproved: (data) => {
-      setModal({ kind: "auto", guardrailId: data.guardrail_id, reason: data.reason });
+      // When the WorkingModal is narrating this run it owns the completion
+      // moment (it auto-closes to the evidence view), so suppress the separate
+      // guardrail pop-up to avoid stacking two modals. The guardrail detail is
+      // still in the lineage panel.
+      if (runCaseId === null) {
+        setModal({ kind: "auto", guardrailId: data.guardrail_id, reason: data.reason });
+      }
       refreshActive();
       refreshCases();
     },
@@ -314,6 +321,11 @@ export default function App() {
   // phase event arrives via SSE.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Case whose autonomous run is currently narrated by the WorkingModal.
+  // Set the instant the operator confirms; cleared when the modal auto-closes
+  // to reveal the finished evidence view.
+  const [runCaseId, setRunCaseId] = useState<string | null>(null);
+
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
     try {
@@ -330,6 +342,10 @@ export default function App() {
 
   const onConfirm = async () => {
     if (!active) return;
+    // Pop the "agents are working" modal immediately, before the network
+    // round-trip, so there's no dead air between the click and the first
+    // stage event arriving over SSE.
+    setRunCaseId(active.case_id);
     setIsSubmitting(true);
     try {
       await api.confirmCase(active.case_id);
@@ -603,6 +619,9 @@ export default function App() {
       )}
       {modal.kind === "auto" && (
         <AutoApproveModal guardrailId={modal.guardrailId} reason={modal.reason} onClose={() => setModal({ kind: "none" })} />
+      )}
+      {runCaseId && active?.case_id === runCaseId && (
+        <WorkingModal active={active} onClose={() => setRunCaseId(null)} />
       )}
       {modal.kind === "compare" && (
         <CompareModal cases={modal.cases} onClose={() => setModal({ kind: "none" })} />

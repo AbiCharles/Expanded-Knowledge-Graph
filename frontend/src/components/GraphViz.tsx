@@ -246,6 +246,7 @@ export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
   const [desiredTab, setDesiredTab] = useState<"graph" | "report">("graph");
   const [data, setData] = useState<SubgraphResponse | null>(null);
   const [analysis, setAnalysis] = useState<RcaAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -257,9 +258,13 @@ export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
       .catch((e) => { if (!cancelled) setError((e as Error).message); });
     // Structured analysis for the method tabs (charts + documents). Best-effort:
     // a failure here just leaves the method tabs empty, the graph still works.
+    // `analysisLoading` drives the in-tab spinner so opening a chart/report tab
+    // before this resolves shows "Loading analysis…" instead of a blank stage.
+    setAnalysisLoading(true);
     getRcaAnalysis(active.case_id)
       .then((a) => { if (!cancelled) setAnalysis(a); })
-      .catch(() => { if (!cancelled) setAnalysis(null); });
+      .catch(() => { if (!cancelled) setAnalysis(null); })
+      .finally(() => { if (!cancelled) setAnalysisLoading(false); });
     return () => { cancelled = true; };
   }, [modalOpen, active.case_id]);
 
@@ -313,6 +318,7 @@ export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
           active={active}
           typeTabs
           rcaAnalysis={analysis}
+          rcaAnalysisLoading={analysisLoading}
         />
       )}
     </>
@@ -479,6 +485,9 @@ type GraphModalProps = {
   // (Evidence graph / 5-Why / Ishikawa / Pareto / Visual / Report); each
   // non-graph tab renders that method's chart / report instead of the canvas.
   rcaAnalysis?: import("../api").RcaAnalysis | null;
+  // True while the /api/rca/analysis round-trip is in flight — shows an in-tab
+  // spinner on the chart/report tabs instead of a blank stage or the raw graph.
+  rcaAnalysisLoading?: boolean;
   // Which method tab to open on (e.g. "report" from the Complete-report tile).
   initialAnalysisTab?: AnalysisTab;
 };
@@ -551,6 +560,7 @@ export function GraphModal({
   embedded = false,
   typeTabs = false,
   rcaAnalysis,
+  rcaAnalysisLoading = false,
   initialAnalysisTab = "graph",
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
@@ -1221,9 +1231,10 @@ export function GraphModal({
             >×</button>
           </div>
         </header>
-        {/* Tab strip — RCA method tabs when an analysis is attached, otherwise
-            the Network / Decision-pathways view-mode tabs. */}
-        {rcaAnalysis ? (
+        {/* Tab strip — RCA method tabs when an analysis is attached (or still
+            loading, so the tabs are visible while their content compiles),
+            otherwise the Network / Decision-pathways view-mode tabs. */}
+        {rcaAnalysis || rcaAnalysisLoading ? (
           <div className="graph-modal-tabs">
             {([
               ["graph", "Evidence graph"],
@@ -1274,12 +1285,26 @@ export function GraphModal({
             </button>
           </div>
         )}
-        {rcaAnalysis && analysisTab !== "graph" ? (
+        {analysisTab !== "graph" && rcaAnalysis ? (
           <RcaAnalysisStage
             tab={analysisTab}
             analysis={rcaAnalysis}
             subgraph={rawNodes && rawEdges ? { nodes: rawNodes, edges: rawEdges, stats: {} } : null}
           />
+        ) : analysisTab !== "graph" && rcaAnalysisLoading ? (
+          <div className="graph-modal-stage rca-loading-stage">
+            <div className="rca-loading">
+              <div className="rca-spinner" aria-hidden="true" />
+              <div className="rca-loading-title">
+                {analysisTab === "report" ? "Compiling report…" : "Loading analysis…"}
+              </div>
+              <div className="rca-loading-body">
+                {analysisTab === "report"
+                  ? "Assembling the full evidence package — visual finding, every chart, the evidence-chain diagram and the issued CAPA."
+                  : "Running the root-cause analyses (5-Why, Ishikawa, Pareto, evidence graph) across the bound evidence."}
+              </div>
+            </div>
+          </div>
         ) : (
         <div className="graph-modal-stage">
           <div className="graph-modal-canvas">

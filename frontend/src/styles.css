@@ -9542,3 +9542,187 @@ details[open] > .suggested-summary .suggested-chevron {
   .no-print { display: none !important; }
   .rca-report-break { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* =========================================================================
+   Loading states — shared spinner + in-tab analysis/report loading
+   ========================================================================= */
+@keyframes kf-spin { to { transform: rotate(360deg); } }
+
+/* In-tab spinner shown on chart/report tabs while /api/rca/analysis is in
+   flight, so switching tabs before it resolves reads as "waiting" not blank. */
+.rca-loading-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 320px;
+  background: #fafafa;
+}
+.rca-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  max-width: 440px;
+  padding: 0 32px;
+}
+.rca-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(26, 58, 107, 0.15);
+  border-top-color: var(--cyan);
+  animation: kf-spin 720ms linear infinite;
+}
+.rca-loading-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--navy);
+}
+.rca-loading-body {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* =========================================================================
+   WorkingModal — "agents are working" live-step overlay after confirm
+   ========================================================================= */
+.working-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(2px);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: graph-modal-fade 180ms ease;
+}
+.working-modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35);
+  padding: 26px 28px 22px;
+  animation: graph-modal-rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.working-modal-head { margin-bottom: 20px; }
+.working-modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--navy-soft);
+  margin-bottom: 10px;
+}
+.working-modal-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.working-modal-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.working-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.working-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  transition: background 180ms ease, opacity 180ms ease;
+}
+.working-step.active { background: rgba(0, 201, 183, 0.08); }
+.working-step.pending { opacity: 0.5; }
+.working-step-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.working-step.done .working-step-icon { color: var(--emerald); }
+.working-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rule);
+}
+.working-step-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(26, 58, 107, 0.18);
+  border-top-color: var(--cyan);
+  animation: kf-spin 700ms linear infinite;
+  display: inline-block;
+}
+.working-step-spinner.small { width: 11px; height: 11px; border-width: 2px; }
+.working-step-body { display: flex; flex-direction: column; gap: 2px; }
+.working-step-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+.working-step.pending .working-step-label { font-weight: 500; }
+.working-step-detail {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.working-modal-foot {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 24px;
+}
+.working-modal-hint {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
+}
+.working-modal-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--paper-warm);
+  background: var(--navy);
+  border: none;
+  border-radius: 6px;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+.working-modal-btn:hover { background: var(--navy-soft); }
