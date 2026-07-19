@@ -173,3 +173,4 @@ _custom_suggested_prompt: Auto-release the $14M Q1 bulk PO to SUP-021 —
   per envelope GR-PP-AUTO-PO-002
 pinned: true
 version: 1
+plain_summary: "Automatically release a routine restock purchase order within the approved dollar limit."

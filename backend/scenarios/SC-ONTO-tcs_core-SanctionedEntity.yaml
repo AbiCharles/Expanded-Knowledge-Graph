@@ -63,3 +63,4 @@ _auto_for_ontology_class:
 - SanctionedEntity
 _custom_suggested_prompt: Look up SanctionedEntity (via tcs_core)
 version: 1
+plain_summary: "Look up a sanctioned entity in the compliance data."

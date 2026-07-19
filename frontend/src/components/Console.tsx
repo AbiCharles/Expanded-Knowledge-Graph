@@ -152,10 +152,17 @@ export function Console({
                   title={chipTooltip(sc)}
                 >
                   <span className="chip-pin-marker" aria-hidden="true">★</span>
-                  {sc.suggested_prompt}
-                  {sc.run_count && sc.run_count > 0 ? (
-                    <span className="chip-stat">· {sc.run_count}</span>
-                  ) : null}
+                  <span className="chip-body">
+                    <span className="chip-prompt">
+                      {sc.suggested_prompt}
+                      {sc.run_count && sc.run_count > 0 ? (
+                        <span className="chip-stat">· {sc.run_count}</span>
+                      ) : null}
+                    </span>
+                    {sc.plain_summary ? (
+                      <span className="chip-plain">{sc.plain_summary}</span>
+                    ) : null}
+                  </span>
                 </button>
               ))}
           </div>
@@ -181,22 +188,29 @@ export function Console({
                     onClick={() => onSendPrompt(sc.suggested_prompt)}
                     title={chipTooltip(sc)}
                   >
-                    {sc.suggested_prompt}
-                    {sc.source_kinds && sc.source_kinds.length > 0 ? (
-                      <span className="chip-sources">
-                        {sc.source_kinds.map((k) => (
-                          <span
-                            key={k}
-                            className={`chip-source-badge chip-source-${k}`}
-                          >
-                            {sourceKindLabel(k)}
+                    <span className="chip-body">
+                      <span className="chip-prompt">
+                        {sc.suggested_prompt}
+                        {sc.source_kinds && sc.source_kinds.length > 0 ? (
+                          <span className="chip-sources">
+                            {sc.source_kinds.map((k) => (
+                              <span
+                                key={k}
+                                className={`chip-source-badge chip-source-${k}`}
+                              >
+                                {sourceKindLabel(k)}
+                              </span>
+                            ))}
                           </span>
-                        ))}
+                        ) : null}
+                        {sc.run_count && sc.run_count > 0 ? (
+                          <span className="chip-stat">· {sc.run_count}</span>
+                        ) : null}
                       </span>
-                    ) : null}
-                    {sc.run_count && sc.run_count > 0 ? (
-                      <span className="chip-stat">· {sc.run_count}</span>
-                    ) : null}
+                      {sc.plain_summary ? (
+                        <span className="chip-plain">{sc.plain_summary}</span>
+                      ) : null}
+                    </span>
                   </button>
                   <button
                     className="chip-edit"
@@ -887,6 +901,9 @@ function groupScenariosByDomain(
 
 function chipTooltip(sc: ScenarioRow): string {
   const lines = [`${sc.id} — ${sc.title}`];
+  // The chip now shows the human-readable title (the intention); surface the
+  // actual prompt it sends on click so it stays discoverable on hover.
+  if (sc.suggested_prompt) lines.push(`Sends: “${sc.suggested_prompt}”`);
   if (sc.source_ids && sc.source_ids.length > 0) {
     const kinds = sc.source_kinds && sc.source_kinds.length > 0
       ? ` (${sc.source_kinds.join(", ")})`

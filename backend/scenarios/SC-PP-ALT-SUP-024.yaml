@@ -139,3 +139,4 @@ outcomes:
 _filter_from_prompt: true
 _custom_suggested_prompt: Borealis Mining is blocked — find drop-in alternative suppliers
 version: 1
+plain_summary: "A supplier is blocked — find qualified drop-in replacements."

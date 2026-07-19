@@ -841,6 +841,80 @@ export async function getSupplierSubgraph(
   );
 }
 
+// Evidence subgraph (Neo4j) — the manufacturing_rca causal chain
+// (Part → Defect → EvidenceNode: visual → log → inference → root_cause).
+// Backs the EvidenceGraphPanel on RCA cases. part_id is resolved server-side
+// from the case's scenario, so the caller only needs the case id.
+export async function getEvidenceSubgraph(
+  case_id: string,
+): Promise<SubgraphResponse> {
+  return jsonOrThrow(
+    await authedFetch("/api/graph/evidence", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ case_id }),
+    })
+  );
+}
+
+// Structured RCA analysis — the native shapes behind each method's chart
+// (Pareto bars, Ishikawa fishbone, 5-Why chain, evidence graph) + the bound
+// evidence "documents". Backs the method tabs on the evidence-graph modal.
+export interface RcaWhyStep { question: string; answer: string; evidence: string; }
+export interface RcaFiveWhy {
+  problem_statement: string;
+  why_chain: RcaWhyStep[];
+  root_cause: string;
+  confidence: string;
+  recommended_actions: string[];
+}
+export interface RcaIshikawa {
+  methods: string[]; machines: string[]; people: string[];
+  materials: string[]; measurement: string[]; environment: string[];
+  primary_root_cause: string; confidence: string;
+}
+export interface RcaPareto { pareto_items: string[]; pareto_percent: number[]; }
+export interface RcaEvidenceDoc {
+  source: string; ontology_type: string; id: string;
+  title: string | null; summary: string | null; via_ontology?: string | null;
+}
+export interface RcaEvidenceGraph {
+  primary_root_cause: string; overall_confidence: number; evidence_summary: string;
+  nodes: { node_id: string; node_type: string; description: string; confidence_score: number }[];
+  edges: { from_node: string; to_node: string; relationship_type: string; strength: number }[];
+}
+export interface RcaVision {
+  image_url: string | null;
+  defect_type: string | null;
+  severity: string | null;
+  location: string | null;
+  candidate_causes: string | null;
+  observations: string | null;
+  title: string | null;
+  summary: string | null;
+}
+export interface RcaAnalysis {
+  problem: string;
+  part_id: string;
+  defect_type: string;
+  vision?: RcaVision | null;
+  evidence: RcaEvidenceDoc[];
+  five_why: RcaFiveWhy;
+  ishikawa: RcaIshikawa;
+  pareto: RcaPareto;
+  evidence_graph: RcaEvidenceGraph;
+}
+
+export async function getRcaAnalysis(case_id: string): Promise<RcaAnalysis> {
+  return jsonOrThrow(
+    await authedFetch("/api/rca/analysis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ case_id }),
+    })
+  );
+}
+
 // =============================================================================
 // Agent orchestrator companion service
 // =============================================================================

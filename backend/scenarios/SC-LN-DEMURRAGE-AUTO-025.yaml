@@ -92,3 +92,4 @@ _executor:
     claim_amount_usd: '385'
 _filter_from_prompt: true
 version: 1
+plain_summary: "Automatically dispute small port storage fees within a preset limit."

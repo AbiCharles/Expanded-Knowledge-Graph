@@ -1,0 +1,147 @@
+ontology_id: manufacturing_rca
+mappings:
+  # Vision analysis — external RCA service, reached over HTTP. The path
+  # template is filled from the (attribute-mapped) `where` clause; the
+  # response JSON columns are mapped back onto ontology attributes by the
+  # HttpResolver's attribute_map support.
+  Defect:
+    sources:
+    - data_source: rca_vision
+      identifier_column: defect_id
+      attribute_map:
+        defect_id: defect_id
+        part_id: part_id
+        defect_type: defect_type
+        severity: severity
+        location: location
+        candidate_causes: candidate_causes
+        observations: observations
+        program: program
+      http_path_template: "/api/image-analysis/{part_id}"
+      confidence: 1.0
+      suggested_by: operator
+      notes: >-
+        GET the vision analysis for a part. RCA_agent must expose
+        GET /api/image-analysis/{part_id} returning ImageAnalysisOutput
+        JSON. Returns [] gracefully when the service is unreachable.
+    relations: {}
+  # Part context — Neo4j.
+  Part:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: part_id
+      attribute_map:
+        part_id: part_id
+        name: name
+        material: material
+        program: program
+      query_template: |
+        MATCH (p:Part)
+        WHERE ($part_id IS NULL OR p.part_id = $part_id)
+        RETURN p.part_id AS id,
+               p.name AS title,
+               p.material + ' · program ' + p.program AS summary
+        ORDER BY p.part_id
+        LIMIT $max_results
+      confidence: 1.0
+      suggested_by: operator
+    relations: {}
+  # Telemetry anomalies — CSV. Filtered by part_id (exact match).
+  Anomaly:
+    sources:
+    - data_source: telemetry_logs
+      identifier_column: anomaly_id
+      attribute_map:
+        anomaly_id: anomaly_id
+        part_id: part_id
+        source_log: source_log
+        description: description
+        deviation_type: deviation_type
+        timestamp: timestamp
+      confidence: 1.0
+      suggested_by: operator
+      notes: Backs the telemetry_logs CSV; filters rows by part_id.
+    relations: {}
+  # Evidence chain — Neo4j. Walks Defect-[:EVIDENCED_BY]->EvidenceNode for
+  # the part, returning the visual/log/inference/root_cause nodes ordered
+  # by confidence.
+  EvidenceNode:
+    sources:
+    - data_source: neo4j_default
+      identifier_column: node_id
+      attribute_map:
+        node_id: node_id
+        part_id: part_id
+        node_type: node_type
+        description: description
+        evidence_source: evidence_source
+        confidence: confidence
+      query_template: |
+        MATCH (d:Defect {part_id: $part_id})-[:EVIDENCED_BY]->(e:EvidenceNode)
+        RETURN e.node_id AS id,
+               toUpper(e.node_type) + ' · ' + e.description AS title,
+               'confidence ' + toString(e.confidence) + '% · source: ' + coalesce(e.evidence_source, '—') AS summary,
+               e.confidence AS confidence
+        ORDER BY e.confidence DESC
+        LIMIT $max_results
+      confidence: 1.0
+      suggested_by: operator
+      notes: >-
+        The graph-resident evidence chain — the Neo4j analog of
+        RCA_agent's EvidenceGraph. Returns [] when Neo4j is down or the
+        seed hasn't been loaded.
+    relations: {}
+  # Historical NCRs — external RAG knowledge base over HTTP. `where`
+  # carries {query, top_k}; the path template substitutes them.
+  PriorNCR:
+    sources:
+    - data_source: rca_knowledge
+      identifier_column: ncr_id
+      attribute_map:
+        ncr_id: id
+        title: title
+        summary: summary
+      http_path_template: "/api/rag/query?q={query}&collection=ncr&top_k={top_k}"
+      confidence: 1.0
+      suggested_by: operator
+      notes: >-
+        Semantic search over historical NCRs. RCA_agent must expose a GET
+        variant of /api/rag/query. Returns [] gracefully when unreachable.
+    relations: {}
+  # CAPA candidates — external RAG knowledge base (CAPA collection).
+  CAPARecommendation:
+    sources:
+    - data_source: rca_knowledge
+      identifier_column: capa_id
+      attribute_map:
+        capa_id: id
+        title: title
+        summary: summary
+        confidence: score
+      http_path_template: "/api/rag/query?q={query}&collection=capa&top_k={top_k}"
+      confidence: 1.0
+      suggested_by: operator
+    relations: {}
+  # Prior CAPA precedent — local governance store (rca.sqlite).
+  PriorCAPA:
+    sources:
+    - data_source: rca_sqlite
+      identifier_column: capa_id
+      attribute_map:
+        capa_id: capa_id
+        defect_type: defect_type
+        root_cause: root_cause
+        action: action
+        outcome: outcome
+      query_template: |
+        SELECT
+          capa_id AS id,
+          'CAPA ' || capa_id || ' · ' || action AS title,
+          'root cause: ' || root_cause || ' · outcome: ' || outcome AS summary
+        FROM prior_capa
+        WHERE (:defect_type IS NULL OR defect_type = :defect_type)
+        ORDER BY capa_id DESC
+        LIMIT :max_results
+      confidence: 1.0
+      suggested_by: operator
+    relations: {}

@@ -87,3 +87,4 @@ outcomes:
       the envelope.
 _filter_from_prompt: true
 version: 1
+plain_summary: "Show a carrier's performance scorecard alongside its recent shipments."

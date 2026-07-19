@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CaseFull, DecisionKind, MatchedPromotedPattern, StagePayload } from "../types";
 import { ActionLifecycleCard } from "./ActionLifecycleCard";
 import { CounterfactualCard } from "./CounterfactualCard";
-import { EvidenceMap, GraphPanel } from "./GraphViz";
+import { EvidenceMap, GraphPanel, EvidenceGraphPanel } from "./GraphViz";
 
 // Plain-English labels for the operator. Raw stage names (agent_intake /
 // proposal / review) survive in the tooltip via title= for engineers.
@@ -259,6 +259,8 @@ export function Envelope({
               aeronovaFindings={aeronovaFindings}
               focusIds={graphFocusIds}
             />
+            {/* RCA cases only — renders null otherwise (self-gated). */}
+            <EvidenceGraphPanel active={effectiveActive} />
           </>
         )}
         {selectedRevision && selectedRevision.revision_no > 1 && newFactKeys.size > 0 && (
@@ -333,14 +335,37 @@ function StageBlock({
           onHighlight={setHighlightedQuery}
         />
       )}
-      {open && (
-        <FactsGrid
-          facts={stage.facts}
-          highlightedQuery={highlightedQuery}
-          targetCostUsd={targetCostUsd}
-          newFactKeys={newFactKeys}
-        />
-      )}
+      {open && (() => {
+        const groups = groupSynthesisFacts(stage.facts);
+        if (!groups) {
+          return (
+            <FactsGrid
+              facts={stage.facts}
+              highlightedQuery={highlightedQuery}
+              targetCostUsd={targetCostUsd}
+              newFactKeys={newFactKeys}
+            />
+          );
+        }
+        return (
+          <div className="fact-groups">
+            {groups.map((g) => (
+              <div key={g.label} className="fact-group">
+                <div className="fact-group-label">
+                  {g.label}
+                  <span className="fact-group-count">{g.facts.length}</span>
+                </div>
+                <FactsGrid
+                  facts={g.facts}
+                  highlightedQuery={highlightedQuery}
+                  targetCostUsd={targetCostUsd}
+                  newFactKeys={newFactKeys}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -427,6 +452,46 @@ function formatWhereVal(v: unknown): string {
 // Cap large stages (e.g. port-disruption returns 30 shipments) at 12 visible
 // facts with a "+ N more" expander. Keeps scroll cost predictable.
 const FACT_PREVIEW_LIMIT = 12;
+
+// RCA synthesis facts carry a `synthesis:<mode>` source. Group the proposal
+// into a "Bound evidence" section plus one labeled section per analysis method
+// so the four analyses read as distinct blocks rather than trailing cards.
+const SYNTH_MODE_LABELS: Record<string, string> = {
+  five_why: "5-Why",
+  ishikawa: "Ishikawa",
+  pareto: "Pareto",
+  evidence_graph: "Evidence-graph",
+};
+const SYNTH_MODE_ORDER = ["five_why", "ishikawa", "pareto", "evidence_graph"];
+
+function groupSynthesisFacts(
+  facts: StagePayload["facts"],
+): { label: string; facts: StagePayload["facts"] }[] | null {
+  const isSynth = (f: StagePayload["facts"][number]) =>
+    (f.source || "").startsWith("synthesis:");
+  if (!facts.some(isSynth)) return null; // normal stage → render the flat grid
+  const bound = facts.filter((f) => !isSynth(f));
+  const bySynth = new Map<string, StagePayload["facts"]>();
+  for (const f of facts) {
+    if (!isSynth(f)) continue;
+    const mode = (f.source || "").slice("synthesis:".length);
+    if (!bySynth.has(mode)) bySynth.set(mode, []);
+    bySynth.get(mode)!.push(f);
+  }
+  const groups: { label: string; facts: StagePayload["facts"] }[] = [];
+  if (bound.length) groups.push({ label: "Bound evidence", facts: bound });
+  const seen = new Set<string>();
+  for (const mode of SYNTH_MODE_ORDER) {
+    if (bySynth.has(mode)) {
+      groups.push({ label: SYNTH_MODE_LABELS[mode] ?? mode, facts: bySynth.get(mode)! });
+      seen.add(mode);
+    }
+  }
+  for (const [mode, fs] of bySynth) {
+    if (!seen.has(mode)) groups.push({ label: SYNTH_MODE_LABELS[mode] ?? mode, facts: fs });
+  }
+  return groups;
+}
 
 function FactsGrid({
   facts,

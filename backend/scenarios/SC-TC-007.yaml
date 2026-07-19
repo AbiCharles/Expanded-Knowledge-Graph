@@ -125,3 +125,4 @@ outcomes:
       before deciding. ReviewBinder will re-run with additional queries; case loops
       back to review.
 version: 1
+plain_summary: "Decide whether to override a sanctions block on an order to a flagged party."

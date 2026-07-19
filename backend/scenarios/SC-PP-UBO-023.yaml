@@ -136,3 +136,4 @@ _filter_from_prompt: true
 _custom_suggested_prompt: Who ultimately owns Onyx Heavy Industries — release the
   UBO disclosure for SUP-008
 version: 1
+plain_summary: "Trace who ultimately owns a supplier, all the way up the ownership chain."

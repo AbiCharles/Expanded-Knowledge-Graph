@@ -135,3 +135,4 @@ _filter_from_prompt: true
 _custom_suggested_prompt: Map the multi-tier supply chain for Encryption Module Mk
   II
 version: 1
+plain_summary: "Map a product's suppliers several tiers deep to surface hidden single points of failure."

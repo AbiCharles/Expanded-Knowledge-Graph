@@ -120,3 +120,4 @@ outcomes:
 _custom_suggested_prompt: Run the live override flow with fresh data from registered
   sources.
 version: 1
+plain_summary: "Review a sanctions block using live data and decide whether to override it."

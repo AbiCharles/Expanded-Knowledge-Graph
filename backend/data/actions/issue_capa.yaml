@@ -1,0 +1,45 @@
+id: issue_capa
+title: Issue corrective/preventive action (CAPA)
+description: >-
+  Files a CAPA record against the manufacturing-RCA governance store after the
+  quality lead approves the root cause + remediation. Writes one row to
+  rca.sqlite#capa_records. The action is COMPENSATABLE — the LineagePanel's
+  "Compensate" button flips the record's status to 'voided' by case_id and
+  records a paired action.compensated event on the audit trail.
+hitl: true
+arguments:
+  - { name: defect_id, type: string, required: true,
+      description: The defect the CAPA addresses., example: DEF-1234 }
+  - { name: part_id, type: string, required: true,
+      description: The affected part., example: P-1234 }
+  - { name: root_cause, type: string, required: true,
+      description: The confirmed root cause the CAPA targets. }
+  - { name: capa_action, type: string, required: true,
+      description: The corrective/preventive action to implement. }
+  - { name: issued_by, type: string, required: true,
+      description: The approving quality lead., example: quality.lead.rlee }
+  - { name: program, type: string, required: false,
+      description: Customer program the part ships into., example: Mirage }
+executor:
+  kind: sql_update
+  data_source: rca_sqlite
+  sql: |
+    INSERT INTO capa_records
+      (case_id, defect_id, part_id, root_cause, capa_action, issued_by, program, status)
+    VALUES
+      (:__case_id, :defect_id, :part_id, :root_cause, :capa_action, :issued_by, :program, 'issued')
+reversibility_class: compensatable
+# Compensation: void the issued CAPA for this case. Fired with the same args
+# as the forward action (which include the injected __case_id), so the row is
+# located reliably even after a server restart.
+compensation:
+  kind: sql_update
+  data_source: rca_sqlite
+  sql: |
+    UPDATE capa_records SET status = 'voided' WHERE case_id = :__case_id
+match_keywords:
+  - issue capa
+  - corrective action
+  - preventive action
+  - approve capa
+default: true

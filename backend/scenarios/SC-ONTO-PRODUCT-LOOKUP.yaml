@@ -54,3 +54,4 @@ outcomes:
     headline: Auto-executed — product bound via ontology
     detail: Product retrieved through smoke_v1.Product mapping.
 version: 1
+plain_summary: "Look up a product's details through the shared business vocabulary."

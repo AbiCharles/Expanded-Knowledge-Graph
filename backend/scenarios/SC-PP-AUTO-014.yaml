@@ -81,3 +81,4 @@ outcomes:
     detail: 'SKU-EL-2210 reorder point: 150 → 200 units. The next purchase trigger
       will fire when on-hand inventory drops below 200.'
 version: 1
+plain_summary: "Adjust a product's reorder point automatically, within preset autonomous limits."

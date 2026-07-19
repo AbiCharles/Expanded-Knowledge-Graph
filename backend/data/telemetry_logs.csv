@@ -1,0 +1,8 @@
+anomaly_id,part_id,source_log,description,deviation_type,timestamp
+ANM-5001,P-1234,autoclave_telemetry,Autoclave pressure dropped 12% below setpoint during cure hold,pressure_drop,2026-06-14T06:12:00Z
+ANM-5002,P-1234,layup_qc_log,Vacuum bag leak rate exceeded 2 inHg/min at pre-cure bag check,vacuum_leak,2026-06-14T04:48:00Z
+ANM-5003,P-1234,autoclave_telemetry,Cure hold dwell time 8 min short of profile at 355F,dwell_short,2026-06-14T06:41:00Z
+ANM-5004,P-1234,resin_batch_log,Resin viscosity 6% above nominal for batch RB-2291,material_out_of_spec,2026-06-13T22:05:00Z
+ANM-5010,P-2050,cnc_spindle_log,Spindle load spike +18% on finishing pass,load_spike,2026-06-15T09:20:00Z
+ANM-5011,P-2050,coolant_flow_log,Coolant flow interruption 4.2s during pocket cut,flow_interrupt,2026-06-15T09:21:00Z
+ANM-5020,P-3312,oven_telemetry,Ramp rate exceeded 3.5C/min during ramp-up,ramp_rate,2026-06-16T11:02:00Z

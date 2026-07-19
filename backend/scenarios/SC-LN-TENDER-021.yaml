@@ -139,3 +139,4 @@ _executor:
     new_total_cost_usd: 5175
     new_status: tendered
 version: 1
+plain_summary: "Move a booking to a different carrier and record the change."

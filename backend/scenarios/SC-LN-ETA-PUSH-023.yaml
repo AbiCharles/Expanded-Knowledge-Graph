@@ -80,3 +80,4 @@ _executor:
     new_eta: 2026-04-30T04:00Z
     variance_days: 2.0
 version: 1
+plain_summary: "Send the customer's system a revised delivery estimate."

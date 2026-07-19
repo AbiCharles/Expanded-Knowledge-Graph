@@ -32,6 +32,9 @@ def list_scenarios(request: Request) -> list[dict]:
                 "domain": sc["domain"],
                 "autonomous": bool(sc.get("autonomous")),
                 "suggested_prompt": _suggested_prompt_for(sc),
+                # Plain-English "what does this mean?" gloss shown under the
+                # prompt on each console chip. Falls back to the title.
+                "plain_summary": sc.get("plain_summary") or sc.get("title", ""),
                 "mtime": state.scenarios.mtime_for(sid),
                 "run_count": int(h.get("count", 0)),
                 "last_run_at": h.get("last_run_at"),

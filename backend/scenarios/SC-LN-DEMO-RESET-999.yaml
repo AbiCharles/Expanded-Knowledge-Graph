@@ -73,3 +73,4 @@ _executor:
   action_id: reset_demo_bookings
   arguments: {}
 version: 1
+plain_summary: "Reset the demo's booking data back to its starting point."

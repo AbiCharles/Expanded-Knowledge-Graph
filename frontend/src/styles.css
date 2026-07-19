@@ -1126,6 +1126,25 @@ details[open] > .suggested-summary .suggested-chevron {
   cursor: pointer;
   transition: all 160ms ease;
   line-height: 1.35;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+/* Two-line chip content: the prompt on top, a plain-English gloss beneath. */
+.chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chip-prompt { line-height: 1.35; }
+.chip-plain {
+  font-size: 10.5px;
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--ink-muted, #6b7280);
 }
 .chip:hover {
   border-color: var(--cyan);
@@ -2423,6 +2442,30 @@ details[open] > .suggested-summary .suggested-chevron {
   overflow-y: auto;
   padding-right: 4px;
 }
+/* Grouped proposal (RCA): one labeled section per analysis method. */
+.fact-groups { display: flex; flex-direction: column; gap: 14px; }
+.fact-group-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted, #6b7280);
+  margin: 2px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fact-group-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--cyan);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+/* In grouped mode each method's grid shows every card (no per-group cap). */
+.fact-group .facts-grid { max-height: none; overflow-y: visible; }
 .fact {
   background: var(--paper-warm);
   border: 1px solid var(--paper-deep);
@@ -2592,6 +2635,94 @@ details[open] > .suggested-summary .suggested-chevron {
 .graph-modal-stat-item { display: inline-flex; gap: 5px; }
 .graph-modal-stat-item strong { color: #0f172a; font-weight: 600; }
 .graph-modal-stat-sep { color: #cbd5e1; padding-right: 4px; }
+/* RCA type-tabs: the node-type counts become clickable filter chips. */
+.graph-modal-stat-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: #475569;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 1px 7px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.graph-modal-stat-btn:hover { border-color: #cbd5e1; background: #f1f5f9; }
+.graph-modal-stat-btn.active {
+  border-color: var(--cyan, #00857a);
+  background: rgba(0,133,122,0.08);
+  color: #0f172a;
+}
+.graph-modal-stat-btn strong { color: #0f172a; font-weight: 700; }
+
+/* RCA type-tabs: floating detail list of the isolated type's nodes (full text). */
+.graph-type-detail {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 300px;
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--rule, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15,23,42,0.14);
+  z-index: 6;
+  overflow: hidden;
+}
+.graph-type-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule, #e2e8f0);
+  background: #f8fafc;
+}
+.graph-type-detail-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.graph-type-detail-count {
+  font-size: 10px;
+  color: var(--cyan, #00857a);
+  border: 1px solid var(--rule, #e2e8f0);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+.graph-type-detail-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.graph-type-detail-close:hover { color: #0f172a; }
+.graph-type-detail-list { overflow-y: auto; padding: 6px; }
+.graph-type-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 6px;
+}
+.graph-type-detail-row:hover { background: #f1f5f9; }
+.graph-type-detail-row + .graph-type-detail-row { border-top: 1px solid #f1f5f9; }
+.graph-type-detail-id {
+  font-family: 'DM Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+.graph-type-detail-label { font-size: 12px; line-height: 1.35; color: #1e293b; }
 .graph-modal-stats-right {
   display: flex;
   align-items: center;
@@ -9081,3 +9212,215 @@ details[open] > .suggested-summary .suggested-chevron {
   font-size: 12.5px;
   letter-spacing: 0.04em;
 }
+
+/* =========================================================================
+   RCA analysis method tabs — charts (Pareto / Ishikawa / 5-Why / Visual)
+   + supporting-documents panel, rendered inside the evidence-graph modal.
+   ========================================================================= */
+.rca-analysis-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--paper, #fbfaf7);
+}
+.rca-analysis-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 22px;
+}
+.rca-chart-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+
+/* Documents panel ------------------------------------------------------- */
+.rca-docs {
+  width: 300px;
+  flex: none;
+  border-left: 1px solid var(--rule, #e2e8f0);
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rca-docs-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--rule, #e2e8f0);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rca-docs-count {
+  font-size: 10px;
+  color: var(--cyan, #00857a);
+  border: 1px solid var(--rule, #e2e8f0);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+.rca-docs-list { overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rca-docs-empty { color: #94a3b8; font-size: 12px; padding: 10px; }
+.rca-doc {
+  border: 1px solid var(--rule, #e5e7eb);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fcfcfd;
+}
+.rca-doc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+.rca-doc-id { font-family: 'DM Mono', monospace; font-size: 9px; color: #94a3b8; letter-spacing: 0.04em; }
+.rca-doc-kind {
+  font-family: 'DM Mono', monospace;
+  font-size: 8.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.rca-doc-kind-csv    { color: #b46d00; }
+.rca-doc-kind-neo4j  { color: #00857a; }
+.rca-doc-kind-http   { color: #305cb0; }
+.rca-doc-kind-sqlite { color: #2f7d5f; }
+.rca-doc-title { font-size: 12px; font-weight: 600; color: #1e293b; line-height: 1.3; }
+.rca-doc-summary { font-size: 11px; color: #64748b; line-height: 1.35; margin-top: 2px; }
+
+/* Pareto (bars + cumulative line) --------------------------------------- */
+.rca-pareto-scroll { overflow-x: auto; }
+.rca-pareto-svg { width: 100%; min-width: 560px; max-width: 760px; height: auto; }
+.pc-grid { stroke: #eef2f6; stroke-width: 1; }
+.pc-axis { stroke: #cbd5e1; stroke-width: 1; }
+.pc-axis-y { fill: #94a3b8; font-family: 'DM Mono', monospace; font-size: 9px; }
+.pc-axis-y2 { fill: #a16207; font-family: 'DM Mono', monospace; font-size: 9px; }
+.pc-bar { fill: #5a9aa3; }
+.pc-bar.lead { fill: #0d6e7f; }
+.pc-bar-val { fill: #0f172a; font-family: 'DM Mono', monospace; font-size: 9.5px; font-weight: 700; }
+.pc-xlabel { fill: #475569; font-size: 10px; }
+.pc-cum-line { fill: none; stroke: #a16207; stroke-width: 2; }
+.pc-cum-dot { fill: #a16207; stroke: #fff; stroke-width: 1; }
+.pc-cum-val { fill: #a16207; font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 700; }
+.pc-rule-80 { stroke: #c14a4a; stroke-width: 1.2; stroke-dasharray: 5 4; }
+.pc-rule-80-label { fill: #c14a4a; font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 700; }
+.rca-pareto-vital {
+  margin-top: 18px;
+  font-size: 12px;
+  color: #475569;
+  padding: 10px 12px;
+  background: rgba(13,110,127,0.06);
+  border-left: 3px solid #0d6e7f;
+  border-radius: 0 4px 4px 0;
+  max-width: 720px;
+}
+
+/* Ishikawa fishbone ----------------------------------------------------- */
+.rca-fishbone-scroll { overflow-x: auto; }
+.rca-fishbone-svg { width: 100%; min-width: 760px; height: auto; }
+.fb-spine { stroke: #334155; stroke-width: 2.5; }
+.fb-spine-tip { fill: #334155; }
+.fb-head { fill: #0d6e7f; }
+.fb-head-label { fill: #cffafe; font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: 0.1em; font-weight: 700; }
+.fb-head-text { fill: #ffffff; font-size: 11px; font-weight: 600; }
+.fb-rib { stroke: #94a3b8; stroke-width: 1.5; }
+.fb-cat-box { fill: #1e293b; }
+.fb-cat-label { fill: #ffffff; font-size: 11px; font-weight: 600; }
+.fb-cause { fill: #475569; font-size: 10px; }
+.fb-cause-more { fill: #94a3b8; font-style: italic; }
+.fb-cause-none { fill: #cbd5e1; font-style: italic; }
+.rca-fishbone-primary {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: #1e293b;
+  padding: 10px 12px;
+  background: rgba(193,74,74,0.06);
+  border-left: 3px solid #c14a4a;
+  border-radius: 0 4px 4px 0;
+}
+
+/* 5-Why chain ----------------------------------------------------------- */
+.rca-5why-chain { display: flex; flex-direction: column; align-items: center; max-width: 560px; }
+.rca-5why-node-wrap { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.rca-5why-node {
+  width: 100%;
+  border: 1px solid var(--rule, #e2e8f0);
+  border-left: 3px solid #5a9aa3;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px 14px;
+}
+.rca-5why-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #0d6e7f;
+  text-transform: uppercase;
+}
+.rca-5why-q { font-size: 12.5px; font-weight: 600; color: #1e293b; margin-top: 2px; }
+.rca-5why-a { font-size: 12px; color: #475569; margin-top: 3px; line-height: 1.4; }
+.rca-5why-ev { font-size: 10.5px; font-style: italic; color: #94a3b8; margin-top: 4px; }
+.rca-5why-arrow { color: #cbd5e1; font-size: 18px; line-height: 1; margin: 3px 0; }
+.rca-5why-root {
+  width: 100%;
+  border-radius: 6px;
+  background: #c14a4a;
+  color: #fff;
+  padding: 12px 14px;
+}
+.rca-5why-root-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.rca-5why-root-text { font-size: 13px; font-weight: 600; margin-top: 3px; line-height: 1.4; }
+.rca-5why-actions { margin-top: 16px; max-width: 560px; }
+.rca-5why-actions-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+.rca-5why-actions ul { margin: 0; padding-left: 18px; }
+.rca-5why-actions li { font-size: 12px; color: #334155; line-height: 1.5; }
+
+/* Visual finding -------------------------------------------------------- */
+.rca-visual-body { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+.rca-visual-scan { flex: none; }
+.rca-visual-svg { width: 340px; max-width: 100%; border: 1px solid var(--rule, #e2e8f0); border-radius: 6px; }
+.rca-visual-img { width: 380px; max-width: 100%; border: 1px solid var(--rule, #e2e8f0); border-radius: 6px; display: block; background: #08152e; }
+.vs-bg { fill: #0b1220; }
+.vs-grid { stroke: #1e293b; stroke-width: 0.5; }
+.vs-defect { fill: rgba(193,74,74,0.35); stroke: #c14a4a; stroke-width: 1.5; }
+.vs-defect-core { fill: rgba(239,68,68,0.65); }
+.vs-defect-label { fill: #fecaca; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700; }
+.rca-visual-caption { font-size: 11px; color: #94a3b8; margin-top: 6px; max-width: 340px; }
+.rca-visual-detail { flex: 1; min-width: 220px; }
+.rca-visual-detail-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-top: 12px;
+}
+.rca-visual-detail-label:first-child { margin-top: 0; }
+.rca-visual-detail-text { font-size: 13px; color: #1e293b; line-height: 1.4; margin-top: 3px; }
+.rca-visual-conf { font-family: 'DM Mono', monospace; font-size: 11px; color: #0d6e7f; margin-top: 4px; }

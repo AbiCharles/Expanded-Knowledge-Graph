@@ -146,3 +146,4 @@ _filter_from_prompt: true
 _custom_suggested_prompt: Onboard Hemlock Precision Castings — run the graph-aware
   sanctions and alliance risk check
 version: 1
+plain_summary: "Vet a new supplier for sanctions and network risk before onboarding it."

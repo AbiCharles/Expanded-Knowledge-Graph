@@ -65,3 +65,4 @@ _auto_for_ontology_class:
 - PriorOverride
 _custom_suggested_prompt: Look up PriorOverride (via supply_chain_demo)
 version: 1
+plain_summary: "Look up past reviewer override decisions."

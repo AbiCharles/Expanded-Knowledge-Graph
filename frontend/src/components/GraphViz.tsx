@@ -8,8 +8,11 @@ import { CaseFull, FactRow } from "../types";
 import {
   GraphNode as ApiNode,
   GraphEdge as ApiEdge,
+  RcaAnalysis,
   SubgraphResponse,
   getSupplierSubgraph,
+  getEvidenceSubgraph,
+  getRcaAnalysis,
   getOntologyClasses,
 } from "../api";
 import {
@@ -26,6 +29,13 @@ import {
   drillKindFor,
   findGraphAnchor,
 } from "../graphDrill";
+import {
+  DocumentsPanel,
+  FishboneDiagram,
+  FiveWhyChain,
+  ParetoChart,
+  VisualFinding,
+} from "./RcaCharts";
 
 // Register the dagre layout once at module load — Cytoscape complains if
 // the same layout is registered twice across hot-reloads, so guard.
@@ -213,6 +223,87 @@ export function GraphPanel({
   );
 }
 
+// =============================================================================
+// RCA evidence graph — the manufacturing_rca causal chain for a defect
+// (Part → Defect → EvidenceNode: visual → log → inference → root_cause), pulled
+// live from Neo4j. Only renders on cases that bound manufacturing_rca facts.
+// Reuses GraphModal's generic rawNodes/rawEdges rendering; node accents are set
+// server-side so the existing knowledge stylesheet colours the chain.
+// =============================================================================
+function caseHasEvidenceGraph(active: CaseFull): boolean {
+  for (const stage of active.stages || []) {
+    for (const f of stage.facts) {
+      if (f.ontology_type === "EvidenceNode") return true;
+      if ((f.via_ontology || "").startsWith("manufacturing_rca")) return true;
+    }
+  }
+  return false;
+}
+
+export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [data, setData] = useState<SubgraphResponse | null>(null);
+  const [analysis, setAnalysis] = useState<RcaAnalysis | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    let cancelled = false;
+    setError(null);
+    getEvidenceSubgraph(active.case_id)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => { if (!cancelled) setError((e as Error).message); });
+    // Structured analysis for the method tabs (charts + documents). Best-effort:
+    // a failure here just leaves the method tabs empty, the graph still works.
+    getRcaAnalysis(active.case_id)
+      .then((a) => { if (!cancelled) setAnalysis(a); })
+      .catch(() => { if (!cancelled) setAnalysis(null); });
+    return () => { cancelled = true; };
+  }, [modalOpen, active.case_id]);
+
+  if (!caseHasEvidenceGraph(active)) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="viz-card-button"
+        onClick={() => setModalOpen(true)}
+      >
+        <span className="viz-card-eyebrow">Evidence graph</span>
+        <span className="viz-card-title">
+          The causal chain behind the root cause — visual, log, inference &amp;
+          root-cause nodes
+        </span>
+        <span className="viz-card-cta">Open in full-page graph &nbsp;⤢</span>
+      </button>
+      {modalOpen && (
+        <GraphModal
+          title="Evidence graph"
+          subtitle="Part → Defect → evidence chain (visual → log → inference → root cause)"
+          explainer={
+            "The graph-resident evidence chain for this defect, pulled live " +
+            "from Neo4j. Each node is a piece of evidence — a visual finding, a " +
+            "log finding, an inference that links them, or the root cause — and " +
+            "each line is a causal relationship (EVIDENCED_BY / SUPPORTS / " +
+            "INDICATES). Follow the amber spine to the red root-cause node. " +
+            "Click any node to see its evidence card from the stages."
+          }
+          rawNodes={data?.nodes}
+          rawEdges={data?.edges}
+          defaultLayout="dagre"
+          onClose={() => setModalOpen(false)}
+          loading={!data && !error}
+          error={error}
+          active={active}
+          typeTabs
+          rcaAnalysis={analysis}
+        />
+      )}
+    </>
+  );
+}
+
 export function EvidenceMap({ active }: { active: CaseFull }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [drill, setDrill] = useState<DrillTarget | null>(null);
@@ -365,7 +456,52 @@ type GraphModalProps = {
   // instructions side panel. Skips the backdrop, skips createPortal,
   // and adds the .embedded class for CSS positioning overrides.
   embedded?: boolean;
+  // RCA evidence graph — make the top-bar node-type counts clickable tabs.
+  // Selecting a type dims the rest of the canvas and opens a detail list of
+  // that type's nodes with their full (untruncated) labels.
+  typeTabs?: boolean;
+  // RCA method tabs — when present, the modal shows a tab per analysis method
+  // (Evidence graph / 5-Why / Ishikawa / Pareto / Visual); each non-graph tab
+  // renders that method's chart + supporting documents instead of the canvas.
+  rcaAnalysis?: import("../api").RcaAnalysis | null;
 };
+
+type AnalysisTab = "graph" | "five_why" | "ishikawa" | "pareto" | "visual";
+
+// One non-graph analysis tab: the method's chart on the left, its supporting
+// evidence "documents" on the right.
+function RcaAnalysisStage({
+  tab,
+  analysis,
+}: {
+  tab: Exclude<AnalysisTab, "graph">;
+  analysis: RcaAnalysis;
+}) {
+  const chart =
+    tab === "five_why" ? (
+      <FiveWhyChain data={analysis.five_why} />
+    ) : tab === "ishikawa" ? (
+      <FishboneDiagram data={analysis.ishikawa} effect={analysis.defect_type || "defect"} />
+    ) : tab === "pareto" ? (
+      <ParetoChart data={analysis.pareto} />
+    ) : (
+      <VisualFinding analysis={analysis} />
+    );
+  const docs =
+    tab === "visual"
+      ? analysis.evidence.filter(
+          (d) =>
+            (d.title || "").toUpperCase().includes("VISUAL") ||
+            d.ontology_type === "Defect",
+        )
+      : analysis.evidence;
+  return (
+    <div className="graph-modal-stage rca-analysis-stage">
+      <div className="rca-analysis-main">{chart}</div>
+      <DocumentsPanel docs={docs.length ? docs : analysis.evidence} />
+    </div>
+  );
+}
 
 export function GraphModal({
   title,
@@ -387,8 +523,14 @@ export function GraphModal({
   aeronovaFindings,
   focusIds,
   embedded = false,
+  typeTabs = false,
+  rcaAnalysis,
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
+  // RCA type-tabs: the node type currently isolated (null = show everything).
+  const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
+  // RCA method tabs: which analysis is showing ("graph" = the network canvas).
+  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("graph");
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(true);
   const [selectedClassFacts, setSelectedClassFacts] = useState<SelectedClassFacts | null>(null);
@@ -801,6 +943,24 @@ export function GraphModal({
     }
   }, [focusIds, elements.length, layout, cyReadyTick, viewMode]);
 
+  // RCA type-tabs — isolate the selected node type. Dims every node NOT of the
+  // selected type; an edge is dimmed only when NEITHER endpoint is the selected
+  // type, so the connections from the isolated nodes stay legible.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements().removeClass("cy-type-dim");
+    if (!selectedNodeType) return;
+    cy.nodes().forEach((n: any) => {
+      if (n.data("nodeType") !== selectedNodeType) n.addClass("cy-type-dim");
+    });
+    cy.edges().forEach((e: any) => {
+      const s = e.source().data("nodeType");
+      const t = e.target().data("nodeType");
+      if (s !== selectedNodeType && t !== selectedNodeType) e.addClass("cy-type-dim");
+    });
+  }, [selectedNodeType, elements.length, cyReadyTick, layout]);
+
   // Double-click any colored pathway node to surface the downstream
   // program exposure in the side legend. Uses a manual lastTap-timing
   // detector (same pattern as attachEvidenceMapBehaviour) instead of
@@ -938,7 +1098,22 @@ export function GraphModal({
                 {typeCounts.map((tc, i) => (
                   <span key={tc.type} className="graph-modal-stat-item">
                     {i > 0 && <span className="graph-modal-stat-sep">·</span>}
-                    <strong>{tc.count}</strong> {pluralType(tc.type, tc.count)}
+                    {typeTabs ? (
+                      <button
+                        type="button"
+                        className={`graph-modal-stat-btn${selectedNodeType === tc.type ? " active" : ""}`}
+                        onClick={() =>
+                          setSelectedNodeType((cur) => (cur === tc.type ? null : tc.type))
+                        }
+                        title={`Isolate ${pluralType(tc.type, tc.count)}`}
+                      >
+                        <strong>{tc.count}</strong> {pluralType(tc.type, tc.count)}
+                      </button>
+                    ) : (
+                      <>
+                        <strong>{tc.count}</strong> {pluralType(tc.type, tc.count)}
+                      </>
+                    )}
                   </span>
                 ))}
               </span>
@@ -979,39 +1154,61 @@ export function GraphModal({
             >×</button>
           </div>
         </header>
-        {/* View-mode tabs — Network is the clean overview; Decision pathways
-            overlays per-pathway highlights using the case's decisionSupport
-            data. The Pathways tab is disabled when the case has no proposed
-            or at-risk pathways to highlight (e.g. simpler onboarding cases). */}
-        <div className="graph-modal-tabs">
-          <button
-            type="button"
-            className={`graph-modal-tab${viewMode === "network" ? " active" : ""}`}
-            onClick={() => setViewMode("network")}
-          >
-            Network
-          </button>
-          <button
-            type="button"
-            className={`graph-modal-tab${viewMode === "pathways" ? " active" : ""}`}
-            onClick={() => setViewMode("pathways")}
-            disabled={!decisionSupport}
-            title={
-              decisionSupport
-                ? "Highlight the proposed swap pathway + at-risk program pathways; dim everything else."
-                : "This case has no proposed or at-risk pathways to highlight."
-            }
-          >
-            Decision pathways
-            {decisionSupport && (
-              <span className="graph-modal-tab-count">
-                {decisionSupport.recommended.length +
-                 decisionSupport.notRecommended.length +
-                 decisionSupport.impacts.length}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Tab strip — RCA method tabs when an analysis is attached, otherwise
+            the Network / Decision-pathways view-mode tabs. */}
+        {rcaAnalysis ? (
+          <div className="graph-modal-tabs">
+            {([
+              ["graph", "Evidence graph"],
+              ["five_why", "5-Why"],
+              ["ishikawa", "Ishikawa"],
+              ["pareto", "Pareto"],
+              ["visual", "Visual"],
+            ] as [AnalysisTab, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`graph-modal-tab${analysisTab === key ? " active" : ""}`}
+                onClick={() => setAnalysisTab(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="graph-modal-tabs">
+            <button
+              type="button"
+              className={`graph-modal-tab${viewMode === "network" ? " active" : ""}`}
+              onClick={() => setViewMode("network")}
+            >
+              Network
+            </button>
+            <button
+              type="button"
+              className={`graph-modal-tab${viewMode === "pathways" ? " active" : ""}`}
+              onClick={() => setViewMode("pathways")}
+              disabled={!decisionSupport}
+              title={
+                decisionSupport
+                  ? "Highlight the proposed swap pathway + at-risk program pathways; dim everything else."
+                  : "This case has no proposed or at-risk pathways to highlight."
+              }
+            >
+              Decision pathways
+              {decisionSupport && (
+                <span className="graph-modal-tab-count">
+                  {decisionSupport.recommended.length +
+                   decisionSupport.notRecommended.length +
+                   decisionSupport.impacts.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+        {rcaAnalysis && analysisTab !== "graph" ? (
+          <RcaAnalysisStage tab={analysisTab} analysis={rcaAnalysis} />
+        ) : (
         <div className="graph-modal-stage">
           <div className="graph-modal-canvas">
             {loading && (
@@ -1094,6 +1291,34 @@ export function GraphModal({
                 }}
               />
             )}
+            {typeTabs && selectedNodeType && (
+              <div className="graph-type-detail">
+                <div className="graph-type-detail-head">
+                  <span className="graph-type-detail-title">
+                    {selectedNodeType}
+                    <span className="graph-type-detail-count">
+                      {(rawNodes ?? []).filter((n) => n.type === selectedNodeType).length}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="graph-type-detail-close"
+                    onClick={() => setSelectedNodeType(null)}
+                    aria-label="Clear type filter"
+                  >×</button>
+                </div>
+                <div className="graph-type-detail-list">
+                  {(rawNodes ?? [])
+                    .filter((n) => n.type === selectedNodeType)
+                    .map((n) => (
+                      <div key={n.id} className="graph-type-detail-row">
+                        <span className="graph-type-detail-id">{n.id}</span>
+                        <span className="graph-type-detail-label">{n.label}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
           <GraphModalSideLegend
             open={legendOpen}
@@ -1117,6 +1342,7 @@ export function GraphModal({
             aeronovaFindings={viewMode === "pathways" ? aeronovaFindings : null}
           />
         </div>
+        )}
       </div>
   );
   if (embedded) {
@@ -2190,6 +2416,19 @@ function ClassDetailsPanel({
   );
 }
 
+// Evidence-graph (manufacturing_rca) node types → accent swatch classes so the
+// side-legend dots match the node accents drawn on the canvas. Mirrors the
+// server-side accent mapping in backend/api/graph.py::_EVIDENCE_STYLE.
+const RCA_TYPE_DOT: Record<string, string> = {
+  Defect: "viz-dot-anchor",
+  "Root cause": "viz-dot-risk",
+  Inference: "viz-dot-risk_path",
+  "Visual finding": "viz-dot-alt",
+  "Log finding": "viz-dot-default",
+  Part: "viz-dot-default",
+  Evidence: "viz-dot-default",
+};
+
 function dotClassFor(variant: "knowledge" | "evidence", ontologyType: string): string {
   if (variant === "evidence") {
     if (ontologyType.includes("prompt")) return "viz-dot-prompt";
@@ -2198,6 +2437,8 @@ function dotClassFor(variant: "knowledge" | "evidence", ontologyType: string): s
     if (ontologyType.includes("outcome")) return "viz-dot-outcome";
     return "viz-dot-class";
   }
+  // Evidence-graph node types get an accent-matched swatch.
+  if (RCA_TYPE_DOT[ontologyType]) return RCA_TYPE_DOT[ontologyType];
   // Knowledge variant — map ontology type to swatch class.
   return `dot-type-${ontologyType}`;
 }
@@ -3165,6 +3406,10 @@ const SHARED_INTERACTION: any[] = [
   // the decision chains. Display:none keeps their layout positions intact
   // (no expensive re-layout on tab flip) but removes them from the view.
   { selector: ".cy-pathway-dim", style: { display: "none" } },
+  // RCA type-tabs: fade (don't hide) everything not of the isolated type, so
+  // the selected nodes pop while their surroundings stay for context.
+  { selector: "node.cy-type-dim", style: { opacity: 0.12 } },
+  { selector: "edge.cy-type-dim", style: { opacity: 0.05 } },
 ];
 
 // =============================================================================

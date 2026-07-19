@@ -76,3 +76,4 @@ outcomes:
     detail: Bound the shipment record plus all milestone + exception events. Event
       payload column is event_type/location/variance_hours.
 version: 1
+plain_summary: "Show every scan and milestone a shipment has been through."

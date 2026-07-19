@@ -128,3 +128,4 @@ outcomes:
       interviews before proceeding. ReviewBinder will re-run with additional queries;
       case loops back to review.
 version: 1
+plain_summary: "Onboard a new supplier after a basic risk check."

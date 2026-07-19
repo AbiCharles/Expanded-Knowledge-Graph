@@ -140,6 +140,35 @@ sources:
   description: 'Postgres governance store (local docker-compose.postgres.yaml): same
     prior_cases schema as the SQLite store, swappable connector. SQL lives in the
     mapping doc when bound.'
+- id: telemetry_logs
+  kind: csv
+  path: backend/data/telemetry_logs.csv
+  id_field: anomaly_id
+  title_field: description
+  summary_template: "{deviation_type} \xB7 {source_log} \xB7 part {part_id} \xB7 {timestamp}"
+  default: true
+  description: Process-telemetry anomalies per part. Backs manufacturing_rca.Anomaly
+    (the fabric-native Anomaly Detection agent).
+- id: rca_vision
+  kind: http
+  base_url: http://localhost:8000
+  default: true
+  description: External RCA_agent (RCA Intellect) vision service. Backs manufacturing_rca.Defect
+    via GET /api/image-analysis/{part_id} (path in the mapping doc). Override base_url
+    to point at the running RCA service; returns [] gracefully when unreachable.
+- id: rca_knowledge
+  kind: http
+  base_url: http://localhost:8000
+  default: true
+  description: External RCA_agent RAG service (Qdrant NCR/CAPA collections). Backs
+    manufacturing_rca.PriorNCR + CAPARecommendation via GET /api/rag/query. Needs
+    a GET variant of RCA_agent's /api/rag/query; returns [] when unreachable.
+- id: rca_sqlite
+  kind: sqlite
+  path: backend/data/rca.sqlite
+  default: true
+  description: 'RCA governance store: prior_capa precedent (read by manufacturing_rca.PriorCAPA)
+    + capa_records write target for the issue_capa action. Seeded by backend/data/seed_rca.py.'
 - id: neo4j_default
   kind: neo4j
   uri: bolt://localhost:7687

@@ -120,3 +120,4 @@ outcomes:
     headline: More information requested
     detail: Reviewer needs additional capacity / account / finance input before committing.
 version: 1
+plain_summary: "Decide whether to pay to expedite a late shipment or accept the penalty."

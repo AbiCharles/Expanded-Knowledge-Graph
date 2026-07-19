@@ -1,0 +1,115 @@
+id: manufacturing_rca
+title: Manufacturing RCA (defect root-cause analysis)
+namespace: rca
+description: >-
+  Root-cause-analysis domain ported from the RCA_agent (RCA Intellect)
+  multi-agent system. Models a manufacturing/quality investigation: a
+  defect found on a part, the telemetry anomalies around it, the
+  graph-resident evidence chain (visual → log → inference → root-cause),
+  and the historical NCR / CAPA knowledge retrieved from the external
+  RCA service. Each class binds to a concrete source: vision analysis
+  (HTTP), telemetry (CSV), the evidence graph (Neo4j), and the RAG
+  knowledge base (HTTP). The 5-Why reasoning is NOT a class — it is
+  synthesized at bind time by the orchestrator over these evidence facts.
+default: false
+classes:
+  Defect:
+    description: A quality defect found on a manufactured part. Backed by the
+      external RCA vision service, which inspects the C-scan / defect image
+      for the part and returns a structured classification.
+    plain_description: >-
+      A flaw found on a part (e.g. a delamination in a composite panel).
+      The vision agent classifies its type, severity, and location and
+      proposes candidate causes from the image alone.
+    attributes:
+    - {name: defect_id, type: string, identifier: true}
+    - {name: part_id, type: string}
+    - {name: defect_type, type: string, description: "e.g. delamination, porosity, crack, inclusion"}
+    - {name: severity, type: string, description: "low | medium | high"}
+    - {name: location, type: string}
+    - {name: candidate_causes, type: string}
+    - {name: observations, type: string}
+    - {name: program, type: string}
+    relations:
+    - {name: evidenced_by, target: EvidenceNode, cardinality: 0..*}
+  Part:
+    description: A manufactured part / assembly under investigation.
+    plain_description: >-
+      The physical part the defect was found on, and the customer
+      program it ships into.
+    attributes:
+    - {name: part_id, type: string, identifier: true}
+    - {name: name, type: string}
+    - {name: material, type: string}
+    - {name: program, type: string}
+  Anomaly:
+    description: A telemetry anomaly detected in the process logs around the
+      part's manufacture. Backed by the telemetry CSV — the fabric-native
+      equivalent of RCA_agent's Anomaly Detection agent.
+    plain_description: >-
+      Something that deviated in the machine logs while the part was
+      being made — a pressure drop, a temperature excursion, an out-of-
+      spec dwell time. Anchors the root-cause chain to hard sensor data.
+    attributes:
+    - {name: anomaly_id, type: string, identifier: true}
+    - {name: part_id, type: string}
+    - {name: source_log, type: string}
+    - {name: description, type: string}
+    - {name: deviation_type, type: string}
+    - {name: timestamp, type: string}
+  EvidenceNode:
+    description: One node in the graph-resident evidence chain for a defect.
+      Node types mirror RCA_agent's EvidenceGraph — visual, log, inference,
+      root_cause — with a confidence score. Backed by Neo4j so the chain is
+      traversable rather than flat.
+    plain_description: >-
+      A single piece of evidence in the causal chain — a visual finding,
+      a log finding, an inference that links them, or the root cause
+      itself — with how confident the agent is in it.
+    attributes:
+    - {name: node_id, type: string, identifier: true}
+    - {name: part_id, type: string}
+    - {name: node_type, type: string, description: "visual | log | inference | root_cause"}
+    - {name: description, type: string}
+    - {name: evidence_source, type: string}
+    - {name: confidence, type: integer, description: "0-100"}
+  PriorNCR:
+    description: A historical Non-Conformance Report retrieved from the
+      external RCA knowledge base (Qdrant) via semantic search. Read-only
+      RAG context that grounds the current investigation in past cases.
+    plain_description: >-
+      A past write-up of a similar defect — what was found, what caused
+      it, what was done. Pulled from the historical NCR archive so the
+      agent isn't starting from a blank page.
+    attributes:
+    - {name: ncr_id, type: string, identifier: true}
+    - {name: title, type: string}
+    - {name: summary, type: string}
+  CAPARecommendation:
+    description: A candidate Corrective / Preventive Action retrieved from the
+      external RCA knowledge base (Qdrant CAPA collection) via semantic
+      search over the current root cause. Surfaced in the review stage so
+      the quality lead approves a grounded remediation.
+    plain_description: >-
+      A suggested fix (and how to stop it recurring) drawn from the CAPA
+      library for defects like this one. The reviewer approves or rejects
+      it before it is issued.
+    attributes:
+    - {name: capa_id, type: string, identifier: true}
+    - {name: title, type: string}
+    - {name: summary, type: string}
+    - {name: confidence, type: decimal}
+  PriorCAPA:
+    description: A previously-issued CAPA record for this defect type, held in
+      the local governance store. Gives the reviewer precedent for the
+      current decision.
+    plain_description: >-
+      What was actually done last time a defect like this came up, and
+      whether it worked — so the reviewer can see precedent before
+      approving.
+    attributes:
+    - {name: capa_id, type: string, identifier: true}
+    - {name: defect_type, type: string}
+    - {name: root_cause, type: string}
+    - {name: action, type: string}
+    - {name: outcome, type: string}

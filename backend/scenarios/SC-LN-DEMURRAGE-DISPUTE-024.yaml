@@ -130,3 +130,4 @@ _executor:
       at DEHAM; carrier responsible for accrual period
     claim_amount_usd: '4800'
 version: 1
+plain_summary: "Challenge a port storage (demurrage) fee we believe is wrong."

@@ -140,3 +140,4 @@ _filter_from_prompt: true
 _custom_suggested_prompt: OFAC just listed Shengli Shell Trading — run carrier exposure
   containment
 version: 1
+plain_summary: "When a new entity is sanctioned, find which carriers are now indirectly exposed."

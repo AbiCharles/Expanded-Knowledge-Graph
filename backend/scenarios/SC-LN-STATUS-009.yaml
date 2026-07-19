@@ -64,3 +64,4 @@ outcomes:
     detail: Shipment record bound from shipments_csv via logistics.Shipment. ETA,
       vessel, position, and port congestion are on the envelope.
 version: 1
+plain_summary: "Check where a shipment is and its current status."

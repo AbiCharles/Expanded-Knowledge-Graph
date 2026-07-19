@@ -64,3 +64,4 @@ _auto_for_ontology_class:
 _filter_from_prompt: true
 _custom_suggested_prompt: Look up Supplier (via supply_chain)
 version: 1
+plain_summary: "Look up a supplier in the supply-chain graph."

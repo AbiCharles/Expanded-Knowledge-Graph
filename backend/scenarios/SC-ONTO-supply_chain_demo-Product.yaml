@@ -63,3 +63,4 @@ _auto_for_ontology_class:
 - Product
 _custom_suggested_prompt: Look up Product (via supply_chain_demo)
 version: 1
+plain_summary: "Look up a product in the supply-chain demo data."

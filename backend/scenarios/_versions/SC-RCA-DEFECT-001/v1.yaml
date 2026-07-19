@@ -1,0 +1,206 @@
+id: SC-RCA-DEFECT-001
+title: Root-cause analysis — composite delamination
+domain: Manufacturing Quality
+teams_channel: '#quality-rca'
+actor_id: agent-rca-quality-07
+operator_role:
+  label: Operator
+  name: quality.engineer.dpark
+reviewer_role:
+  label: Reviewer
+  name: quality.lead.rlee
+autonomous: false
+action_type: rca_investigation
+action_payload:
+  part_id: P-1234
+  defect_id: DEF-1234
+  defect_type: delamination
+  program: Mirage
+  customer: Aeronova
+  # RAG query strings for the knowledge-base bindings. Kept on the payload
+  # (rather than inline in the where) so the query is a resolvable :param —
+  # a production scenario could rewrite these from the synthesized root cause.
+  ncr_query: composite delamination ply interface autoclave pressure cure consolidation
+    root cause
+  capa_query: delamination autoclave pressure regulator consolidation corrective preventive
+    action in-line gate SPC
+teams_headline: RCA · high-severity delamination on Mirage wing-spar (P-1234)
+execute_message: 'A high-severity <strong>delamination</strong> (DEF-1234) was found
+  on Mirage wing-spar panel P-1234. The agent runs a governed root-cause analysis:
+  it binds the <strong>vision</strong> classification of the C-scan, the process
+  <strong>telemetry anomalies</strong> around the cure, the graph-resident
+  <strong>evidence chain</strong> (visual → log → inference → root-cause) from Neo4j,
+  and the closest historical <strong>NCRs</strong> from the knowledge base — then
+  synthesizes a <strong>5-Why</strong> chain to a root cause. The quality lead
+  approves the corrective/preventive action (CAPA) with the full evidence package
+  on the audit trail.'
+match_keywords:
+- rca
+- root cause
+- root cause analysis
+- delamination
+- composite defect
+- c-scan defect
+- five why
+- 5-why
+- capa
+- corrective action
+- defect investigation
+- quality escape
+- why did this part fail
+interpreted_as: run root-cause analysis on the delamination (DEF-1234) on Mirage
+  wing-spar P-1234 — bind vision, telemetry, evidence-graph and prior NCRs, synthesize
+  a 5-Why root cause, and recommend a CAPA for quality-lead approval
+clarifying_question: 'Confirm — run root-cause analysis for defect <code>DEF-1234</code>
+  (delamination) on part <code>P-1234</code>. I''ll bind four evidence sources: the
+  <strong>vision</strong> C-scan classification (RCA service), process
+  <strong>telemetry anomalies</strong> (telemetry logs), the graph
+  <strong>evidence chain</strong> (Neo4j), and the closest historical
+  <strong>NCRs</strong> (knowledge base) — then synthesize a 5-Why root cause. The
+  quality lead approves / rejects the CAPA with full evidence on the audit trail.
+  Proceed?'
+closing_messages:
+  approve: <strong>Quality lead approved the CAPA.</strong> The vision finding,
+    telemetry anomalies, evidence chain, prior NCRs, and the synthesized 5-Why root
+    cause are captured on the audit trail. The CAPA is issued against the governance
+    store; it can be voided from the lineage panel if superseded.
+  reject: '<strong>Quality lead declined the proposed CAPA.</strong> Reason:
+    <em>"{rationale}"</em><br><br>No CAPA issued. The agent''s evidence package and
+    5-Why chain remain on the audit trail and the case is queued for re-evaluation
+    as new evidence arrives.'
+  request_more_info: '<strong>Quality lead needs more information.</strong>
+    Specifically: <em>"{rationale}"</em><br><br>Case is back in review.'
+rationale_reasons:
+  reject:
+  - Root cause is not yet supported by the telemetry — the pressure-drop anomaly
+    needs to be tied to this specific cure run before committing a CAPA.
+  - Proposed CAPA treats the symptom (regulator) but not the missing in-line gate —
+    escape will recur.
+  - Delamination extent exceeds the disposition authority — must escalate to the
+    Material Review Board before any CAPA commits.
+  - Prior CAPA on this defect type already exists and was only partially effective —
+    re-open that CAPA rather than issuing a new one.
+  request_more_info:
+  - Need the autoclave regulator calibration history for the cure run in question.
+  - Need confirmation the C-scan indication is a true delamination and not a
+    resin-rich benign inclusion.
+  - Need the prepreg out-life record for the layup batch before deciding.
+stages:
+  agent_intake:
+    binder: RCAPolicyAndScopeBinder/1.0
+    facts:
+    - source: kf:policy
+      ontology_type: Policy
+      id: POL-RCA-QUALITY-2026
+      uri: kf.tcs/policy/POL-RCA-QUALITY-2026
+      title: Quality RCA policy
+      payload: 'When a high-severity defect is found on a flagship-program part,
+        the agent must (a) bind the vision classification of the defect image, (b)
+        bind the process telemetry anomalies for the part, (c) walk the evidence
+        graph from the defect through visual/log findings to an inferred root cause,
+        (d) retrieve the closest historical NCRs, (e) synthesize a 5-Why chain, and
+        (f) obtain named quality-lead approval before any CAPA is issued.'
+    - source: iam:scopes
+      ontology_type: ActorScope
+      id: agent-rca-quality-07
+      uri: iam.tcs/actors/agent-rca-quality-07
+      title: Actor scope
+      payload: 'Scopes: quality.read, quality.rca, quality.capa_after_review · this
+        case is propose-only (no autonomous CAPA). CAPA issuance requires named
+        quality-lead approval; dispositions beyond rework authority escalate to the
+        Material Review Board.'
+    - source: kf:context
+      ontology_type: ContextNote
+      id: DEF-1234-REPORT
+      uri: kf.tcs/context/def-1234
+      title: Trigger event
+      payload: 'Inbound QA flagged a high-severity delamination (DEF-1234) at the
+        ply 7/8 interface of Mirage wing-spar panel P-1234 during post-cure C-scan.
+        Part quarantined pending root-cause analysis and disposition.'
+  proposal:
+    binder: RCADefectProposalBinder/1.0
+    ontology_queries:
+    - ontology: manufacturing_rca
+      class: Defect
+      where:
+        part_id: :part_id
+      purpose: Vision classification of the C-scan for this part (RCA vision service —
+        manufacturing_rca.Defect). Defect type, severity, location, candidate causes.
+    - ontology: manufacturing_rca
+      class: Anomaly
+      where:
+        part_id: :part_id
+      max_results: 6
+      purpose: Process telemetry anomalies around the part's manufacture (telemetry
+        logs — manufacturing_rca.Anomaly). Anchors the chain to sensor data.
+    - ontology: manufacturing_rca
+      class: EvidenceNode
+      where:
+        part_id: :part_id
+      max_results: 8
+      purpose: The graph-resident evidence chain from Neo4j — visual → log →
+        inference → root-cause nodes with confidence (manufacturing_rca.EvidenceNode).
+    - ontology: manufacturing_rca
+      class: PriorNCR
+      where:
+        query: :ncr_query
+        top_k: 3
+      purpose: Closest historical NCRs via semantic search (RCA knowledge base —
+        manufacturing_rca.PriorNCR).
+    synthesis: five_why
+  review:
+    binder: RCADefectReviewBinder/1.0
+    ontology_queries:
+    - ontology: manufacturing_rca
+      class: CAPARecommendation
+      where:
+        query: :capa_query
+        top_k: 3
+      purpose: Candidate CAPAs via semantic search over the root cause (RCA knowledge
+        base — manufacturing_rca.CAPARecommendation).
+    - ontology: manufacturing_rca
+      class: PriorCAPA
+      where:
+        defect_type: :defect_type
+      max_results: 4
+      purpose: Prior CAPA precedent for this defect type from the governance store
+        (rca.sqlite — manufacturing_rca.PriorCAPA).
+outcomes:
+  approve:
+    headline: Approved — CAPA issued
+    detail: Quality lead accepted the 5-Why root cause and the corrective/preventive
+      action. The CAPA is filed against the governance store; the full evidence
+      package is on the audit trail. Can be voided from the lineage panel if
+      superseded.
+  reject:
+    headline: Rejected — no CAPA
+    detail: Quality lead declined the proposed CAPA (typically — root cause not yet
+      supported, symptom-only fix, or MRB escalation). The part remains quarantined;
+      the case is queued for re-evaluation as new evidence arrives.
+  request_more_info:
+    headline: More information requested
+    detail: Reviewer requires additional calibration, C-scan confirmation, or
+      material-history data before deciding.
+_custom_suggested_prompt: RCA the C-scan delamination on part P-1234 for the Mirage
+  program
+# Surfaces this scenario in the operator console's pinned row for one-click demos.
+pinned: true
+# On approve, file the CAPA. The action is COMPENSATABLE (its YAML declares a
+# forward INSERT and a compensation UPDATE), so the LineagePanel renders a
+# "Compensate" button on the executed event — clicking it voids the CAPA and
+# lands a paired action.compensated event on the audit trail. Arg values are
+# hand-authored here to the demo narrative; production scenarios would bind the
+# root_cause / capa_action from the reviewer's selection in the case.
+_executor:
+  action_id: issue_capa
+  arguments:
+    defect_id: DEF-1234
+    part_id: P-1234
+    root_cause: Autoclave pressure regulator drift caused insufficient consolidation
+      pressure during cure, delaminating the ply 7/8 interface — with no in-line gate
+      to catch the drift.
+    capa_action: Replace the autoclave pressure regulator and add it to PM; add an
+      in-line cure-pressure SPC alarm before the operation commits the part.
+    issued_by: quality.lead.rlee
+    program: Mirage
+version: 1

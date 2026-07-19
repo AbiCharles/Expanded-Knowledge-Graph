@@ -20,6 +20,9 @@ export interface ScenarioRow {
   // `?version=N`. Null on the rare in-memory-only scenarios.
   version?: number | null;
   suggested_prompt: string;
+  // Plain-English "what does this mean?" gloss shown as a muted second line
+  // under the prompt on each chip. Backend falls back to the title.
+  plain_summary?: string;
   // Unix-seconds freshness; backend sorts newest-first. Optional because
   // older API responses may not have it.
   mtime?: number | null;

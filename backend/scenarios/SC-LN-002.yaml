@@ -153,3 +153,4 @@ _executor:
     new_total_cost_usd: 13570
     new_status: tendered
 version: 1
+plain_summary: "Switch a critical shipment from ocean to air freight to make up lost time."

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 from tcs_hitl_context import KnowledgeFact, KnowledgeQuery, KnowledgeRef
@@ -60,8 +61,14 @@ class HttpResolver:
             for k, v in query.filters.items()
             if k not in ("__binding__", "__ontology__", "max_results")
         }
+        # URL-encode each value so a query-string binding (e.g. a RAG
+        # `?q={query}` template whose value carries spaces / punctuation)
+        # produces a valid request. Numeric ids encode to themselves, so
+        # existing path-segment bindings are unaffected.
         try:
-            path = path_template.format(**substitution)
+            path = path_template.format(
+                **{k: quote(str(v), safe="") for k, v in substitution.items()}
+            )
         except KeyError as e:
             raise ValueError(
                 f"HttpResolver {self.name!r}: missing filter {e.args[0]!r} for path {path_template!r}"
@@ -73,26 +80,48 @@ class HttpResolver:
         except httpx.HTTPError as exc:
             log.warning("HttpResolver %s failed for %s: %s", self.name, url, exc)
             return []
-        return self._payload_to_facts(resp.json(), query.ontology_type)
+        return self._payload_to_facts(
+            resp.json(), query.ontology_type, binding.get("attribute_map")
+        )
 
-    def _payload_to_facts(self, payload: Any, ontology_type: str) -> list[KnowledgeFact]:
+    def _payload_to_facts(
+        self,
+        payload: Any,
+        ontology_type: str,
+        attribute_map: Optional[dict[str, str]] = None,
+    ) -> list[KnowledgeFact]:
         rows = payload if isinstance(payload, list) else [payload]
+        # `attribute_map` is ontology-attribute -> source-column. Invert it so
+        # response columns are renamed back to ontology attribute names, letting
+        # a bound query surface typed attributes (defect_type, severity, …) on
+        # the fact payload alongside the title/summary the console renders.
+        inv = {src: onto for onto, src in (attribute_map or {}).items()}
         facts: list[KnowledgeFact] = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            entity_id = str(row.get("id", row.get("ID", "?")))
+            mapped = {inv.get(k, k): v for k, v in row.items()} if inv else dict(row)
+            entity_id = str(mapped.get("id") or row.get("id") or row.get("ID") or "?")
             title = str(
-                row.get("title")
+                mapped.get("title")
+                or mapped.get("name")
+                or row.get("title")
                 or row.get("name")
                 or row.get("subject")
                 or "(no title)"
             )
             summary_parts = []
             for k in ("body", "description", "summary", "userId"):
-                if row.get(k):
-                    summary_parts.append(f"{k}={row[k]}")
+                val = mapped.get(k) if mapped.get(k) is not None else row.get(k)
+                if val:
+                    summary_parts.append(f"{k}={val}")
             summary = " · ".join(str(s)[:120] for s in summary_parts) or str(row)[:200]
+            fact_payload: dict[str, Any] = {"title": title, "summary": summary}
+            # Additive: expose the mapped ontology attributes without
+            # clobbering the rendered title/summary.
+            for k, v in mapped.items():
+                if k not in ("title", "summary"):
+                    fact_payload.setdefault(k, v)
             facts.append(
                 KnowledgeFact(
                     ref=KnowledgeRef(
@@ -100,7 +129,7 @@ class HttpResolver:
                         ontology_type=ontology_type,
                         id=entity_id,
                     ),
-                    payload={"title": title, "summary": summary},
+                    payload=fact_payload,
                     fetched_by=self.name,
                 )
             )

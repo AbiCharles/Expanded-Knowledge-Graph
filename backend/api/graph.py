@@ -272,3 +272,136 @@ def supplier_subgraph(
             "alliance_peers": alliance_peer_count,
         },
     )
+
+
+# =============================================================================
+# Evidence subgraph — the manufacturing_rca evidence chain for a defect.
+# Renders Part → Defect → EvidenceNode(visual/log/inference/root_cause) plus the
+# SUPPORTS / INDICATES causal edges, reusing the same {nodes, edges} contract
+# the GraphModal already knows how to draw. Node accents are mapped so the
+# existing knowledge stylesheet colours the chain without new CSS.
+# =============================================================================
+class EvidenceRequest(BaseModel):
+    case_id: str = Field("", description="Case to resolve part_id from (optional if part_id given)")
+    part_id: str = Field("", description="Anchor part id, e.g. 'P-1234'. Overrides case lookup.")
+    data_source: str = Field("neo4j_default", description="Registered Neo4j source")
+
+
+# One row per edge in the evidence subgraph, 9 identical columns across the
+# three UNION branches so run_cypher() can serialise them flat.
+_EVIDENCE_CYPHER = """
+MATCH (p:Part {part_id: $part_id})-[:HAS_DEFECT]->(d:Defect {part_id: $part_id})
+RETURN p.part_id AS src_id, p.name AS src_name, 'Part' AS src_type, '' AS src_kind,
+       'HAS_DEFECT' AS rel,
+       d.defect_id AS dst_id, coalesce(d.defect_type, 'defect') AS dst_name,
+       'Defect' AS dst_type, '' AS dst_kind
+
+UNION
+
+MATCH (d:Defect {part_id: $part_id})-[:EVIDENCED_BY]->(e:EvidenceNode)
+RETURN d.defect_id AS src_id, coalesce(d.defect_type, 'defect') AS src_name,
+       'Defect' AS src_type, '' AS src_kind,
+       'EVIDENCED_BY' AS rel,
+       e.node_id AS dst_id, e.description AS dst_name,
+       'EvidenceNode' AS dst_type, coalesce(e.node_type, '') AS dst_kind
+
+UNION
+
+MATCH (e1:EvidenceNode {part_id: $part_id})-[r:SUPPORTS|INDICATES]->(e2:EvidenceNode)
+RETURN e1.node_id AS src_id, e1.description AS src_name,
+       'EvidenceNode' AS src_type, coalesce(e1.node_type, '') AS src_kind,
+       type(r) AS rel,
+       e2.node_id AS dst_id, e2.description AS dst_name,
+       'EvidenceNode' AS dst_type, coalesce(e2.node_type, '') AS dst_kind
+"""
+
+# Map (neo4j label, EvidenceNode.node_type) → (legend display type, accent).
+# Accents reuse the knowledge stylesheet's existing palette so no CSS is added:
+#   anchor=teal · risk=red · risk_path=amber · alt=purple · default=grey.
+_EVIDENCE_STYLE = {
+    "visual": ("Visual finding", "alt"),
+    "log": ("Log finding", "default"),
+    "inference": ("Inference", "risk_path"),
+    "root_cause": ("Root cause", "risk"),
+}
+
+
+def _evidence_style(typ: str, kind: str) -> tuple[str, str]:
+    if typ == "Defect":
+        return ("Defect", "anchor")
+    if typ == "Part":
+        return ("Part", "default")
+    return _EVIDENCE_STYLE.get((kind or "").strip().lower(), ("Evidence", "default"))
+
+
+@router.post("/evidence", response_model=SubgraphResponse)
+def evidence_subgraph(
+    payload: EvidenceRequest,
+    request: Request,
+    _user: CurrentUser = Depends(current_user),
+) -> SubgraphResponse:
+    state = request.app.state.app_state
+
+    # Resolve the part_id: explicit arg wins; otherwise pull it off the case's
+    # scenario action_payload (the manufacturing_rca scenarios carry part_id).
+    part_id = (payload.part_id or "").strip()
+    if not part_id and payload.case_id:
+        case = state.cases.get(payload.case_id)
+        if case is not None and case.scenario_id:
+            sc = state.scenarios.get(case.scenario_id)
+            if sc:
+                part_id = str((sc.get("action_payload") or {}).get("part_id") or "")
+    if not part_id:
+        raise HTTPException(400, "no part_id (pass part_id, or a case_id whose scenario carries one)")
+
+    source = state.data_sources.get(payload.data_source)
+    if source is None:
+        raise HTTPException(404, f"data_source {payload.data_source!r} not registered")
+    if not isinstance(source, Neo4jResolver):
+        raise HTTPException(400, f"data_source {payload.data_source!r} is not Neo4j")
+
+    nodes: dict[str, GraphNode] = {}
+    edges: list[GraphEdge] = []
+
+    def _row_cell(cols: list[str], row: list, key: str) -> Any:
+        return row[cols.index(key)] if key in cols else None
+
+    def _upsert(nid: str, name: str, typ: str, kind: str) -> str:
+        nid = (nid or "").strip()
+        if not nid or nid == "?":
+            return ""
+        display_type, accent = _evidence_style(typ, kind)
+        if nid not in nodes:
+            nodes[nid] = GraphNode(id=nid, label=name or nid, type=display_type, accent=accent)
+        return nid
+
+    res = source.run_cypher(_EVIDENCE_CYPHER, {"part_id": part_id})
+    cols = res.get("columns") or []
+    for row in (res.get("rows") or []):
+        s = _upsert(
+            _row_cell(cols, row, "src_id"), _row_cell(cols, row, "src_name"),
+            _row_cell(cols, row, "src_type"), _row_cell(cols, row, "src_kind"),
+        )
+        t = _upsert(
+            _row_cell(cols, row, "dst_id"), _row_cell(cols, row, "dst_name"),
+            _row_cell(cols, row, "dst_type"), _row_cell(cols, row, "dst_kind"),
+        )
+        rel = _row_cell(cols, row, "rel")
+        if s and t and rel:
+            # Highlight the causal spine (…→ root cause) so it reads as a path.
+            accent = "risk_path" if rel in ("SUPPORTS", "INDICATES") else ""
+            edges.append(GraphEdge(source=s, target=t, type=rel, accent=accent))
+
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[GraphEdge] = []
+    for e in edges:
+        key = (e.source, e.target, e.type)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(e)
+
+    return SubgraphResponse(
+        nodes=list(nodes.values()),
+        edges=deduped,
+        stats={"nodes": len(nodes), "edges": len(deduped)},
+    )

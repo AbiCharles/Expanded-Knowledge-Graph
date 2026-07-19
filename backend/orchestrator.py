@@ -95,6 +95,12 @@ async def run_case(state: AppState, case: CaseRecord) -> None:
                         continue
                     action.payload[k] = v
     state.service.attach_proposal(ctx, action)
+    # RCA synthesis — if the proposal stage declares a `synthesis:` block,
+    # run the LLM inference pass (5-Why) over the just-bound evidence and
+    # append the reasoning as synthesized facts BEFORE we emit the proposal
+    # envelope, so the reviewer sees the chain alongside its evidence.
+    # Additive: no-op for scenarios without a `synthesis:` block.
+    await _maybe_run_synthesis(state, ctx, scenario, action)
     await state.bus.emit(case.case_id, _stage_event(ctx, Stage.PROPOSAL))
 
     # Idempotency check — runs the action's predicate_sql against the target
@@ -346,6 +352,48 @@ async def _extract_prompt_filters(
         if parsed.where:
             out[f"{ontology_id}.{parsed.class_}"] = dict(parsed.where)
     return out
+
+
+async def _maybe_run_synthesis(
+    state: AppState, ctx: KnowledgeContext, scenario: dict, action
+) -> None:
+    """Run the RCA reasoning pass(es) over the bound proposal evidence.
+
+    Opt-in: a scenario's `stages.proposal.synthesis` selects the mode(s) —
+    ``all`` (every registered method), a single mode string, or a list.
+    Each mode reasons over the SAME original evidence snapshot; its facts are
+    appended to the proposal StageContext (so they ride along in the envelope,
+    the SSE payload, and the revision snapshot) and a lineage event records the
+    result. Never raises — synthesis is best-effort enrichment and must not
+    sink the case.
+    """
+    proposal_def = (scenario.get("stages") or {}).get("proposal") or {}
+    from .rca_synthesis import resolve_modes, run_synthesis_modes
+
+    modes = resolve_modes(proposal_def.get("synthesis"))
+    if not modes:
+        return
+    stage_ctx = ctx.stages.get(Stage.PROPOSAL)
+    if stage_ctx is None:
+        return
+    try:
+        results = await run_synthesis_modes(
+            state.llm, modes,
+            evidence_facts=stage_ctx.facts, payload=dict(action.payload),
+        )
+        actor = scenario.get("actor_id") or "agent-rca-synthesis"
+        for mode, facts, detail in results:
+            stage_ctx.facts.extend(facts)
+            ev = make_event(
+                stage=Stage.PROPOSAL,
+                actor=actor,
+                action=f"synthesis.{mode}",
+                detail=f"{mode} synthesis → {detail}",
+            )
+            ctx.append_lineage(ev)
+            state.lineage.record(ctx.case_id, ev)
+    except Exception:  # noqa: BLE001
+        log.exception("RCA synthesis pass failed; proposal continues without it")
 
 
 def _maybe_run_executor(state: AppState, case: CaseRecord, scenario: dict) -> None:

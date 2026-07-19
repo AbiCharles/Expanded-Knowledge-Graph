@@ -64,3 +64,4 @@ _auto_for_ontology_class:
 _filter_from_prompt: true
 _custom_suggested_prompt: Look up PurchaseOrder (via supply_chain)
 version: 1
+plain_summary: "Look up a purchase order in the supply-chain graph."

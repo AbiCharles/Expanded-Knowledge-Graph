@@ -119,3 +119,4 @@ outcomes:
     detail: Reviewer requested additional alternate-capacity and cost-delta data before
       deciding. Case loops back to review.
 version: 1
+plain_summary: "When a port is disrupted, recommend an alternative route."
