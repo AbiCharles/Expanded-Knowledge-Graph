@@ -61,6 +61,30 @@ def _fetch_cscan_svg(state, part_id: str) -> str | None:
         return None
 
 
+async def resolve_part_id(state, scenario: dict, case, override: str = "") -> str:
+    """Effective part_id for a case: explicit override > extracted from the
+    operator's prompt (when the scenario sets `_filter_from_prompt` and a real
+    LLM is configured) > the scenario's action_payload default. Keeps the charts
+    + evidence graph consistent with the case the operator actually ran."""
+    if override:
+        return override
+    part_id = str((scenario.get("action_payload") or {}).get("part_id", ""))
+    prompt = (getattr(case, "prompt", "") or "").strip() if case is not None else ""
+    if scenario.get("_filter_from_prompt") and prompt:
+        try:
+            from ..orchestrator import _extract_prompt_filters
+
+            filters = await _extract_prompt_filters(state, scenario, prompt)
+            for where in filters.values():
+                v = where.get("part_id")
+                if v:
+                    part_id = str(v)
+                    break
+        except Exception:  # noqa: BLE001
+            log.info("part_id prompt-extraction failed; using scenario default")
+    return part_id
+
+
 @router.post("/analysis")
 async def rca_analysis(
     payload: RcaAnalysisRequest,
@@ -69,17 +93,19 @@ async def rca_analysis(
 ) -> dict:
     state = request.app.state.app_state
 
-    scenario = None
-    if payload.case_id:
-        case = state.cases.get(payload.case_id)
-        if case is not None and case.scenario_id:
-            scenario = state.scenarios.get(case.scenario_id)
+    case = state.cases.get(payload.case_id) if payload.case_id else None
+    scenario = (
+        state.scenarios.get(case.scenario_id)
+        if (case is not None and case.scenario_id)
+        else None
+    )
     if scenario is None:
         raise HTTPException(404, "no RCA scenario resolvable for this case")
 
     action_payload = dict(scenario.get("action_payload") or {})
-    if payload.part_id:
-        action_payload["part_id"] = payload.part_id
+    action_payload["part_id"] = await resolve_part_id(
+        state, scenario, case, payload.part_id
+    )
 
     proposal_def = (scenario.get("stages") or {}).get("proposal") or {}
     # Re-bind the proposal evidence (Anomaly / EvidenceNode / Defect / PriorNCR).

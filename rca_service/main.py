@@ -46,7 +46,20 @@ DEFECTS: dict[str, dict] = {
         "candidate_causes": "insufficient consolidation pressure; autoclave regulator drift",
         "observations": "18 mm delamination at the ply 7/8 interface; C-scan amplitude drop of -14 dB over the affected region",
         "program": "Mirage",
+        "cscan_db": "-14 dB",
         "image_url": f"{BASE}/api/cscan/P-1234.svg",
+    },
+    "P-3300": {
+        "id": "DEF-3300",
+        "part_id": "P-3300",
+        "defect_type": "delamination",
+        "severity": "medium",
+        "location": "skin-to-doubler interface, station 220",
+        "candidate_causes": "cure temperature undershoot; 1.8 mm ply gap at the doubler; vacuum loss during ramp",
+        "observations": "9 mm delamination at the skin/doubler bondline; C-scan amplitude drop of -9 dB",
+        "program": "Viper",
+        "cscan_db": "-9 dB",
+        "image_url": f"{BASE}/api/cscan/P-3300.svg",
     },
 }
 
@@ -108,8 +121,8 @@ def rag_query(q: str = "", collection: str = "ncr", top_k: int = 3):
 # =============================================================================
 # C-scan image — a representative ultrasonic amplitude map with the defect
 # =============================================================================
-def _cscan_svg() -> str:
-    return """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 460 300'>
+def _cscan_svg(part_id: str = "P-1234", loc: str = "ply 7/8", db: str = "-14 dB") -> str:
+    return f"""<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 460 300'>
   <defs>
     <linearGradient id='amp' x1='0' y1='0' x2='1' y2='0'>
       <stop offset='0' stop-color='#0b1e3f'/><stop offset='0.5' stop-color='#0e7c7b'/>
@@ -142,7 +155,7 @@ def _cscan_svg() -> str:
   <!-- delamination indication -->
   <ellipse cx='250' cy='150' rx='60' ry='34' fill='url(#defect)'/>
   <ellipse cx='250' cy='150' rx='60' ry='34' fill='none' stroke='#ffcc00' stroke-width='1' stroke-dasharray='4 3'/>
-  <text x='250' y='205' fill='#ffd6d6' font-family='monospace' font-size='11' text-anchor='middle'>delamination -14 dB</text>
+  <text x='250' y='205' fill='#ffd6d6' font-family='monospace' font-size='11' text-anchor='middle'>delamination {db}</text>
   <!-- axes -->
   <text x='205' y='278' fill='#7f97bd' font-family='monospace' font-size='10' text-anchor='middle'>scan X (mm)</text>
   <text x='16' y='150' fill='#7f97bd' font-family='monospace' font-size='10' text-anchor='middle' transform='rotate(-90 16 150)'>scan Y (mm)</text>
@@ -151,13 +164,17 @@ def _cscan_svg() -> str:
   <text x='399' y='24' fill='#7f97bd' font-family='monospace' font-size='9' text-anchor='middle'>amp</text>
   <text x='420' y='36' fill='#7f97bd' font-family='monospace' font-size='9'>hi</text>
   <text x='420' y='258' fill='#7f97bd' font-family='monospace' font-size='9'>lo</text>
-  <text x='40' y='20' fill='#cfe0ff' font-family='monospace' font-size='11'>C-scan · P-1234 · ply 7/8</text>
+  <text x='40' y='20' fill='#cfe0ff' font-family='monospace' font-size='11'>C-scan · {part_id} · {loc}</text>
 </svg>"""
 
 
 @app.get("/api/cscan/{name}")
 def cscan(name: str):
-    return Response(content=_cscan_svg(), media_type="image/svg+xml")
+    part = name.split(".")[0]
+    d = DEFECTS.get(part, {})
+    loc = (d.get("location") or "ply 7/8").split(",")[0].strip()
+    db = d.get("cscan_db", "-14 dB")
+    return Response(content=_cscan_svg(part, loc, db), media_type="image/svg+xml")
 
 
 @app.get("/api/health")

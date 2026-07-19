@@ -6,3 +6,7 @@ ANM-5004,P-1234,resin_batch_log,Resin viscosity 6% above nominal for batch RB-22
 ANM-5010,P-2050,cnc_spindle_log,Spindle load spike +18% on finishing pass,load_spike,2026-06-15T09:20:00Z
 ANM-5011,P-2050,coolant_flow_log,Coolant flow interruption 4.2s during pocket cut,flow_interrupt,2026-06-15T09:21:00Z
 ANM-5020,P-3312,oven_telemetry,Ramp rate exceeded 3.5C/min during ramp-up,ramp_rate,2026-06-16T11:02:00Z
+ANM-5040,P-3300,autoclave_telemetry,Cure temperature undershoot 9C below profile at the hold,temp_undershoot,2026-06-17T07:30:00Z
+ANM-5041,P-3300,layup_qc_log,Ply gap 1.8mm exceeded 1.0mm limit at the skin doubler,ply_gap,2026-06-17T05:10:00Z
+ANM-5042,P-3300,autoclave_telemetry,Vacuum level lost to 12 inHg during first cure ramp,vacuum_loss,2026-06-17T06:55:00Z
+ANM-5043,P-3300,freezer_out_log,Prepreg out-life at 82% of limit for batch RB-3310,material_marginal,2026-06-16T23:40:00Z

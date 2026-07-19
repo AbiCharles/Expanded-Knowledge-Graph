@@ -346,22 +346,27 @@ def _evidence_class(typ: str) -> str:
 
 
 @router.post("/evidence", response_model=SubgraphResponse)
-def evidence_subgraph(
+async def evidence_subgraph(
     payload: EvidenceRequest,
     request: Request,
     _user: CurrentUser = Depends(current_user),
 ) -> SubgraphResponse:
     state = request.app.state.app_state
 
-    # Resolve the part_id: explicit arg wins; otherwise pull it off the case's
-    # scenario action_payload (the manufacturing_rca scenarios carry part_id).
+    # Resolve the part_id: explicit arg wins; otherwise resolve from the case —
+    # the operator's prompt (when _filter_from_prompt) or the scenario default.
     part_id = (payload.part_id or "").strip()
     if not part_id and payload.case_id:
         case = state.cases.get(payload.case_id)
-        if case is not None and case.scenario_id:
-            sc = state.scenarios.get(case.scenario_id)
-            if sc:
-                part_id = str((sc.get("action_payload") or {}).get("part_id") or "")
+        sc = (
+            state.scenarios.get(case.scenario_id)
+            if (case is not None and case.scenario_id)
+            else None
+        )
+        if sc:
+            from .rca import resolve_part_id
+
+            part_id = await resolve_part_id(state, sc, case)
     if not part_id:
         raise HTTPException(400, "no part_id (pass part_id, or a case_id whose scenario carries one)")
 

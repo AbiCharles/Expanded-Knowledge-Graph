@@ -187,6 +187,11 @@ _custom_suggested_prompt: RCA the C-scan delamination on part P-1234 for the Mir
   program
 # Surfaces this scenario in the operator console's pinned row for one-click demos.
 pinned: true
+# Extract the part_id / program from the operator's prompt and overlay them on
+# the action payload (so "RCA the delamination on P-3300 for Viper" investigates
+# P-3300, not the P-1234 default). Needs a real LLM provider — the offline/fake
+# parser can't pull attribute values, so it falls back to the payload defaults.
+_filter_from_prompt: true
 # On approve, file the CAPA. The action is COMPENSATABLE (its YAML declares a
 # forward INSERT and a compensation UPDATE), so the LineagePanel renders a
 # "Compensate" button on the executed event — clicking it voids the CAPA and
