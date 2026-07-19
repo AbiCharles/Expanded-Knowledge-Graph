@@ -9,7 +9,12 @@ operator_role:
 reviewer_role:
   label: Reviewer
   name: quality.lead.rlee
-autonomous: false
+autonomous: true
+auto_approval_guardrail: GR-RCA-AUTO-2026
+auto_approval_reason: Read-bound RCA with a compensatable CAPA. The agent binds
+  the full evidence package, runs every analysis method, and auto-issues the
+  corrective action; the issued CAPA is reversible from the audit trail, so no
+  pre-execution human gate is required for this defect class.
 action_type: rca_investigation
 action_payload:
   part_id: P-1234
@@ -70,6 +75,11 @@ closing_messages:
     as new evidence arrives.'
   request_more_info: '<strong>Quality lead needs more information.</strong>
     Specifically: <em>"{rationale}"</em><br><br>Case is back in review.'
+# Autonomous closing line (the agent auto-completes; no reviewer decision).
+closing_message: <strong>RCA auto-completed.</strong> Root cause identified across
+  all four analysis methods and the corrective action issued automatically. The
+  full evidence package + report are on the audit trail; the CAPA can be voided
+  from the lineage panel.
 rationale_reasons:
   reject:
   - Root cause is not yet supported by the telemetry — the pressure-drop anomaly
@@ -168,6 +178,13 @@ stages:
       purpose: Prior CAPA precedent for this defect type from the governance store
         (rca.sqlite — manufacturing_rca.PriorCAPA).
 outcomes:
+  auto_execute:
+    headline: Auto-completed — root cause found, CAPA issued
+    detail: The agent bound the full evidence package (vision, telemetry, evidence
+      graph, prior NCRs), ran all four analysis methods, and auto-issued the
+      corrective action. The complete evidence package, the analyses, and the
+      issued CAPA are on the audit trail; the CAPA is reversible from the lineage
+      panel. Open the full report from the outcome.
   approve:
     headline: Approved — CAPA issued
     detail: Quality lead accepted the 5-Why root cause and the corrective/preventive

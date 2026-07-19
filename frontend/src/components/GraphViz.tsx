@@ -34,6 +34,7 @@ import {
   FishboneDiagram,
   FiveWhyChain,
   ParetoChart,
+  RcaReport,
   VisualFinding,
 } from "./RcaCharts";
 
@@ -242,6 +243,7 @@ function caseHasEvidenceGraph(active: CaseFull): boolean {
 
 export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [desiredTab, setDesiredTab] = useState<"graph" | "report">("graph");
   const [data, setData] = useState<SubgraphResponse | null>(null);
   const [analysis, setAnalysis] = useState<RcaAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -268,19 +270,32 @@ export function EvidenceGraphPanel({ active }: { active: CaseFull }) {
       <button
         type="button"
         className="viz-card-button"
-        onClick={() => setModalOpen(true)}
+        onClick={() => { setDesiredTab("graph"); setModalOpen(true); }}
       >
-        <span className="viz-card-eyebrow">Evidence graph</span>
+        <span className="viz-card-eyebrow">Evidence graph &amp; analyses</span>
         <span className="viz-card-title">
-          The causal chain behind the root cause — visual, log, inference &amp;
-          root-cause nodes
+          The causal chain behind the root cause — plus every analysis method
+          (5-Why, Ishikawa, Pareto, C-scan) as tabs
         </span>
         <span className="viz-card-cta">Open in full-page graph &nbsp;⤢</span>
+      </button>
+      <button
+        type="button"
+        className="viz-card-button"
+        onClick={() => { setDesiredTab("report"); setModalOpen(true); }}
+      >
+        <span className="viz-card-eyebrow">Complete report</span>
+        <span className="viz-card-title">
+          The full RCA report — findings, all charts &amp; diagrams, root cause
+          and the issued CAPA — printable to PDF
+        </span>
+        <span className="viz-card-cta">Open report &nbsp;⤢</span>
       </button>
       {modalOpen && (
         <GraphModal
           title="Evidence graph"
           subtitle="Part → Defect → evidence chain (visual → log → inference → root cause)"
+          initialAnalysisTab={desiredTab}
           explainer={
             "The graph-resident evidence chain for this defect, pulled live " +
             "from Neo4j. Each node is a piece of evidence — a visual finding, a " +
@@ -461,22 +476,33 @@ type GraphModalProps = {
   // that type's nodes with their full (untruncated) labels.
   typeTabs?: boolean;
   // RCA method tabs — when present, the modal shows a tab per analysis method
-  // (Evidence graph / 5-Why / Ishikawa / Pareto / Visual); each non-graph tab
-  // renders that method's chart + supporting documents instead of the canvas.
+  // (Evidence graph / 5-Why / Ishikawa / Pareto / Visual / Report); each
+  // non-graph tab renders that method's chart / report instead of the canvas.
   rcaAnalysis?: import("../api").RcaAnalysis | null;
+  // Which method tab to open on (e.g. "report" from the Complete-report tile).
+  initialAnalysisTab?: AnalysisTab;
 };
 
-type AnalysisTab = "graph" | "five_why" | "ishikawa" | "pareto" | "visual";
+type AnalysisTab = "graph" | "five_why" | "ishikawa" | "pareto" | "visual" | "report";
 
 // One non-graph analysis tab: the method's chart on the left, its supporting
-// evidence "documents" on the right.
+// evidence "documents" on the right. The "report" tab is full-width.
 function RcaAnalysisStage({
   tab,
   analysis,
+  subgraph,
 }: {
   tab: Exclude<AnalysisTab, "graph">;
   analysis: RcaAnalysis;
+  subgraph?: SubgraphResponse | null;
 }) {
+  if (tab === "report") {
+    return (
+      <div className="graph-modal-stage rca-report-stage">
+        <RcaReport analysis={analysis} subgraph={subgraph} />
+      </div>
+    );
+  }
   const chart =
     tab === "five_why" ? (
       <FiveWhyChain data={analysis.five_why} />
@@ -525,12 +551,13 @@ export function GraphModal({
   embedded = false,
   typeTabs = false,
   rcaAnalysis,
+  initialAnalysisTab = "graph",
 }: GraphModalProps) {
   const [layout, setLayout] = useState<LayoutName>(defaultLayout);
   // RCA type-tabs: the node type currently isolated (null = show everything).
   const [selectedNodeType, setSelectedNodeType] = useState<string | null>(null);
   // RCA method tabs: which analysis is showing ("graph" = the network canvas).
-  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("graph");
+  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>(initialAnalysisTab);
   // RCA evidence graph: the ontology class of the node the user last clicked.
   const [selectedNodeClass, setSelectedNodeClass] = useState<{
     ontologyId: string;
@@ -1204,6 +1231,7 @@ export function GraphModal({
               ["ishikawa", "Ishikawa"],
               ["pareto", "Pareto"],
               ["visual", "Visual"],
+              ["report", "Report"],
             ] as [AnalysisTab, string][]).map(([key, label]) => (
               <button
                 key={key}
@@ -1247,7 +1275,11 @@ export function GraphModal({
           </div>
         )}
         {rcaAnalysis && analysisTab !== "graph" ? (
-          <RcaAnalysisStage tab={analysisTab} analysis={rcaAnalysis} />
+          <RcaAnalysisStage
+            tab={analysisTab}
+            analysis={rcaAnalysis}
+            subgraph={rawNodes && rawEdges ? { nodes: rawNodes, edges: rawEdges, stats: {} } : null}
+          />
         ) : (
         <div className="graph-modal-stage">
           <div className="graph-modal-canvas">

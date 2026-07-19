@@ -21,6 +21,7 @@ so the demo runs end-to-end without credentials.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -505,15 +506,18 @@ async def run_synthesis_modes(
 ) -> list[tuple[str, list[KnowledgeFact], str]]:
     """Run each mode over the SAME (original) evidence snapshot. Returns one
     (mode, facts, lineage_detail) tuple per mode. A mode that raises is skipped."""
-    results: list[tuple[str, list[KnowledgeFact], str]] = []
     snapshot = list(evidence_facts)  # so later modes don't see earlier synthesis facts
-    for mode in modes:
-        fn = MODES.get(mode)
-        if fn is None:
+    valid = [m for m in modes if m in MODES]
+    # Run all methods concurrently — they're independent (each reads the same
+    # snapshot). Turns N sequential LLM round-trips into one.
+    settled = await asyncio.gather(
+        *(MODES[m](llm, snapshot, payload) for m in valid), return_exceptions=True
+    )
+    results: list[tuple[str, list[KnowledgeFact], str]] = []
+    for mode, r in zip(valid, settled):
+        if isinstance(r, Exception):
+            log.warning("synthesis mode %s failed; skipping (%s)", mode, r)
             continue
-        try:
-            facts, detail = await fn(llm, snapshot, payload)
-            results.append((mode, facts, detail))
-        except Exception:  # noqa: BLE001
-            log.exception("synthesis mode %s failed; skipping", mode)
+        facts, detail = r
+        results.append((mode, facts, detail))
     return results

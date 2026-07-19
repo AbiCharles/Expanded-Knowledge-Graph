@@ -239,6 +239,26 @@ async def _finalise_autonomous(state: AppState, case: CaseRecord, pd: policy.Pol
     assert case.ctx is not None
     scenario = state.scenarios.require(case.scenario_id)  # type: ignore[arg-type]
 
+    # Autonomous scenarios don't pause for a human, but still bind + surface the
+    # review-stage evidence (e.g. CAPA candidates + prior CAPAs) so the completed
+    # case presents the FULL evidence package as its outcome — the same rich view
+    # a reviewer would see, just auto-decided.
+    ctx = case.ctx
+    if ctx.action is not None and "review" in (scenario.get("stages") or {}):
+        try:
+            review = state.service.review_binder.bind(ctx.action, ctx)
+            ctx.attach_stage(review)
+            rev_ev = make_event(
+                stage=Stage.REVIEW,
+                actor="hitl_service",
+                action="auto_bound",
+                detail=f"review evidence bound autonomously — {len(review.facts)} fact(s)",
+            )
+            ctx.append_lineage(rev_ev)
+            state.lineage.record(ctx.case_id, rev_ev)
+        except Exception:  # noqa: BLE001
+            log.exception("autonomous review binding failed; continuing")
+
     ev = make_event(
         stage=Stage.EXECUTE,
         actor=scenario["actor_id"],

@@ -12,6 +12,7 @@ Deterministic under `LLM_PROVIDER=fake`.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
@@ -107,6 +108,16 @@ async def rca_analysis(
         state, scenario, case, payload.part_id
     )
 
+    # Cache the assembled analysis per (case, part) — re-opening the modal or
+    # the report tab reuses it instead of re-binding + re-synthesizing.
+    cache = getattr(state, "_rca_analysis_cache", None)
+    if cache is None:
+        cache = {}
+        state._rca_analysis_cache = cache
+    ckey = f"{payload.case_id}|{action_payload['part_id']}"
+    if ckey in cache:
+        return cache[ckey]
+
     proposal_def = (scenario.get("stages") or {}).get("proposal") or {}
     # Re-bind the proposal evidence (Anomaly / EvidenceNode / Defect / PriorNCR).
     facts, _ = _facts_from_stage(
@@ -118,10 +129,14 @@ async def rca_analysis(
         review_def, ontology=state.ontology_resolver, payload=action_payload
     )
 
-    five = await run_five_why_synthesis(state.llm, evidence_facts=facts, payload=action_payload)
-    ish = await run_ishikawa_synthesis(state.llm, evidence_facts=facts, payload=action_payload)
-    par = await run_pareto_synthesis(state.llm, evidence_facts=facts, payload=action_payload)
-    eg = await run_evidence_graph_synthesis(state.llm, evidence_facts=facts, payload=action_payload)
+    # Run the four analysis methods concurrently (4 sequential LLM round-trips
+    # → 1 with a real provider).
+    five, ish, par, eg = await asyncio.gather(
+        run_five_why_synthesis(state.llm, evidence_facts=facts, payload=action_payload),
+        run_ishikawa_synthesis(state.llm, evidence_facts=facts, payload=action_payload),
+        run_pareto_synthesis(state.llm, evidence_facts=facts, payload=action_payload),
+        run_evidence_graph_synthesis(state.llm, evidence_facts=facts, payload=action_payload),
+    )
 
     # Vision — pull the C-scan image + typed fields off the bound Defect fact
     # (from the rca_vision http source). None when the vision service is down.
@@ -155,7 +170,7 @@ async def rca_analysis(
         for f in (facts + review_facts)
     ]
 
-    return {
+    result = {
         "problem": _problem_statement(action_payload),
         "part_id": action_payload.get("part_id", ""),
         "defect_type": action_payload.get("defect_type", ""),
@@ -166,3 +181,5 @@ async def rca_analysis(
         "pareto": par.model_dump(),
         "evidence_graph": eg.model_dump(),
     }
+    cache[ckey] = result
+    return result

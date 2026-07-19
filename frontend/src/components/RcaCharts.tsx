@@ -8,6 +8,7 @@ import {
   RcaFiveWhy,
   RcaIshikawa,
   RcaPareto,
+  SubgraphResponse,
 } from "../api";
 
 // =============================================================================
@@ -400,4 +401,194 @@ export function VisualFinding({ analysis }: { analysis: RcaAnalysis }) {
 function truncate(s: string, n: number): string {
   if (!s) return "";
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
+}
+
+function cap(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+// =============================================================================
+// Static evidence-chain diagram — a layered, non-interactive rendering of the
+// Neo4j evidence subgraph, for the report (Part → Defect → evidence → root).
+// =============================================================================
+const _ACCENT_FILL: Record<string, string> = {
+  anchor: "#0d6e7f",
+  risk: "#c14a4a",
+  risk_path: "#94a3b8",
+  alt: "#a16207",
+  default: "#cbd5e1",
+  "": "#cbd5e1",
+};
+const _EV_COL: Record<string, number> = {
+  Part: 0,
+  Defect: 1,
+  "Visual finding": 2,
+  "Log finding": 2,
+  Inference: 3,
+  "Root cause": 4,
+};
+
+function StaticEvidenceDiagram({ subgraph }: { subgraph?: SubgraphResponse | null }) {
+  const nodes = subgraph?.nodes || [];
+  const edges = subgraph?.edges || [];
+  if (!nodes.length) {
+    return <div className="rca-report-empty">Evidence chain not available.</div>;
+  }
+  const byCol: Record<number, typeof nodes> = {};
+  nodes.forEach((n) => {
+    const c = _EV_COL[n.type] ?? 2;
+    (byCol[c] ||= []).push(n);
+  });
+  const colKeys = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+  const W = 760;
+  const top = 34;
+  const maxRows = Math.max(1, ...colKeys.map((c) => byCol[c].length));
+  const H = top * 2 + maxRows * 72;
+  const pos: Record<string, { x: number; y: number }> = {};
+  colKeys.forEach((c, ci) => {
+    const list = byCol[c];
+    const x = colKeys.length === 1 ? W / 2 : 50 + (ci * (W - 100)) / (colKeys.length - 1);
+    list.forEach((n, i) => {
+      pos[n.id] = { x, y: top + ((i + 0.5) * (H - 2 * top)) / list.length };
+    });
+  });
+  return (
+    <div className="rca-static-graph-wrap">
+      <svg viewBox={`0 0 ${W} ${H}`} className="rca-static-graph" role="img">
+        {edges.map((e, i) => {
+          const a = pos[e.source];
+          const b = pos[e.target];
+          if (!a || !b) return null;
+          return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="sg-edge" />;
+        })}
+        {nodes.map((n) => {
+          const p = pos[n.id];
+          if (!p) return null;
+          return (
+            <g key={n.id}>
+              <circle cx={p.x} cy={p.y} r={9} fill={_ACCENT_FILL[n.accent || "default"]}
+                stroke="#fff" strokeWidth={1.5} />
+              <text x={p.x} y={p.y + 22} className="sg-label" textAnchor="middle">
+                {truncate(n.label, 24)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function ReportDocs({ title, docs }: { title: string; docs: RcaEvidenceDoc[] }) {
+  if (!docs.length) return null;
+  return (
+    <div className="rca-report-docs">
+      <div className="rca-report-docs-label">{title}</div>
+      <ul>
+        {docs.map((d) => (
+          <li key={`${d.source}-${d.id}`}>
+            <strong>{d.title || d.id}</strong>
+            {d.summary ? ` — ${d.summary}` : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// =============================================================================
+// The complete, print-ready RCA report.
+// =============================================================================
+export function RcaReport({
+  analysis,
+  subgraph,
+}: {
+  analysis: RcaAnalysis;
+  subgraph?: SubgraphResponse | null;
+}) {
+  const fw = analysis.five_why;
+  const by = (t: string) => analysis.evidence.filter((d) => d.ontology_type === t);
+  return (
+    <div className="rca-report">
+      <div className="rca-report-toolbar no-print">
+        <button className="rca-report-print" type="button" onClick={() => window.print()}>
+          🖨 Print / Save as PDF
+        </button>
+      </div>
+      <article className="rca-report-doc">
+        <header className="rca-report-head">
+          <div className="rca-report-eyebrow">Root-cause analysis report</div>
+          <h1 className="rca-report-title">{cap(analysis.problem)}</h1>
+          <div className="rca-report-meta">
+            Part {analysis.part_id} · {analysis.defect_type}
+            {analysis.vision?.severity ? ` · ${analysis.vision.severity} severity` : ""}
+          </div>
+        </header>
+
+        <section className="rca-report-section">
+          <h2>Summary</h2>
+          <p className="rca-report-rootcause">
+            <strong>Root cause:</strong> {fw.root_cause}{" "}
+            <span className="rca-report-conf">({fw.confidence} confidence)</span>
+          </p>
+          {analysis.evidence_graph.evidence_summary && (
+            <p>{analysis.evidence_graph.evidence_summary}</p>
+          )}
+        </section>
+
+        {analysis.vision && (
+          <section className="rca-report-section">
+            <h2>Visual finding — C-scan</h2>
+            <VisualFinding analysis={analysis} />
+          </section>
+        )}
+
+        <section className="rca-report-section">
+          <h2>Evidence findings</h2>
+          <ReportDocs title="Telemetry anomalies" docs={by("Anomaly")} />
+          <ReportDocs title="Evidence-graph nodes" docs={by("EvidenceNode")} />
+          <ReportDocs title="Historical NCRs" docs={by("PriorNCR")} />
+        </section>
+
+        <section className="rca-report-section">
+          <h2>Evidence chain</h2>
+          <StaticEvidenceDiagram subgraph={subgraph} />
+        </section>
+
+        <section className="rca-report-section rca-report-break">
+          <h2>5-Why analysis</h2>
+          <FiveWhyChain data={fw} />
+        </section>
+
+        <section className="rca-report-section rca-report-break">
+          <h2>Ishikawa (fishbone)</h2>
+          <FishboneDiagram data={analysis.ishikawa} effect={analysis.defect_type || "defect"} />
+        </section>
+
+        <section className="rca-report-section rca-report-break">
+          <h2>Pareto</h2>
+          <ParetoChart data={analysis.pareto} />
+        </section>
+
+        <section className="rca-report-section">
+          <h2>Recommended corrective / preventive action</h2>
+          {fw.recommended_actions.length > 0 && (
+            <ul className="rca-report-actions">
+              {fw.recommended_actions.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+            </ul>
+          )}
+          <ReportDocs title="Candidate CAPAs (knowledge base)" docs={by("CAPARecommendation")} />
+          <ReportDocs title="Prior CAPA precedent" docs={by("PriorCAPA")} />
+        </section>
+
+        <footer className="rca-report-foot">
+          Every fact in this report is bound from a registered data source with
+          per-fact provenance on the audit trail. The corrective action is issued
+          as a governed, reversible action.
+        </footer>
+      </article>
+    </div>
+  );
 }
