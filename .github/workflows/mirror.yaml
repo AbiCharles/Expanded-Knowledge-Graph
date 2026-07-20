@@ -74,3 +74,12 @@ jobs:
             '+refs/tags/*:refs/tags/*' \
             '+refs/heads/main:refs/heads/dev' \
             '+refs/heads/main:refs/heads/Development'
+
+          # Second Azure repo — tcs_knowledge_fabric_new_ui — receives
+          # ONLY the launcher branch. Kept isolated so consumers
+          # browsing the new-UI work don't see the full fabric history.
+          # Same PAT + same filter-repo pass, so .claude/ is stripped
+          # here too. Leading `+` allows force-updates after rebases.
+          AZURE_NEW_UI_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric_new_ui"
+          git push "${AZURE_NEW_UI_URL}" \
+            '+refs/heads/launcher:refs/heads/launcher'
