@@ -68,18 +68,21 @@ jobs:
           # become no-ops (already-up-to-date). The capital D in
           # `Development` matches the existing Azure-side branch name
           # exactly — git refs are case-sensitive.
+          # Second Azure repo — tcs_knowledge_fabric_new_ui — receives
+          # ONLY the launcher branch. Kept isolated so consumers
+          # browsing the new-UI work don't see the full fabric history.
+          # Runs BEFORE the main-repo push so a pre-existing ForcePush
+          # denial on tcs_knowledge_fabric's `Development` branch (which
+          # fails the script under `set -e`) doesn't block launcher →
+          # new_ui from ever getting pushed. Same PAT + same
+          # filter-repo pass, so .claude/ is stripped here too.
+          AZURE_NEW_UI_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric_new_ui"
+          git push "${AZURE_NEW_UI_URL}" \
+            '+refs/heads/launcher:refs/heads/launcher'
+
           AZURE_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
           git push "${AZURE_URL}" \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*' \
             '+refs/heads/main:refs/heads/dev' \
             '+refs/heads/main:refs/heads/Development'
-
-          # Second Azure repo — tcs_knowledge_fabric_new_ui — receives
-          # ONLY the launcher branch. Kept isolated so consumers
-          # browsing the new-UI work don't see the full fabric history.
-          # Same PAT + same filter-repo pass, so .claude/ is stripped
-          # here too. Leading `+` allows force-updates after rebases.
-          AZURE_NEW_UI_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric_new_ui"
-          git push "${AZURE_NEW_UI_URL}" \
-            '+refs/heads/launcher:refs/heads/launcher'
