@@ -308,3 +308,53 @@ export interface AutoApprovedEvent {
   closing_message: string;
   lineage: LineageEvent[];
 }
+
+// =============================================================================
+// Multi-scenario Outcome DAG — mirrors backend/outcome_plan.py. Returned by
+// POST /api/graph/outcome-tree. Nodes/edges render on Cytoscape; `outcomes`
+// is the ranked side-panel list.
+// =============================================================================
+export type OutcomeNodeKind = "question" | "scenario_step" | "decision" | "outcome";
+export type EdgeBasis = "author" | "history" | "default" | "agent" | "structural";
+
+export interface OutcomeNode {
+  id: string;
+  label: string;
+  kind: OutcomeNodeKind;
+  scenario_id?: string | null;
+  step_index?: number | null;
+  outcome_kind?: string | null;
+  // Aggregate probability of reaching this node (outcome terminals only).
+  probability?: number | null;
+  accent: string;
+}
+
+export interface OutcomeEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  probability: number;
+  basis: EdgeBasis;
+  rationale: string;
+  accent: string;
+}
+
+export interface OutcomeSummary {
+  id: string;
+  label: string;
+  outcome_kind?: string | null;
+  scenario_id?: string | null;
+  probability: number;
+  // One entry per distinct root→outcome path (list of edge ids).
+  path_edge_ids: string[][];
+}
+
+export interface OutcomePlan {
+  question: string;
+  scenario_ids: string[];
+  nodes: OutcomeNode[];
+  edges: OutcomeEdge[];
+  outcomes: OutcomeSummary[];
+  stats: Record<string, number>;
+}

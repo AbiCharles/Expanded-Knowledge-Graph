@@ -10,6 +10,7 @@ interface Props {
   onOpenScenariosHelp: () => void;
   onOpenMetrics: () => void;
   onOpenInsights: () => void;
+  onOpenOutcomeTree: () => void;
   onOpenPlatformFlow: () => void;
   onOpenCaseSpec: () => void;
   // W8 — opens the agent-driven run view. Optional so the StatusBar
@@ -17,7 +18,7 @@ interface Props {
   onOpenAgentRun?: () => void;
 }
 
-export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenInsights, onOpenPlatformFlow, onOpenCaseSpec, onOpenAgentRun }: Props) {
+export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpenScenariosHelp, onOpenMetrics, onOpenInsights, onOpenOutcomeTree, onOpenPlatformFlow, onOpenCaseSpec, onOpenAgentRun }: Props) {
   let stage = "Idle";
   if (active) {
     if (active.phase === "awaiting_clarification") stage = "Clarifying";
@@ -96,6 +97,13 @@ export function StatusBar({ active, role, user, onLogout, onOpenKnowledge, onOpe
           title="Live metrics dashboard"
         >
           Metrics
+        </button>
+        <button
+          className="statusbar-action statusbar-action-quiet"
+          onClick={onOpenOutcomeTree}
+          title="Stitch multiple scenarios into a probability-weighted outcome graph"
+        >
+          Outcome pathways
         </button>
         {user.role === "admin" && (
           <button

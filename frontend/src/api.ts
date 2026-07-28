@@ -8,6 +8,7 @@ import {
   CreateCaseResponse,
   DataSourceRow,
   DecisionKind,
+  OutcomePlan,
   QueueRow,
   SampleFact,
   ScenarioRow,
@@ -23,6 +24,23 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
 
 export async function listScenarios(): Promise<ScenarioRow[]> {
   return jsonOrThrow(await authedFetch("/api/scenarios"));
+}
+
+// Stitch several scenarios into one probability-weighted Outcome DAG.
+// `context` can carry optional signals for the hybrid probability model,
+// e.g. { reliability_score: 0.8 }.
+export async function outcomeTree(
+  question: string,
+  scenarioIds: string[],
+  context: Record<string, unknown> = {}
+): Promise<OutcomePlan> {
+  return jsonOrThrow(
+    await authedFetch("/api/graph/outcome-tree", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, scenario_ids: scenarioIds, context }),
+    })
+  );
 }
 
 export async function listCases(): Promise<CaseSummary[]> {

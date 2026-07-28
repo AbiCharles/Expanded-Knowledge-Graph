@@ -9,6 +9,7 @@ import { CaseSpecModal } from "./components/CaseSpecModal";
 import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { InsightsModal } from "./components/InsightsModal";
+import { OutcomeTreeModal } from "./components/OutcomeTreeModal";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -36,6 +37,7 @@ type ModalState =
   | { kind: "edit-scenario"; scenarioId: string }
   | { kind: "metrics" }
   | { kind: "insights" }
+  | { kind: "outcome-tree" }
   | { kind: "platform-flow" }
   | { kind: "case-spec"; tab?: "scenario" | "ontology"; anchor?: string };
 
@@ -534,6 +536,7 @@ export default function App() {
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
         onOpenInsights={() => setModal({ kind: "insights" })}
+        onOpenOutcomeTree={() => setModal({ kind: "outcome-tree" })}
         onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
         onOpenCaseSpec={() => setModal({ kind: "case-spec" })}
         onOpenAgentRun={() => {
@@ -629,6 +632,9 @@ export default function App() {
       )}
       {modal.kind === "insights" && (
         <InsightsModal onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "outcome-tree" && (
+        <OutcomeTreeModal scenarios={scenarios} onClose={() => setModal({ kind: "none" })} />
       )}
       {modal.kind === "platform-flow" && (
         <PlatformFlowModal active={active} onClose={() => setModal({ kind: "none" })} />
