@@ -109,6 +109,22 @@ export interface CreateCaseResponse {
   clarifying_question: string;
   confidence: number;
   candidates: ScenarioCandidate[];
+  // Present only when the planner detected a multi-scenario question.
+  pipeline?: PipelineForecast | null;
+}
+
+// The planner's ordered pipeline + projected Outcome DAG (mirrors
+// PipelineOut in backend/api/cases.py). Rendered by PipelineForecastPanel.
+export interface PipelineStepPlan {
+  scenario_id: string;
+  title: string;
+  why: string;
+}
+export interface PipelineForecast {
+  steps: PipelineStepPlan[];
+  rationale: string;
+  confidence: number;
+  forecast: OutcomePlan;
 }
 
 export interface ScenarioCandidate {

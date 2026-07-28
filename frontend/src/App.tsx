@@ -10,6 +10,7 @@ import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { InsightsModal } from "./components/InsightsModal";
 import { OutcomeTreeModal } from "./components/OutcomeTreeModal";
+import { PipelineForecastPanel } from "./components/PipelineForecastPanel";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -23,7 +24,7 @@ import {
 import { StatusBar } from "./components/StatusBar";
 import { AgentRun } from "./components/AgentRun";
 import { useCaseStream } from "./hooks/useCaseStream";
-import { CaseFull, CaseSummary, DecisionKind, ScenarioRow } from "./types";
+import { CaseFull, CaseSummary, DecisionKind, PipelineForecast, ScenarioRow } from "./types";
 
 type ModalState =
   | { kind: "none" }
@@ -315,12 +316,17 @@ export default function App() {
   // in the Console so the user gets feedback BEFORE the case's own `binding`
   // phase event arrives via SSE.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set when the planner detects a multi-scenario question — drives the
+  // projected-pathways panel above the main workspace.
+  const [pipeline, setPipeline] = useState<PipelineForecast | null>(null);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
+    setPipeline(null);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
+      setPipeline(result.pipeline ?? null);
       refreshCases();
     } catch (e) {
       console.error(e);
@@ -546,6 +552,9 @@ export default function App() {
           }
         }}
       />
+      {pipeline && (
+        <PipelineForecastPanel pipeline={pipeline} onClose={() => setPipeline(null)} />
+      )}
       <div className="main">
         <Console
           scenarios={scenarios}

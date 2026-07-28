@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
+from ..case_history import decision_history_provider
 from ..datasources.neo4j_source import Neo4jResolver
 from ..outcome_plan import OutcomePlan
 from ..scenario_composer import compose
@@ -293,29 +294,6 @@ class OutcomeTreeRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-def _make_history_provider(database):
-    """scenario_id -> {decision_kind: count} from the cases table.
-
-    Same denominator basis as api/insights.py's ``share_of_decisions`` —
-    the historical priors that seed branch probabilities.
-    """
-    from sqlalchemy import func, select
-
-    from ..persistence.db import CaseRow
-
-    def provider(scenario_id: str) -> dict[str, float]:
-        with database.session() as session:
-            rows = session.execute(
-                select(CaseRow.decision_kind, func.count(CaseRow.case_id))
-                .where(CaseRow.scenario_id == scenario_id)
-                .where(CaseRow.decision_kind.is_not(None))
-                .group_by(CaseRow.decision_kind)
-            ).all()
-        return {kind: float(n) for kind, n in rows if kind}
-
-    return provider
-
-
 @router.post("/outcome-tree", response_model=OutcomePlan)
 def outcome_tree(
     payload: OutcomeTreeRequest,
@@ -330,7 +308,7 @@ def outcome_tree(
     the nodes/edges the frontend renders plus a ranked ``outcomes`` list.
     """
     state = request.app.state.app_state
-    provider = _make_history_provider(state.database)
+    provider = decision_history_provider(state.database)
     try:
         return compose(
             payload.question,

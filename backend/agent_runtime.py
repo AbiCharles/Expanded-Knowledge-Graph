@@ -47,9 +47,34 @@ class InterpretedRequest(BaseModel):
     candidates: list[ScenarioCandidate] = Field(default_factory=list)
 
 
+class PipelineStep(BaseModel):
+    """One scenario in a planned multi-scenario pipeline (in run order)."""
+    scenario_id: str
+    title: str
+    why: str = ""
+
+
+class PipelinePlan(BaseModel):
+    """Result of `plan_pipeline` — an ordered pipeline of 1..N scenarios.
+
+    `steps` is the compose order: the first is the entry point; each later
+    step is reached only if the prior step's decision lets the workflow
+    proceed. `len(steps) >= 2` means the question is genuinely multi-scenario.
+    """
+    steps: list[PipelineStep] = Field(default_factory=list)
+    rationale: str = ""
+    confidence: float = 0.0
+
+    @property
+    def multi(self) -> bool:
+        return len(self.steps) >= 2
+
+
 # Confidence below this threshold → UI should offer top-K alternatives.
 SUGGEST_THRESHOLD = 0.7
 TOP_K = 3
+# Max scenarios the keyword-chain fallback will stitch together.
+MAX_PIPELINE_STEPS = 4
 
 
 _CLASSIFY_SYSTEM = """You are the intake stage of a Human-in-the-Loop agent runtime for an enterprise supply-chain platform.
@@ -76,6 +101,22 @@ Respond with strict JSON only, matching this schema:
     {"scenario_id": string, "confidence": number},
     {"scenario_id": string, "confidence": number}
   ]
+}"""
+
+
+_PLAN_SYSTEM = """You are the pipeline planner for a Human-in-the-Loop supply-chain agent runtime.
+Given an operator's natural-language question and the scenario catalog, decide whether answering it requires a SEQUENCE of scenarios ("compose then branch") or a single scenario.
+
+Rules:
+  - Return an ORDERED pipeline. The first step is the entry point; each later step is one the workflow only reaches if the prior step's decision lets it proceed (e.g. the reviewer approves, then a follow-on action is triggered).
+  - Return MULTIPLE steps ONLY when the question genuinely spans multiple dependent decisions (e.g. "if we approve a mitigation for the failing supplier, what happens to the follow-on bulk PO?"). If it's a single ask, return exactly one step.
+  - Use only scenario_ids that exist in the catalog. Give a short `why` for each step.
+
+Respond with strict JSON only:
+{
+  "steps": [ {"scenario_id": string, "why": string} ],
+  "rationale": string,
+  "confidence": number
 }"""
 
 
@@ -216,6 +257,83 @@ class AgentRuntime:
             clarifying_question=top_sc.get("clarifying_question", ""),
             confidence=candidates[0].confidence,
             candidates=candidates,
+        )
+
+    # -------------------------------------------------------------------------
+    # Step 1b — plan a (possibly multi-scenario) pipeline from the prompt
+    # -------------------------------------------------------------------------
+    async def plan_pipeline(self, text: str) -> PipelinePlan:
+        """Plan an ordered pipeline of scenarios for a natural-language question.
+
+        With a real LLM this reasons over the catalog and returns a chain when
+        the question spans dependent decisions. With the fake LLM (or on any
+        failure) it falls back to keyword-chaining: scenarios whose
+        `match_keywords` hit the prompt, ordered by hit count.
+        """
+        if self.llm.name == "fake":
+            return self._keyword_chain(text)
+
+        catalog_lines = [
+            f"  - {sc['id']}: {sc['title']} ({sc.get('domain', '')}) — keywords: "
+            + ", ".join(sc.get("match_keywords", []))
+            for sc in self.scenarios.all()
+        ]
+        user_msg = (
+            "Scenario catalog:\n" + "\n".join(catalog_lines)
+            + f"\n\nOperator question: {text!r}\n\nReturn JSON only."
+        )
+        try:
+            raw = await self.llm.complete(
+                system=_PLAN_SYSTEM, user=user_msg,
+                response_format="json", temperature=0.1,
+            )
+            parsed = json.loads(raw)
+            steps: list[PipelineStep] = []
+            seen: set[str] = set()
+            for s in parsed.get("steps", []) or []:
+                sid = s.get("scenario_id")
+                sc = self.scenarios.get(sid) if sid else None
+                if sc is None or sid in seen:
+                    continue
+                seen.add(sid)
+                steps.append(PipelineStep(scenario_id=sid, title=sc["title"], why=s.get("why", "")))
+                if len(steps) >= MAX_PIPELINE_STEPS:
+                    break
+            if not steps:
+                return self._keyword_chain(text)
+            return PipelinePlan(
+                steps=steps,
+                rationale=parsed.get("rationale", ""),
+                confidence=float(parsed.get("confidence", 0.0)),
+            )
+        except Exception:
+            log.exception("LLM plan_pipeline failed; keyword-chain fallback")
+            return self._keyword_chain(text)
+
+    def _keyword_chain(self, text: str) -> PipelinePlan:
+        """Keyword-match fallback. 2+ matching scenarios → a chained pipeline."""
+        lower = text.lower()
+        scored: list[tuple[int, dict]] = []
+        for sc in self.scenarios.all():
+            score = sum(1 for kw in sc.get("match_keywords", []) if kw and kw in lower)
+            if score > 0:
+                scored.append((score, sc))
+        scored.sort(key=lambda t: -t[0])
+        if not scored:
+            return PipelinePlan(steps=[], rationale="No scenario keywords matched the question.")
+        if len(scored) >= 2:
+            chosen = scored[:MAX_PIPELINE_STEPS]
+            rationale = "Keyword-chain fallback — multiple scenarios matched the question."
+        else:
+            chosen = scored[:1]
+            rationale = "Keyword fallback — a single scenario matched."
+        steps = [
+            PipelineStep(scenario_id=sc["id"], title=sc["title"], why=f"{score} keyword match(es)")
+            for score, sc in chosen
+        ]
+        return PipelinePlan(
+            steps=steps, rationale=rationale,
+            confidence=min(1.0, 0.5 + 0.1 * chosen[0][0]),
         )
 
     # -------------------------------------------------------------------------

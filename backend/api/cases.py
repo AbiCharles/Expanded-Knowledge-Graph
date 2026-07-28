@@ -15,6 +15,9 @@ from sse_starlette.sse import EventSourceResponse
 
 from .. import orchestrator
 from ..auth import CurrentUser, current_user
+from ..case_history import decision_history_provider
+from ..outcome_plan import OutcomePlan
+from ..scenario_composer import compose
 from ..state import AppState, CaseRecord
 
 router = APIRouter(tags=["cases"])
@@ -41,6 +44,29 @@ class CandidateOut(BaseModel):
     confidence: float
 
 
+class PipelineStepOut(BaseModel):
+    """One scenario in a planned multi-scenario pipeline (in run order)."""
+
+    scenario_id: str
+    title: str
+    why: str = ""
+
+
+class PipelineOut(BaseModel):
+    """Attached to CreateCaseOut when a question spans multiple scenarios.
+
+    `forecast` is the probability-weighted Outcome DAG projected for the
+    planned pipeline (same shape as POST /graph/outcome-tree). Phase 1
+    surfaces this as the projected map; Phase 2 will drive the real
+    chained execution from `steps`.
+    """
+
+    steps: list[PipelineStepOut]
+    rationale: str = ""
+    confidence: float = 0.0
+    forecast: OutcomePlan
+
+
 class CreateCaseOut(BaseModel):
     """Response for POST /api/cases — the new case + the agent's interpretation."""
 
@@ -50,6 +76,9 @@ class CreateCaseOut(BaseModel):
     clarifying_question: str
     confidence: float
     candidates: list[CandidateOut] = []
+    # Populated only when the planner decides the question spans 2+
+    # scenarios. Null for ordinary single-scenario questions (unchanged flow).
+    pipeline: Optional[PipelineOut] = None
 
 
 class ReplayIn(BaseModel):
@@ -184,9 +213,38 @@ async def create_case(
     request: Request,
     user: CurrentUser = Depends(current_user),
 ) -> CreateCaseOut:
-    """Operator typed a prompt. Run LLM classification, return clarifier."""
+    """Operator typed a prompt. Run LLM classification, return clarifier.
+
+    Also runs the pipeline planner: if the question spans 2+ dependent
+    scenarios, the response carries a `pipeline` block (the planned steps +
+    a probability-weighted forecast graph). The single case created here is
+    still the entry point; Phase 2 will drive the real chained execution.
+    """
     state: AppState = request.app.state.app_state
     interpreted = await state.agent_runtime.interpret_prompt(payload.prompt)
+
+    # Auto-detect a multi-scenario question and project its Outcome DAG.
+    pipeline_out: Optional[PipelineOut] = None
+    try:
+        plan = await state.agent_runtime.plan_pipeline(payload.prompt)
+        if plan.multi:
+            scenario_ids = [s.scenario_id for s in plan.steps]
+            forecast = compose(
+                payload.prompt,
+                scenario_ids,
+                scenarios=state.scenarios,
+                history_provider=decision_history_provider(state.database),
+                context={},
+            )
+            pipeline_out = PipelineOut(
+                steps=[PipelineStepOut(**s.model_dump()) for s in plan.steps],
+                rationale=plan.rationale,
+                confidence=plan.confidence,
+                forecast=forecast,
+            )
+    except Exception:
+        log.exception("pipeline planning failed; continuing as single case")
+        pipeline_out = None
 
     case_id = f"case-{uuid.uuid4().hex[:10]}"
 
@@ -224,6 +282,7 @@ async def create_case(
         clarifying_question=interpreted.clarifying_question,
         confidence=interpreted.confidence,
         candidates=[CandidateOut(**c) for c in candidates_payload],
+        pipeline=pipeline_out,
     )
 
 

@@ -9088,11 +9088,19 @@ details[open] > .suggested-summary .suggested-chevron {
 .otree-modal { display: flex; flex-direction: column; }
 .otree-body {
   display: grid;
-  grid-template-columns: 280px 1fr 260px;
+  grid-template-columns: 280px 1fr;
   gap: 14px;
   flex: 1;
   min-height: 0;
   padding: 4px 2px 2px;
+}
+/* Canvas + ranked-outcomes, shared by the modal and the pipeline panel. */
+.otree-graph {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
 }
 .otree-config { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
 .otree-label { font-size: 12px; font-weight: 600; color: #334155; margin-top: 4px; }
@@ -9157,3 +9165,45 @@ details[open] > .suggested-summary .suggested-chevron {
 .otree-outcome-pct { font-size: 14px; font-weight: 700; color: #0f172a; }
 .otree-outcome-label { font-size: 12px; color: #334155; }
 .otree-outcome-scn { font-size: 10px; color: #94a3b8; font-family: "DM Mono", monospace; margin-top: 2px; }
+
+/* =========================================================================
+   Pipeline forecast panel (PipelineForecastPanel.tsx) — auto-shown when a
+   question is detected to span multiple scenarios.
+   ========================================================================= */
+.pipeline-panel {
+  border: 1px solid #d9c9a8;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbf7ee 0%, #ffffff 60%);
+  padding: 14px 16px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pipeline-head { display: flex; flex-direction: column; gap: 2px; position: relative; }
+.pipeline-close {
+  position: absolute; top: -2px; right: 0; border: none; background: transparent;
+  font-size: 20px; line-height: 1; color: #94a3b8; cursor: pointer;
+}
+.pipeline-close:hover { color: #475569; }
+.pipeline-eyebrow {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #a16207;
+}
+.pipeline-head h3 { margin: 0; font-family: Fraunces, Georgia, serif; font-size: 17px; color: #1e293b; }
+.pipeline-head p { margin: 0; font-size: 12.5px; color: #64748b; }
+.pipeline-steps {
+  display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 2px 0 0; padding: 0;
+}
+.pipeline-steps li {
+  display: flex; align-items: center; gap: 7px;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 999px; padding: 4px 10px 4px 5px;
+}
+.pipeline-step-n {
+  flex: 0 0 20px; height: 20px; line-height: 20px; text-align: center; border-radius: 50%;
+  background: #0d6e7f; color: #fff; font-size: 11px; font-weight: 700;
+}
+.pipeline-step-title { font-size: 12.5px; font-weight: 600; color: #1e293b; }
+.pipeline-step-why { font-size: 11px; color: #94a3b8; }
+.pipeline-step-arrow { color: #cbd5e1; font-weight: 700; }
+.pipeline-graph { height: 460px; min-height: 0; }
