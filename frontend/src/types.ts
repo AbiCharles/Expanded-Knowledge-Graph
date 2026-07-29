@@ -121,9 +121,34 @@ export interface PipelineStepPlan {
   why: string;
 }
 export interface PipelineForecast {
+  pipeline_id: string;
   steps: PipelineStepPlan[];
   rationale: string;
   confidence: number;
+  forecast: OutcomePlan;
+}
+
+// Live pipeline state from GET /api/pipelines/{id} (Phase 2). Drives the
+// per-step status + the actual-path overlay on the forecast graph.
+export type PipelineStatus = "planned" | "running" | "complete" | "error";
+
+export interface PipelineStepState {
+  scenario_id: string;
+  title: string;
+  why: string;
+  case_id: string | null;
+  decision: string | null;
+}
+
+export interface PipelineState {
+  pipeline_id: string;
+  prompt: string;
+  status: PipelineStatus;
+  current_step: number;
+  terminal_decision: string | null;
+  error: string | null;
+  steps: PipelineStepState[];
+  actual_path: { step: number; scenario_id: string; decision: string }[];
   forecast: OutcomePlan;
 }
 

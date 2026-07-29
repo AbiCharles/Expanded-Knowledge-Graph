@@ -17,6 +17,7 @@ from .. import orchestrator
 from ..auth import CurrentUser, current_user
 from ..case_history import decision_history_provider
 from ..outcome_plan import OutcomePlan
+from ..pipeline import PipelineRecord, PipelineStepState
 from ..scenario_composer import compose
 from ..state import AppState, CaseRecord
 
@@ -61,6 +62,7 @@ class PipelineOut(BaseModel):
     chained execution from `steps`.
     """
 
+    pipeline_id: str
     steps: list[PipelineStepOut]
     rationale: str = ""
     confidence: float = 0.0
@@ -224,62 +226,102 @@ async def create_case(
     interpreted = await state.agent_runtime.interpret_prompt(payload.prompt)
 
     # Auto-detect a multi-scenario question and project its Outcome DAG.
-    pipeline_out: Optional[PipelineOut] = None
+    plan = None
+    forecast = None
     try:
         plan = await state.agent_runtime.plan_pipeline(payload.prompt)
         if plan.multi:
-            scenario_ids = [s.scenario_id for s in plan.steps]
             forecast = compose(
                 payload.prompt,
-                scenario_ids,
+                [s.scenario_id for s in plan.steps],
                 scenarios=state.scenarios,
                 history_provider=decision_history_provider(state.database),
                 context={},
             )
-            pipeline_out = PipelineOut(
-                steps=[PipelineStepOut(**s.model_dump()) for s in plan.steps],
-                rationale=plan.rationale,
-                confidence=plan.confidence,
-                forecast=forecast,
-            )
     except Exception:
         log.exception("pipeline planning failed; continuing as single case")
-        pipeline_out = None
+        plan = None
+        forecast = None
+
+    is_multi = plan is not None and plan.multi and forecast is not None
 
     case_id = f"case-{uuid.uuid4().hex[:10]}"
+    pipeline_id = f"pipe-{uuid.uuid4().hex[:10]}" if is_multi else None
 
     candidates_payload = [c.model_dump() for c in interpreted.candidates]
     # phase: we keep "awaiting_clarification" as long as we have at least one
-    # candidate to suggest — the UI shows top-K buttons when confidence is low.
+    # candidate to suggest (or this is a pipeline entry point) — the UI shows
+    # top-K buttons / the "Run pipeline" affordance from there.
     has_candidates = bool(interpreted.scenario_id) or bool(candidates_payload)
-    # Pin the case to the live scenario's current version so a later
-    # edit (which bumps the scenario to v+1) doesn't retroactively
-    # change what this case ran against. Null when the binder later
-    # picks a scenario via clarification — the relink path stamps it
-    # then. See _relink_case() below.
+
+    # When multi, the entry-point case runs the pipeline's FIRST step (which
+    # may differ from the single-scenario classification); otherwise it runs
+    # the classifier's best match.
+    if is_multi:
+        first_scenario: Optional[str] = plan.steps[0].scenario_id
+        sc0 = state.scenarios.get(first_scenario) or {}
+        interpreted_as = sc0.get("interpreted_as", "")
+        clarifying_question = sc0.get("clarifying_question", "")
+    else:
+        first_scenario = interpreted.scenario_id
+        interpreted_as = interpreted.interpreted_as
+        clarifying_question = interpreted.clarifying_question
+
+    # Pin the case to the live scenario's current version so a later edit
+    # (which bumps the scenario to v+1) doesn't retroactively change what
+    # this case ran against.
     scenario_version = None
-    if interpreted.scenario_id:
-        sc = state.scenarios.get(interpreted.scenario_id)
+    if first_scenario:
+        sc = state.scenarios.get(first_scenario)
         if sc and isinstance(sc.get("version"), int):
             scenario_version = sc["version"]
+
     record = CaseRecord(
         case_id=case_id,
         prompt=payload.prompt,
-        scenario_id=interpreted.scenario_id,
+        scenario_id=first_scenario,
         scenario_version=scenario_version,
-        interpreted_as=interpreted.interpreted_as,
-        clarifying_question=interpreted.clarifying_question,
+        interpreted_as=interpreted_as,
+        clarifying_question=clarifying_question,
         user_id=user.id,
         confidence=interpreted.confidence,
         candidates=candidates_payload,
-        phase="awaiting_clarification" if has_candidates else "cancelled",
+        phase="awaiting_clarification" if (has_candidates or is_multi) else "cancelled",
+        pipeline_id=pipeline_id,
+        pipeline_step=0 if is_multi else None,
     )
     state.cases[case_id] = record
+
+    pipeline_out: Optional[PipelineOut] = None
+    if is_multi:
+        steps = [
+            PipelineStepState(scenario_id=s.scenario_id, title=s.title, why=s.why)
+            for s in plan.steps
+        ]
+        steps[0].case_id = case_id  # entry-point case runs step 0
+        state.pipelines[pipeline_id] = PipelineRecord(
+            pipeline_id=pipeline_id,
+            prompt=payload.prompt,
+            user_id=user.id,
+            steps=steps,
+            forecast=forecast,
+        )
+        pipeline_out = PipelineOut(
+            pipeline_id=pipeline_id,
+            steps=[
+                PipelineStepOut(scenario_id=s.scenario_id, title=s.title, why=s.why)
+                for s in plan.steps
+            ],
+            rationale=plan.rationale,
+            confidence=plan.confidence,
+            forecast=forecast,
+        )
+
     return CreateCaseOut(
         case_id=case_id,
-        scenario_id=interpreted.scenario_id,
-        interpreted_as=interpreted.interpreted_as,
-        clarifying_question=interpreted.clarifying_question,
+        scenario_id=first_scenario,
+        interpreted_as=interpreted_as,
+        clarifying_question=clarifying_question,
         confidence=interpreted.confidence,
         candidates=[CandidateOut(**c) for c in candidates_payload],
         pipeline=pipeline_out,

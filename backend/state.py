@@ -109,6 +109,12 @@ class AppState:
         # persist; the orchestrator + API endpoints do that at phase boundaries.
         self.cases: PersistentCaseStore = PersistentCaseStore(database)
 
+        # Multi-scenario pipelines (Phase 2), keyed by pipeline_id. In-memory
+        # only, like the review queue / decision store — a restart drops
+        # in-flight pipelines (their per-step cases still persist). Values are
+        # backend.pipeline.PipelineRecord.
+        self.pipelines: dict[str, Any] = {}
+
         # Transport: in-memory queue + decision store. The framework writes
         # rendered cards into the queue on submit_for_review; the decisions API
         # writes ReviewDecisions into the store; collect_decision pulls them out.

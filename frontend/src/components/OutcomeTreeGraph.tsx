@@ -191,27 +191,75 @@ const STYLESHEET: any[] = [
   },
   { selector: "node.otree-hl", style: { "border-width": 3, "border-color": "#4f46e5" } },
   { selector: ".otree-dim", style: { opacity: 0.22 } },
+
+  // Actual path taken by the live run (Phase 2). Solid + thick, on top.
+  {
+    selector: "edge.otree-taken-continue",
+    style: { "line-color": "#1f9d55", "target-arrow-color": "#1f9d55", width: 5.5, opacity: 1, "z-index": 30, label: "data(label)", color: "#0c3d24", "font-weight": 700 },
+  },
+  {
+    selector: "edge.otree-taken-stop",
+    style: { "line-color": "#c14a4a", "target-arrow-color": "#c14a4a", width: 5.5, opacity: 1, "z-index": 30, label: "data(label)", color: "#7a2424", "font-weight": 700 },
+  },
+  { selector: "node.otree-active", style: { "border-width": 4, "border-color": "#1f9d55", "border-style": "double" } },
 ];
+
+const CONTINUE_DECISIONS = new Set(["approve", "auto_execute"]);
 
 const DAGRE = { name: "dagre", rankDir: "LR", nodeSep: 40, rankSep: 90, edgeSep: 16, padding: 24, animate: false };
 
 export function OutcomeTreeGraph({
   plan,
   emptyHint,
+  actualPath,
+  activeScenarioId,
 }: {
   plan: OutcomePlan | null;
   emptyHint?: string;
+  // The path a live pipeline run has actually taken (Phase 2 overlay).
+  actualPath?: { scenario_id: string; decision: string }[];
+  activeScenarioId?: string | null;
 }) {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const cyRef = useRef<any>(null);
   const [cyTick, setCyTick] = useState(0);
+  const hasActual = !!(actualPath && actualPath.length);
 
   const elements = useMemo(() => (plan ? toElements(plan) : []), [plan]);
 
-  // Reset selection to the most-probable outcome whenever the plan changes.
+  // Reset selection to the most-probable outcome whenever the plan changes —
+  // unless a live run is overlaying its actual path (then don't auto-dim).
   useEffect(() => {
-    setSelectedOutcome(plan?.outcomes[0]?.id ?? null);
-  }, [plan]);
+    setSelectedOutcome(hasActual ? null : plan?.outcomes[0]?.id ?? null);
+  }, [plan, hasActual]);
+
+  // Overlay the actual path taken by the live run: paint each resolved
+  // step's branch edge (green = continued, red = stopped) and ring the
+  // currently-executing scenario node.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || !plan) return;
+    cy.batch(() => {
+      cy.elements().removeClass("otree-taken-continue otree-taken-stop otree-active");
+      const nodeById = new Map(plan.nodes.map((n) => [n.id, n]));
+      for (const step of actualPath ?? []) {
+        const cont = CONTINUE_DECISIONS.has(step.decision);
+        for (const e of plan.edges) {
+          const src = nodeById.get(e.source);
+          if (e.label === step.decision && src && src.scenario_id === step.scenario_id) {
+            cy.getElementById(e.id).addClass(cont ? "otree-taken-continue" : "otree-taken-stop");
+          }
+        }
+      }
+      if (activeScenarioId) {
+        for (const n of plan.nodes) {
+          if (n.kind === "scenario_step" && n.scenario_id === activeScenarioId) {
+            cy.getElementById(n.id).addClass("otree-active");
+          }
+        }
+      }
+    });
+  }, [plan, actualPath, activeScenarioId, cyTick]);
 
   // Run dagre once cy has the new elements attached.
   useEffect(() => {

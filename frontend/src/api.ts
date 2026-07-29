@@ -9,6 +9,7 @@ import {
   DataSourceRow,
   DecisionKind,
   OutcomePlan,
+  PipelineState,
   QueueRow,
   SampleFact,
   ScenarioRow,
@@ -24,6 +25,20 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
 
 export async function listScenarios(): Promise<ScenarioRow[]> {
   return jsonOrThrow(await authedFetch("/api/scenarios"));
+}
+
+// Multi-scenario pipeline (Phase 2). `confirmPipeline` kicks off the real
+// chained HITL execution; `getPipeline` returns live state for polling.
+export async function confirmPipeline(
+  pipelineId: string
+): Promise<{ pipeline_id: string; status: string }> {
+  return jsonOrThrow(
+    await authedFetch(`/api/pipelines/${pipelineId}/confirm`, { method: "POST" })
+  );
+}
+
+export async function getPipeline(pipelineId: string): Promise<PipelineState> {
+  return jsonOrThrow(await authedFetch(`/api/pipelines/${pipelineId}`));
 }
 
 // Stitch several scenarios into one probability-weighted Outcome DAG.

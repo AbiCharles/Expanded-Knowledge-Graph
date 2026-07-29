@@ -553,7 +553,14 @@ export default function App() {
         }}
       />
       {pipeline && (
-        <PipelineForecastPanel pipeline={pipeline} onClose={() => setPipeline(null)} />
+        <PipelineForecastPanel
+          pipeline={pipeline}
+          onClose={() => setPipeline(null)}
+          onActiveCase={(cid) => {
+            setActiveId(cid);
+            refreshCases();
+          }}
+        />
       )}
       <div className="main">
         <Console

@@ -9207,3 +9207,20 @@ details[open] > .suggested-summary .suggested-chevron {
 .pipeline-step-why { font-size: 11px; color: #94a3b8; }
 .pipeline-step-arrow { color: #cbd5e1; font-weight: 700; }
 .pipeline-graph { height: 460px; min-height: 0; }
+.pipeline-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pipeline-controls .pipeline-steps { flex: 1; }
+.pipeline-steps li.current { box-shadow: 0 0 0 2px rgba(31,157,85,0.4); }
+.pipeline-step-n.good { background: #3f9d6d; }
+.pipeline-step-n.risk { background: #c14a4a; }
+.pipeline-step-n.warn { background: #d99a2b; }
+.pipeline-step-n.current { background: #1f9d55; animation: pipeline-pulse 1.2s ease-in-out infinite; }
+@keyframes pipeline-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.pipeline-run {
+  background: #0d6e7f; color: #fff; border: none; border-radius: 8px;
+  padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.pipeline-run:disabled { background: #cbd5e1; cursor: not-allowed; }
+.pipeline-status { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.pipeline-status.running { color: #0d6e7f; }
+.pipeline-status.complete { color: #1f6e46; }
+.pipeline-status.error { color: #b91c1c; }

@@ -37,6 +37,7 @@ from .api.insights import router as insights_router
 from .api.metrics import router as metrics_router
 from .api.actions import router as actions_router
 from .api.ontologies import router as ontologies_router
+from .api.pipelines import router as pipelines_router
 from .api.scenarios import router as scenarios_router
 from .auth import assert_jwt_secret_set, ensure_default_admin
 from .config import get_settings
@@ -213,6 +214,7 @@ def create_app() -> FastAPI:
     app.include_router(ontologies_router, prefix="/api")
     app.include_router(actions_router, prefix="/api")
     app.include_router(graph_router, prefix="/api")
+    app.include_router(pipelines_router, prefix="/api")
     app.include_router(aeronova_router, prefix="/api")
 
     @app.get("/api/health")
