@@ -133,6 +133,26 @@ export function Console({
       )}
       {showWelcome && <WelcomeState historyCount={historyCount} />}
 
+      {/* Multi-scenario demo — a natural question that spans two scenarios, so
+          the question-driven Outcome-pathways flow is one click away in a demo.
+          Not tied to a single scenario (it's the planner that fans it out). */}
+      <div className="demo-row">
+        <div className="demo-label">Multi-scenario</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() =>
+            onSendPrompt(
+              "A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?"
+            )
+          }
+          title="Spans supply-assurance + PO auto-release — opens the Outcome-pathways flow"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?
+        </button>
+      </div>
+
       {/* Pinned row — demo-headline scenarios that should always be one click
           away without expanding the full catalogue. Renders ABOVE the
           collapsible Suggestions section; collapses cleanly when no scenario

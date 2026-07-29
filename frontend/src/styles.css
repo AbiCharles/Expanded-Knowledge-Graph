@@ -9280,3 +9280,9 @@ details[open] > .suggested-summary .suggested-chevron {
 .pw-approve:disabled { background: #cbd5e1; cursor: not-allowed; }
 .pw-path.chosen .pw-approve { background: #1f9d55; }
 .pw-paths-empty { color: #94a3b8; font-size: 12.5px; font-style: italic; padding: 12px 0; }
+
+/* One-click multi-scenario demo chip */
+.demo-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; flex-wrap: wrap; }
+.demo-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a16207; white-space: nowrap; }
+.chip-demo { background: linear-gradient(180deg, #fbf7ee 0%, #ffffff 80%); border: 1px solid #d9c9a8; color: #1e293b; text-align: left; }
+.chip-demo:hover:not(:disabled) { border-color: #a16207; }
