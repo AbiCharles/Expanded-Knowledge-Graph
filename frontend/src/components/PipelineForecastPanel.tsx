@@ -14,6 +14,13 @@ import { PipelineForecast, PipelineState } from "../types";
 import { pct } from "./OutcomeTreeGraph";
 import { PipelineModal } from "./PipelineModal";
 
+const DECISION_MARK: Record<string, { icon: string; cls: string }> = {
+  approve: { icon: "✓", cls: "good" },
+  auto_execute: { icon: "⚡", cls: "good" },
+  reject: { icon: "✗", cls: "risk" },
+  request_more_info: { icon: "?", cls: "warn" },
+};
+
 export function PipelineForecastPanel({
   pipeline,
   onClose,
@@ -83,20 +90,31 @@ export function PipelineForecastPanel({
   const status = pstate?.status ?? "planned";
   const paths = pstate?.viable_paths ?? [];
   const recommended = paths.find((p) => p.recommended);
+  // Live per-step state (with the decision that resolved each) when available,
+  // else the planned steps — so the banner always shows which scenarios the
+  // question used and how each one turned out.
+  const displaySteps =
+    pstate?.steps ?? pipeline.steps.map((s) => ({ ...s, decision: null as string | null, case_id: null }));
 
   return (
     <section className="pipeline-banner" aria-label="Multi-scenario pipeline">
       <div className="pipeline-banner-main">
-        <span className="pipeline-eyebrow">Multi-scenario question</span>
+        <span className="pipeline-eyebrow">Multi-scenario question · uses {displaySteps.length} scenarios</span>
         <div className="pipeline-banner-row">
           <ol className="pipeline-steps compact">
-            {pipeline.steps.map((s, i) => (
-              <li key={`${s.scenario_id}-${i}`} title={s.why || s.scenario_id}>
-                {i > 0 && <span className="pipeline-step-arrow">→</span>}
-                <span className="pipeline-step-n">{i + 1}</span>
-                <span className="pipeline-step-title">{s.title.split(" — ")[0]}</span>
-              </li>
-            ))}
+            {displaySteps.map((s, i) => {
+              const mark = s.decision ? DECISION_MARK[s.decision] : null;
+              const isCurrent = status === "running" && pstate?.current_step === i && !s.decision;
+              return (
+                <li key={`${s.scenario_id}-${i}`} title={s.scenario_id}>
+                  {i > 0 && <span className="pipeline-step-arrow">→</span>}
+                  <span className={`pipeline-step-n${mark ? ` ${mark.cls}` : ""}${isCurrent ? " current" : ""}`}>
+                    {mark ? mark.icon : i + 1}
+                  </span>
+                  <span className="pipeline-step-title">{s.title.split(" — ")[0]}</span>
+                </li>
+              );
+            })}
           </ol>
           <div className="pipeline-banner-status">
             {status === "planned" && recommended && (

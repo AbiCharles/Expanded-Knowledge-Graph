@@ -109,7 +109,15 @@ export function PipelineModal({
                       disabled={status !== "planned" || approving}
                       onClick={() => onApprove(p.path_id)}
                     >
-                      {isChosen ? "✓ Approved — executing" : "Approve this pathway"}
+                      {!isChosen
+                        ? "Approve this pathway"
+                        : status === "complete"
+                        ? "✓ Executed"
+                        : status === "error"
+                        ? "✗ Execution failed"
+                        : status === "running"
+                        ? "✓ Approved — executing…"
+                        : "✓ Approved"}
                     </button>
                   </div>
                 );
@@ -118,6 +126,23 @@ export function PipelineModal({
             </div>
           </aside>
         </div>
+
+        {status === "complete" && (
+          <div className="pw-footer">
+            <span className="pw-footer-msg">
+              ✓ The pathway executed end-to-end (ended on <strong>{pstate?.terminal_decision ?? "—"}</strong>). Each step's action fired and is on the audit trail.
+            </span>
+            <button className="pw-done" type="button" onClick={onClose}>
+              View outcome &amp; audit ▸
+            </button>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="pw-footer error">
+            <span className="pw-footer-msg">Execution error: {pstate?.error ?? "unknown"}</span>
+            <button className="pw-done" type="button" onClick={onClose}>Close</button>
+          </div>
+        )}
       </div>
     </div>
   );

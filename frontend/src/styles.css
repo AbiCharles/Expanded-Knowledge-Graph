@@ -9280,6 +9280,20 @@ details[open] > .suggested-summary .suggested-chevron {
 .pw-approve:disabled { background: #cbd5e1; cursor: not-allowed; }
 .pw-path.chosen .pw-approve { background: #1f9d55; }
 .pw-paths-empty { color: #94a3b8; font-size: 12.5px; font-style: italic; padding: 12px 0; }
+.pw-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 10px; padding: 12px 14px; border-radius: 10px;
+  background: #e6f4ec; border: 1px solid #b6dcc5;
+}
+.pw-footer.error { background: #fef2f2; border-color: #f0c4c4; }
+.pw-footer-msg { font-size: 13px; color: #14532d; }
+.pw-footer.error .pw-footer-msg { color: #7a1f1f; }
+.pw-footer-msg strong { text-transform: capitalize; }
+.pw-done {
+  border: none; border-radius: 8px; background: #1f9d55; color: #fff;
+  padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.pw-footer.error .pw-done { background: #0f172a; }
 
 /* One-click multi-scenario demo chip */
 .demo-row { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; flex-wrap: wrap; }
