@@ -83,6 +83,44 @@ def test_pipeline_unknown_404(client: TestClient, admin_headers: dict):
     assert client.get("/api/pipelines/pipe-nope", headers=admin_headers).status_code == 404
 
 
+def test_pipeline_exposes_viable_paths_with_recommended(client: TestClient, admin_headers: dict):
+    pipe = _make_pipeline(client, admin_headers)
+    p = client.get(f"/api/pipelines/{pipe['pipeline_id']}", headers=admin_headers).json()
+    assert p["viable_paths"], "expected actionable viable paths"
+    assert sum(1 for vp in p["viable_paths"] if vp["recommended"]) == 1
+    # Ranked most-probable first, and the recommended one leads.
+    probs = [vp["probability"] for vp in p["viable_paths"]]
+    assert probs == sorted(probs, reverse=True)
+    assert p["viable_paths"][0]["recommended"]
+
+
+def test_approve_path_starts_execution(client: TestClient, admin_headers: dict, monkeypatch):
+    # Stub run_case so the approve-path run completes deterministically.
+    _stub_run_case(monkeypatch, {})  # every step -> approve
+    pipe = _make_pipeline(client, admin_headers)
+    pid = pipe["pipeline_id"]
+    p = client.get(f"/api/pipelines/{pid}", headers=admin_headers).json()
+    rec = next(vp for vp in p["viable_paths"] if vp["recommended"])
+
+    # Unknown path -> 404.
+    assert client.post(f"/api/pipelines/{pid}/approve-path", json={"path_id": "nope"}, headers=admin_headers).status_code == 404
+
+    r = client.post(f"/api/pipelines/{pid}/approve-path", json={"path_id": rec["path_id"]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "running"
+
+    # Poll directly (approve-path already started the run; don't re-confirm).
+    final = None
+    for _ in range(60):
+        final = client.get(f"/api/pipelines/{pid}", headers=admin_headers).json()
+        if final["status"] in ("complete", "error"):
+            break
+        time.sleep(0.05)
+    assert final and final["status"] == "complete", final
+    assert final["chosen_path_id"] == rec["path_id"]
+    assert final["steps"][0]["decision"] == "approve"
+
+
 def test_first_step_case_is_linked_to_pipeline(client: TestClient, admin_headers: dict):
     create = client.post("/api/cases", json={"prompt": MULTI_PROMPT}, headers=admin_headers).json()
     pid = create["pipeline"]["pipeline_id"]

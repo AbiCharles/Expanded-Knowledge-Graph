@@ -10,6 +10,7 @@ standalone case.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -19,6 +20,9 @@ from .pipeline import PipelineRecord
 from .probability import CONTINUE_KINDS
 
 log = logging.getLogger(__name__)
+
+# How long to wait for a step to reach review_ready before giving up (seconds).
+_STEP_TIMEOUT = 60.0
 
 
 def _new_step_case(state, pipeline: PipelineRecord, step_index: int) -> CaseRecord:
@@ -80,5 +84,60 @@ async def run_pipeline(state, pipeline: PipelineRecord) -> None:
         pipeline.status = "complete"
     except Exception as exc:  # noqa: BLE001 — never let a step kill the loop silently
         log.exception("pipeline %s failed at step %s", pipeline.pipeline_id, pipeline.current_step)
+        pipeline.status = "error"
+        pipeline.error = str(exc)
+
+
+async def run_pipeline_path(state, pipeline: PipelineRecord, prescribed: dict[str, str]) -> None:
+    """Execute an approved pathway end-to-end, auto-applying its decisions.
+
+    The reviewer approved one whole pathway, so instead of blocking on a human
+    at each HITL step we auto-file the decision that pathway prescribes for
+    each scenario (defaulting to "approve" for any step the path doesn't name),
+    which lets the normal executor fire. Autonomous steps that don't escalate
+    just auto-execute. Stops if a prescribed decision doesn't continue.
+    """
+    from .api.decisions import record_decision_internal  # lazy: avoid import cycle
+
+    pipeline.status = "running"
+    n = len(pipeline.steps)
+    try:
+        for i in range(n):
+            pipeline.current_step = i
+            step = pipeline.steps[i]
+            case = state.cases.get(step.case_id) if step.case_id else None
+            if case is None:
+                case = _new_step_case(state, pipeline, i)
+                step.case_id = case.case_id
+
+            if case.decision_kind:
+                decision = case.decision_kind
+            else:
+                task = asyncio.create_task(orchestrator.run_case(state, case))
+                waited = 0.0
+                while not task.done():
+                    if case.phase == "review_ready" and case.ticket_id and not case.decision_kind:
+                        want = prescribed.get(step.scenario_id, "approve")
+                        await record_decision_internal(
+                            state=state, case=case, decision=want,
+                            reviewer_id="pathway-auto",
+                            rationale="Auto-applied from the approved pathway.",
+                            follow_up=None,
+                        )
+                        break
+                    await asyncio.sleep(0.05)
+                    waited += 0.05
+                    if waited > _STEP_TIMEOUT:
+                        break
+                await task
+                decision = case.decision_kind or "no_op"
+
+            step.decision = decision
+            if decision not in CONTINUE_KINDS or i == n - 1:
+                pipeline.terminal_decision = decision
+                break
+        pipeline.status = "complete"
+    except Exception as exc:  # noqa: BLE001
+        log.exception("pipeline %s (path) failed at step %s", pipeline.pipeline_id, pipeline.current_step)
         pipeline.status = "error"
         pipeline.error = str(exc)

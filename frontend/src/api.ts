@@ -41,6 +41,21 @@ export async function getPipeline(pipelineId: string): Promise<PipelineState> {
   return jsonOrThrow(await authedFetch(`/api/pipelines/${pipelineId}`));
 }
 
+// Approve one whole pathway; the backend executes it end-to-end, auto-applying
+// that path's decisions and firing each step's action (no per-step prompts).
+export async function approvePath(
+  pipelineId: string,
+  pathId: string
+): Promise<{ pipeline_id: string; status: string; path_id: string }> {
+  return jsonOrThrow(
+    await authedFetch(`/api/pipelines/${pipelineId}/approve-path`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path_id: pathId }),
+    })
+  );
+}
+
 // Stitch several scenarios into one probability-weighted Outcome DAG.
 // `context` can carry optional signals for the hybrid probability model,
 // e.g. { reliability_score: 0.8 }.

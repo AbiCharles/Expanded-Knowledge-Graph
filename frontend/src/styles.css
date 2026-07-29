@@ -9234,3 +9234,49 @@ details[open] > .suggested-summary .suggested-chevron {
 .pipeline-decide.approve { background: #1f9d55; }
 .pipeline-decide.reject { background: #c14a4a; }
 .pipeline-decide.info { background: #d99a2b; }
+
+/* Compact multi-scenario banner (chip) */
+.pipeline-banner {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  border: 1px solid #d9c9a8; border-radius: 12px;
+  background: linear-gradient(180deg, #fbf7ee 0%, #ffffff 70%);
+  padding: 10px 16px; margin: 12px 0;
+}
+.pipeline-banner-main { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.pipeline-banner-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pipeline-banner-status { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: wrap; }
+.pipeline-summary { font-size: 12.5px; color: #64748b; }
+.pipeline-summary strong { color: #1e293b; }
+.pipeline-steps.compact { margin: 0; }
+
+/* .otree-graph without the built-in outcomes panel (used inside the modal) */
+.otree-graph.solo { grid-template-columns: 1fr; }
+
+/* Pathway modal */
+.pw-modal { display: flex; flex-direction: column; }
+.pw-body {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 360px;
+  gap: 14px; padding: 4px 2px 2px;
+}
+.pw-graph { min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; }
+.pw-graph .otree-graph { height: 100%; }
+.pw-paths { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.pw-paths-head { font-size: 13px; font-weight: 700; color: #334155; }
+.pw-paths-hint { font-size: 11.5px; color: #94a3b8; }
+.pw-paths-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; padding-right: 4px; }
+.pw-path { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: #fff; }
+.pw-path.recommended { border-color: #0d6e7f; box-shadow: 0 0 0 1px rgba(13,110,127,0.3); }
+.pw-path.chosen { border-color: #1f9d55; box-shadow: 0 0 0 2px #1f9d55; }
+.pw-path-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pw-path-pct { font-size: 18px; font-weight: 700; color: #0f172a; }
+.pw-path-label { font-size: 13px; font-weight: 600; color: #1e293b; flex: 1; }
+.pw-badge { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #0d6e7f; background: #d6eef1; border-radius: 5px; padding: 2px 6px; }
+.pw-path-steps { display: flex; flex-wrap: wrap; gap: 5px; }
+.pw-step-chip { font-size: 10.5px; border-radius: 6px; padding: 2px 7px; background: #f1f5f9; color: #475569; }
+.pw-step-chip.d-approve, .pw-step-chip.d-auto_execute { background: #e6f4ec; color: #1f6e46; }
+.pw-step-chip.d-reject { background: #fbeaea; color: #8a3030; }
+.pw-step-chip.d-request_more_info { background: #fdf1dd; color: #8a6215; }
+.pw-approve { border: none; border-radius: 8px; background: #0d6e7f; color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pw-approve:disabled { background: #cbd5e1; cursor: not-allowed; }
+.pw-path.chosen .pw-approve { background: #1f9d55; }
+.pw-paths-empty { color: #94a3b8; font-size: 12.5px; font-style: italic; padding: 12px 0; }

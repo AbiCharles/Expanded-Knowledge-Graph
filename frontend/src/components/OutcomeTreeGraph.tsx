@@ -224,6 +224,7 @@ export function OutcomeTreeGraph({
   actualPath,
   activeScenarioId,
   runActive,
+  hideOutcomes,
 }: {
   plan: OutcomePlan | null;
   emptyHint?: string;
@@ -233,6 +234,9 @@ export function OutcomeTreeGraph({
   // True while a pipeline is executing — suppress the projected most-probable
   // highlight so it isn't mistaken for the actual path taken.
   runActive?: boolean;
+  // Hide the built-in ranked-outcomes panel (the pathway modal shows its own
+  // approvable viable-paths list instead).
+  hideOutcomes?: boolean;
 }) {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const cyRef = useRef<any>(null);
@@ -324,7 +328,7 @@ export function OutcomeTreeGraph({
   }
 
   return (
-    <div className="otree-graph">
+    <div className={`otree-graph${hideOutcomes ? " solo" : ""}`}>
       <div className="otree-canvas">
         <CytoscapeComponent
           elements={elements}
@@ -342,6 +346,7 @@ export function OutcomeTreeGraph({
           }}
         />
       </div>
+      {!hideOutcomes && (
       <aside className="otree-outcomes">
         <div className="otree-outcomes-head">
           Outcomes <span>({plan.outcomes.length})</span>
@@ -372,6 +377,7 @@ export function OutcomeTreeGraph({
           })}
         </div>
       </aside>
+      )}
     </div>
   );
 }

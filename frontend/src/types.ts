@@ -140,6 +140,16 @@ export interface PipelineStepState {
   decision: string | null;
 }
 
+// One actionable pathway the reviewer can approve (from viable_paths).
+export interface ViablePath {
+  path_id: string;
+  label: string;
+  outcome_kind: string | null;
+  probability: number;
+  recommended: boolean;
+  steps: { scenario_id: string; decision: string; step_index: number | null }[];
+}
+
 export interface PipelineState {
   pipeline_id: string;
   prompt: string;
@@ -147,6 +157,8 @@ export interface PipelineState {
   current_step: number;
   terminal_decision: string | null;
   error: string | null;
+  chosen_path_id: string | null;
+  viable_paths: ViablePath[];
   steps: PipelineStepState[];
   actual_path: { step: number; scenario_id: string; decision: string }[];
   forecast: OutcomePlan;
