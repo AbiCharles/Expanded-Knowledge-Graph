@@ -89,18 +89,22 @@ const STYLESHEET: any[] = [
     style: {
       label: "data(label)",
       "text-wrap": "wrap",
-      "text-max-width": 120,
+      "text-max-width": 150,
       "font-family": "Fraunces, Georgia, serif",
-      "font-size": 8,
+      "font-size": 12,
+      "font-weight": 600,
       color: "#0f172a",
+      // White halo so labels stay legible over edges / coloured fills.
+      "text-outline-color": "#ffffff",
+      "text-outline-width": 2,
       "text-valign": "center",
       "text-halign": "center",
       "background-color": "#94a3b8",
       "border-width": 1.5,
       "border-color": "rgba(15,23,42,0.2)",
-      width: 26,
-      height: 26,
-      "min-zoomed-font-size": 5,
+      width: 30,
+      height: 30,
+      "min-zoomed-font-size": 0,
     },
   },
   {
@@ -139,9 +143,14 @@ const STYLESHEET: any[] = [
       shape: "diamond",
       "background-color": "#d4a93a",
       "border-color": "#8a6d20",
-      color: "#4a3a10",
-      width: 34,
-      height: 34,
+      color: "#3a2e08",
+      width: 42,
+      height: 42,
+      // Label sits below the diamond so it isn't cramped inside the shape.
+      "text-valign": "bottom",
+      "text-margin-y": 4,
+      "font-size": 11,
+      "font-style": "normal",
     },
   },
   {
@@ -166,15 +175,16 @@ const STYLESHEET: any[] = [
       "target-arrow-shape": "triangle",
       "line-color": "#cbd5e1",
       "target-arrow-color": "#cbd5e1",
-      width: "mapData(prob, 0, 1, 1.2, 6)",
+      width: "mapData(prob, 0, 1, 1.5, 7)",
       label: "data(label)",
       "font-family": "ui-sans-serif, system-ui, sans-serif",
-      "font-size": 7,
-      color: "#475569",
+      "font-size": 10,
+      "font-weight": 600,
+      color: "#334155",
       "text-background-color": "#ffffff",
-      "text-background-opacity": 0.85,
-      "text-background-padding": 2,
-      "min-zoomed-font-size": 6,
+      "text-background-opacity": 0.9,
+      "text-background-padding": 3,
+      "min-zoomed-font-size": 0,
     },
   },
   { selector: "edge.basis-author", style: { "line-color": "#8b8ad6", "target-arrow-color": "#8b8ad6", color: "#4f46e5" } },
@@ -206,32 +216,37 @@ const STYLESHEET: any[] = [
 
 const CONTINUE_DECISIONS = new Set(["approve", "auto_execute"]);
 
-const DAGRE = { name: "dagre", rankDir: "LR", nodeSep: 40, rankSep: 90, edgeSep: 16, padding: 24, animate: false };
+const DAGRE = { name: "dagre", rankDir: "LR", nodeSep: 55, rankSep: 135, edgeSep: 18, padding: 28, animate: false };
 
 export function OutcomeTreeGraph({
   plan,
   emptyHint,
   actualPath,
   activeScenarioId,
+  runActive,
 }: {
   plan: OutcomePlan | null;
   emptyHint?: string;
   // The path a live pipeline run has actually taken (Phase 2 overlay).
   actualPath?: { scenario_id: string; decision: string }[];
   activeScenarioId?: string | null;
+  // True while a pipeline is executing — suppress the projected most-probable
+  // highlight so it isn't mistaken for the actual path taken.
+  runActive?: boolean;
 }) {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const cyRef = useRef<any>(null);
   const [cyTick, setCyTick] = useState(0);
   const hasActual = !!(actualPath && actualPath.length);
+  const suppressHighlight = hasActual || !!runActive;
 
   const elements = useMemo(() => (plan ? toElements(plan) : []), [plan]);
 
   // Reset selection to the most-probable outcome whenever the plan changes —
-  // unless a live run is overlaying its actual path (then don't auto-dim).
+  // unless a live run is in progress / overlaying its actual path.
   useEffect(() => {
-    setSelectedOutcome(hasActual ? null : plan?.outcomes[0]?.id ?? null);
-  }, [plan, hasActual]);
+    setSelectedOutcome(suppressHighlight ? null : plan?.outcomes[0]?.id ?? null);
+  }, [plan, suppressHighlight]);
 
   // Overlay the actual path taken by the live run: paint each resolved
   // step's branch edge (green = continued, red = stopped) and ring the

@@ -9224,3 +9224,13 @@ details[open] > .suggested-summary .suggested-chevron {
 .pipeline-status.running { color: #0d6e7f; }
 .pipeline-status.complete { color: #1f6e46; }
 .pipeline-status.error { color: #b91c1c; }
+.pipeline-review { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pipeline-review-label { font-size: 12.5px; font-weight: 700; color: #0d6e7f; white-space: nowrap; }
+.pipeline-decide {
+  border: none; border-radius: 7px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; color: #fff;
+}
+.pipeline-decide:disabled { opacity: 0.5; cursor: not-allowed; }
+.pipeline-decide.approve { background: #1f9d55; }
+.pipeline-decide.reject { background: #c14a4a; }
+.pipeline-decide.info { background: #d99a2b; }

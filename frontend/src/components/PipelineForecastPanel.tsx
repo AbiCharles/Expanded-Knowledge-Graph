@@ -31,6 +31,10 @@ export function PipelineForecastPanel({
 }) {
   const [pstate, setPstate] = useState<PipelineState | null>(null);
   const [busy, setBusy] = useState(false);
+  // The pending review ticket for the current step (so the operator can
+  // approve/reject the running step from here without hunting for the case).
+  const [ticket, setTicket] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
   const pollRef = useRef<number | undefined>(undefined);
   const lastActiveCase = useRef<string | null>(null);
 
@@ -47,6 +51,8 @@ export function PipelineForecastPanel({
     stopPolling();
     setPstate(null);
     setBusy(false);
+    setTicket(null);
+    setDeciding(false);
     lastActiveCase.current = null;
   }, [pipeline.pipeline_id]);
 
@@ -59,12 +65,38 @@ export function PipelineForecastPanel({
         lastActiveCase.current = cur.case_id;
         onActiveCase?.(cur.case_id);
       }
+      // Surface the current step's review ticket (if it's blocked on HITL).
+      if (p.status === "running" && cur?.case_id && !cur.decision) {
+        try {
+          const q = await api.listQueue();
+          setTicket(q.find((r) => r.case_id === cur.case_id)?.ticket_id ?? null);
+        } catch {
+          /* keep polling */
+        }
+      } else {
+        setTicket(null);
+      }
       if (p.status === "complete" || p.status === "error") {
         stopPolling();
         setBusy(false);
+        setTicket(null);
       }
     } catch {
       /* transient; keep polling */
+    }
+  };
+
+  const decide = async (decision: "approve" | "reject" | "request_more_info") => {
+    if (!ticket) return;
+    setDeciding(true);
+    try {
+      await api.postDecision(ticket, { decision, reviewer_id: "operator", rationale: "" });
+      setTicket(null);
+      await poll();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setDeciding(false);
     }
   };
 
@@ -119,7 +151,17 @@ export function PipelineForecastPanel({
             {busy ? "Starting…" : "▶ Run pipeline"}
           </button>
         )}
-        {status === "running" && <span className="pipeline-status running">Running · step {(pstate?.current_step ?? 0) + 1}…</span>}
+        {status === "running" && ticket && (
+          <div className="pipeline-review">
+            <span className="pipeline-review-label">Step {(pstate?.current_step ?? 0) + 1} · your review:</span>
+            <button className="pipeline-decide approve" disabled={deciding} onClick={() => decide("approve")}>Approve</button>
+            <button className="pipeline-decide reject" disabled={deciding} onClick={() => decide("reject")}>Reject</button>
+            <button className="pipeline-decide info" disabled={deciding} onClick={() => decide("request_more_info")}>More info</button>
+          </div>
+        )}
+        {status === "running" && !ticket && (
+          <span className="pipeline-status running">Running · step {(pstate?.current_step ?? 0) + 1}…</span>
+        )}
         {status === "complete" && (
           <span className="pipeline-status complete">
             Complete · ended on {pstate?.terminal_decision ?? "—"}
@@ -129,7 +171,12 @@ export function PipelineForecastPanel({
       </div>
 
       <div className="pipeline-graph">
-        <OutcomeTreeGraph plan={plan} actualPath={pstate?.actual_path} activeScenarioId={activeScenarioId} />
+        <OutcomeTreeGraph
+          plan={plan}
+          actualPath={pstate?.actual_path}
+          activeScenarioId={activeScenarioId}
+          runActive={status === "running"}
+        />
       </div>
     </section>
   );
