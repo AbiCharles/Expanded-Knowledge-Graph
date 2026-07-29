@@ -454,6 +454,12 @@ export async function getScenario(scenarioId: string): Promise<any> {
   );
 }
 
+// Full scenario dict (stages, ontology_queries, facts, outcomes) — used by the
+// pathway legend to drill into a scenario's ontology + attributes.
+export async function getScenarioSpec(scenarioId: string): Promise<any> {
+  return jsonOrThrow(await authedFetch(`/api/scenarios/${scenarioId}?full=1`));
+}
+
 // Full parsed scenario dict (stages, ontology_queries, outcomes,
 // closing_messages, rationale_reasons, …) — used by the read-only
 // Case-spec modal. The non-?full=1 endpoint returns only the editable

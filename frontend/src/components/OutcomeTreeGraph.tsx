@@ -46,7 +46,7 @@ export function pct(p: number | null | undefined): string {
   return `${(p * 100).toFixed(p >= 0.1 ? 0 : 1)}%`;
 }
 
-function toElements(plan: OutcomePlan): any[] {
+function toElements(plan: OutcomePlan, scenarioColors?: Record<string, string>): any[] {
   const els: any[] = [];
   for (const n of plan.nodes) {
     const accent =
@@ -57,8 +57,12 @@ function toElements(plan: OutcomePlan): any[] {
       n.kind === "outcome" && n.probability != null
         ? `${n.label}\n(${pct(n.probability)})`
         : n.label;
+    const data: any = { id: n.id, label, kind: n.kind, accent, prob: n.probability ?? null };
+    // Colour-band nodes by which scenario they belong to.
+    const col = n.scenario_id && scenarioColors ? scenarioColors[n.scenario_id] : undefined;
+    if (col) data.scenarioColor = col;
     els.push({
-      data: { id: n.id, label, kind: n.kind, accent, prob: n.probability ?? null },
+      data,
       classes: `otree-node kind-${n.kind} accent-${accent}`,
     });
   }
@@ -168,6 +172,10 @@ const STYLESHEET: any[] = [
   { selector: "node.kind-outcome.accent-risk", style: { "background-color": "#c14a4a", "border-color": "#7a2424", color: "#3a0f0f" } },
   { selector: "node.kind-outcome.accent-warn", style: { "background-color": "#d99a2b", "border-color": "#8a6215", color: "#3f2c07" } },
   { selector: "node.kind-outcome.accent-alt", style: { "background-color": "#8592a6", "border-color": "#4a5568", color: "#1f2733" } },
+  // Scenario band: colour a node's border by which scenario it belongs to
+  // (the legend maps colour -> scenario). Placed after the per-kind rules so
+  // it wins; the dynamic taken/active/highlight classes below still override.
+  { selector: "node[scenarioColor]", style: { "border-color": "data(scenarioColor)", "border-width": 3.5 } },
   {
     selector: "edge.otree-edge",
     style: {
@@ -225,6 +233,7 @@ export function OutcomeTreeGraph({
   activeScenarioId,
   runActive,
   hideOutcomes,
+  scenarioColors,
 }: {
   plan: OutcomePlan | null;
   emptyHint?: string;
@@ -237,6 +246,8 @@ export function OutcomeTreeGraph({
   // Hide the built-in ranked-outcomes panel (the pathway modal shows its own
   // approvable viable-paths list instead).
   hideOutcomes?: boolean;
+  // scenario_id -> colour, so nodes are banded by which scenario they belong to.
+  scenarioColors?: Record<string, string>;
 }) {
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const cyRef = useRef<any>(null);
@@ -244,7 +255,7 @@ export function OutcomeTreeGraph({
   const hasActual = !!(actualPath && actualPath.length);
   const suppressHighlight = hasActual || !!runActive;
 
-  const elements = useMemo(() => (plan ? toElements(plan) : []), [plan]);
+  const elements = useMemo(() => (plan ? toElements(plan, scenarioColors) : []), [plan, scenarioColors]);
 
   // Reset selection to the most-probable outcome whenever the plan changes —
   // unless a live run is in progress / overlaying its actual path.

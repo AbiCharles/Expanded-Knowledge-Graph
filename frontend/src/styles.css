@@ -9258,8 +9258,28 @@ details[open] > .suggested-summary .suggested-chevron {
   flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 360px;
   gap: 14px; padding: 4px 2px 2px;
 }
-.pw-graph { min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; }
+.pw-left { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
+.pw-graph { flex: 1; min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; overflow: hidden; }
 .pw-graph .otree-graph { height: 100%; }
+
+/* Scenario legend + drill-down */
+.pw-legend { border: 1px solid #e2e8f0; border-radius: 10px; background: #fbfcfd; padding: 8px 10px; max-height: 210px; overflow-y: auto; flex-shrink: 0; }
+.pw-legend-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 6px; }
+.pw-legend-items { display: flex; flex-direction: column; gap: 6px; }
+.pw-legend-item { display: flex; flex-direction: column; }
+.pw-legend-chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12.5px; color: #1e293b; text-align: left; }
+.pw-legend-chip:hover { border-color: #cbd5e1; }
+.pw-legend-chip.active { border-color: #94a3b8; }
+.pw-legend-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(15,23,42,0.15); }
+.pw-legend-name { flex: 1; font-weight: 600; }
+.pw-legend-caret { color: #94a3b8; }
+.pw-legend-detail { padding: 8px 10px 4px 30px; font-size: 12px; color: #334155; display: flex; flex-direction: column; gap: 3px; }
+.pw-legend-row { line-height: 1.5; }
+.pw-legend-row b { color: #475569; font-weight: 600; }
+.pw-legend-sub { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; margin-top: 5px; }
+.pw-legend-binding { line-height: 1.5; }
+.pw-legend-binding code, .pw-legend-row code { background: #eef2f6; border-radius: 4px; padding: 1px 5px; font-size: 11px; color: #0d6e7f; font-family: "DM Mono", monospace; }
+.pw-legend-purpose { color: #94a3b8; }
 .pw-paths { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
 .pw-paths-head { font-size: 13px; font-weight: 700; color: #334155; }
 .pw-paths-hint { font-size: 11.5px; color: #94a3b8; }
