@@ -155,8 +155,8 @@ Respond with strict JSON only:
 _ROUTER_SYSTEM = """You are the answer-strategy router for an enterprise supply-chain assistant.
 Given a user's question, decide HOW it is best answered, as a probability distribution over three strategies:
   - A (deterministic): ONE governed scenario with a single definitive outcome — often answerable from the scenario definition itself. Favour A when one scenario clearly and fully covers the question.
-  - B (pipeline): one OR MORE governed scenarios answered over mapped ontologies, pulling from source systems, with human review and/or multiple possible outcomes. Favour B when a scenario fits but the answer is not a single deterministic value (it needs source data and/or review), or when the question spans several dependent scenarios.
-  - C (rag): a retrieval/generative answer from the policy corpus or general knowledge. Favour C when NO scenario fits well (open policy / how-to / definitional questions).
+  - B (pipeline): one OR MORE governed TRANSACTIONAL scenarios answered over mapped ontologies — pulling live data and/or human review, with one or multiple outcomes (e.g. assess a specific supplier's risk, release a PO, trace a shipment, run a sanctions check on a NAMED entity). Favour B when the question asks to ACT ON or ANALYSE specific operational data. Do NOT choose B merely because a scenario name shares a keyword.
+  - C (rag): a retrieval/generative answer from the company POLICY CORPUS (SOPs, compliance briefs, rules such as the two-person rule, onboarding guides) or general knowledge. Favour C for policy / SOP / rule / definitional / how-to / "explain" questions, and anything outside the governed transactional scenarios — even if a scenario name loosely overlaps a keyword.
 
 You are told the best single-scenario match, whether that match is a deterministic scenario, and whether the planner found a multi-scenario pipeline. Weigh those signals.
 
