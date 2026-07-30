@@ -9350,6 +9350,12 @@ details[open] > .suggested-summary .suggested-chevron {
 .route-item-blurb { font-size: 12px; color: #64748b; line-height: 1.4; margin-top: 2px; }
 .route-foot { font-size: 12px; color: #475569; border-top: 1px dashed #e2e8f0; padding-top: 8px; line-height: 1.45; }
 .route-foot strong { color: #0f172a; }
+/* Routing shown as a dismissible modal (popped on Proceed). Reuses the bar. */
+.route-modal { position: relative; width: 640px; max-width: 92vw; max-height: 88vh; overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(11,23,51,0.35); padding: 10px 12px; }
+.route-modal .route-bar { border: 0; margin: 0; }
+.route-modal .route-head { padding-right: 24px; }
+.route-modal-close { position: absolute; top: 10px; right: 12px; z-index: 2; background: none; border: 0; font-size: 22px; line-height: 1; color: #94a3b8; cursor: pointer; }
+.route-modal-close:hover { color: #475569; }
 
 .rag-panel {
   border: 1px solid #d9c9a8; border-left: 4px solid #b45309; border-radius: 12px;

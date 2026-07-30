@@ -18,7 +18,7 @@ def test_create_case_always_returns_routing(client: TestClient, admin_headers: d
     assert routing["strategy"] in ("single", "pipeline", "rag")
 
 
-def test_offcatalog_prompt_routes_rag_with_answer(client: TestClient, admin_headers: dict):
+def test_offcatalog_prompt_defers_rag_until_proceed(client: TestClient, admin_headers: dict):
     # Pure gibberish matches no scenario keywords → both classifiers weak → C.
     resp = client.post(
         "/api/cases",
@@ -28,8 +28,12 @@ def test_offcatalog_prompt_routes_rag_with_answer(client: TestClient, admin_head
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["routing"]["strategy"] == "rag"
-    assert body["rag"] is not None
-    assert "answer" in body["rag"]
+    assert body["rag"] is None  # deferred — not generated until the user proceeds
+    # Proceeding generates the answer.
+    ans = client.post(f"/api/cases/{body['case_id']}/answer-rag", headers=admin_headers)
+    assert ans.status_code == 200, ans.text
+    payload = ans.json()
+    assert "answer" in payload and "grounded" in payload
 
 
 def test_hitl_prompt_does_not_route_rag(client: TestClient, admin_headers: dict):

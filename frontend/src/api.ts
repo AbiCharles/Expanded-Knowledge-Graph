@@ -11,6 +11,7 @@ import {
   OutcomePlan,
   PipelineState,
   QueueRow,
+  RagAnswer,
   SampleFact,
   ScenarioRow,
 } from "./types";
@@ -94,6 +95,13 @@ export async function createCase(prompt: string): Promise<CreateCaseResponse> {
 export async function confirmCase(caseId: string): Promise<void> {
   await jsonOrThrow(
     await authedFetch(`/api/cases/${caseId}/confirm`, { method: "POST" })
+  );
+}
+
+// Generate the deferred RAG (Strategy C) answer once the user proceeds.
+export async function answerRag(caseId: string): Promise<RagAnswer> {
+  return jsonOrThrow(
+    await authedFetch(`/api/cases/${caseId}/answer-rag`, { method: "POST" })
   );
 }
 

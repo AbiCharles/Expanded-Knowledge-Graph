@@ -12,6 +12,7 @@ import { InsightsModal } from "./components/InsightsModal";
 import { OutcomeTreeModal } from "./components/OutcomeTreeModal";
 import { PipelineForecastPanel } from "./components/PipelineForecastPanel";
 import { RouteProbabilityBar } from "./components/RouteProbabilityBar";
+import { RouteModal } from "./components/RouteModal";
 import { RagAnswerPanel } from "./components/RagAnswerPanel";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
@@ -328,6 +329,8 @@ export default function App() {
   // scenario that asks "Proceed? / Cancel" it appears once they confirm; for a
   // RAG answer (no proceed step) it appears immediately.
   const [showRouting, setShowRouting] = useState(false);
+  // The routing shown as a dismissible modal, popped once on Proceed.
+  const [routeModalOpen, setRouteModalOpen] = useState(false);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
@@ -335,13 +338,13 @@ export default function App() {
     setRouting(null);
     setRag(null);
     setShowRouting(false);
+    setRouteModalOpen(false);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
       setPipeline(result.pipeline ?? null);
       setRouting(result.routing ?? null);
-      setRag(result.rag ?? null);
-      setShowRouting(!!result.rag); // RAG has no proceed step — show at once
+      setRag(null); // RAG answer is deferred — generated on Proceed
       refreshCases();
     } catch (e) {
       console.error(e);
@@ -354,11 +357,18 @@ export default function App() {
   const onConfirm = async () => {
     if (!active) return;
     setIsSubmitting(true);
-    setShowRouting(true); // user chose to proceed → reveal how it's being answered
+    setShowRouting(true);    // reveal the inline routing bar
+    setRouteModalOpen(true); // and pop the routing modal (every query)
     try {
-      await api.confirmCase(active.case_id);
-      refreshActive();
-      refreshCases();
+      if (routing?.strategy === "rag") {
+        // RAG has no governed scenario to run — generate the deferred answer.
+        setRag(await api.answerRag(active.case_id));
+        refreshCases();
+      } else {
+        await api.confirmCase(active.case_id);
+        refreshActive();
+        refreshCases();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -383,6 +393,11 @@ export default function App() {
   };
   const onCancel = async () => {
     if (!active) return;
+    // Cancelled → nothing runs; clear the routing display too.
+    setRouting(null);
+    setRag(null);
+    setShowRouting(false);
+    setRouteModalOpen(false);
     await api.cancelCase(active.case_id);
     refreshActive();
     refreshCases();
@@ -569,6 +584,9 @@ export default function App() {
         }}
       />
       {routing && showRouting && <RouteProbabilityBar routing={routing} />}
+      {routing && routeModalOpen && (
+        <RouteModal routing={routing} onClose={() => setRouteModalOpen(false)} />
+      )}
       {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
       {pipeline && (
         <PipelineForecastPanel
@@ -591,6 +609,7 @@ export default function App() {
           onSendPrompt={onSendPrompt}
           onConfirm={onConfirm}
           onCancel={onCancel}
+          ragProceed={routing?.strategy === "rag" && !rag}
           onSelectCase={setActiveId}
           onReplay={onReplay}
           onBaselineReplay={onBaselineReplay}
