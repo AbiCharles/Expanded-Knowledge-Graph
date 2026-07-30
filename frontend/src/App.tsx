@@ -11,6 +11,8 @@ import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { InsightsModal } from "./components/InsightsModal";
 import { OutcomeTreeModal } from "./components/OutcomeTreeModal";
 import { PipelineForecastPanel } from "./components/PipelineForecastPanel";
+import { RouteProbabilityBar } from "./components/RouteProbabilityBar";
+import { RagAnswerPanel } from "./components/RagAnswerPanel";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -24,7 +26,7 @@ import {
 import { StatusBar } from "./components/StatusBar";
 import { AgentRun } from "./components/AgentRun";
 import { useCaseStream } from "./hooks/useCaseStream";
-import { CaseFull, CaseSummary, DecisionKind, PipelineForecast, ScenarioRow } from "./types";
+import { CaseFull, CaseSummary, DecisionKind, PipelineForecast, RagAnswer, Routing, ScenarioRow } from "./types";
 
 type ModalState =
   | { kind: "none" }
@@ -319,14 +321,21 @@ export default function App() {
   // Set when the planner detects a multi-scenario question — drives the
   // projected-pathways panel above the main workspace.
   const [pipeline, setPipeline] = useState<PipelineForecast | null>(null);
+  // Answer-strategy router output (A/B/C bar) + the RAG answer when Strategy C.
+  const [routing, setRouting] = useState<Routing | null>(null);
+  const [rag, setRag] = useState<RagAnswer | null>(null);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
     setPipeline(null);
+    setRouting(null);
+    setRag(null);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
       setPipeline(result.pipeline ?? null);
+      setRouting(result.routing ?? null);
+      setRag(result.rag ?? null);
       refreshCases();
     } catch (e) {
       console.error(e);
@@ -552,6 +561,8 @@ export default function App() {
           }
         }}
       />
+      {routing && <RouteProbabilityBar routing={routing} />}
+      {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
       {pipeline && (
         <PipelineForecastPanel
           pipeline={pipeline}

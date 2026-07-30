@@ -111,6 +111,38 @@ export interface CreateCaseResponse {
   candidates: ScenarioCandidate[];
   // Present only when the planner detected a multi-scenario question.
   pipeline?: PipelineForecast | null;
+  // The answer-strategy router's A/B/C decision (always present).
+  routing?: Routing | null;
+  // The generative answer, present only when the router chose Strategy C (RAG).
+  rag?: RagAnswer | null;
+}
+
+// Answer-strategy router decision (mirrors RouteResult in backend/agent_runtime.py).
+export type RouteStrategy = "deterministic" | "pipeline" | "rag";
+export interface Routing {
+  p_a: number; // deterministic single scenario
+  p_b: number; // multi-scenario ontology pipeline
+  p_c: number; // RAG / generative
+  strategy: RouteStrategy;
+  confidence: number; // expected correctness of the chosen answer
+  rationale: string;
+  basis: "llm" | "heuristic";
+}
+
+// Strategy-C generative answer (mirrors RagAnswer in backend/rag_answerer.py).
+export interface RagCitation {
+  n: number;
+  source: string;
+  id: string;
+  title: string;
+  snippet: string;
+  score: number;
+}
+export interface RagAnswer {
+  answer: string;
+  citations: RagCitation[];
+  grounded: boolean;
+  confidence: number;
 }
 
 // The planner's ordered pipeline + projected Outcome DAG (mirrors

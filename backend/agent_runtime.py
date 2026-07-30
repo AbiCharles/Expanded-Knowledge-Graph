@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 from tcs_hitl_context import AgentAction, LLMClient
@@ -70,6 +70,38 @@ class PipelinePlan(BaseModel):
         return len(self.steps) >= 2
 
 
+# Answer-strategy names by probability index [A, B, C].
+_STRATEGIES: tuple[str, str, str] = ("deterministic", "pipeline", "rag")
+# Expected-correctness weight per strategy (A > B > C); drives the meter.
+_CORRECTNESS_WEIGHTS: tuple[float, float, float] = (1.0, 0.75, 0.45)
+
+
+def _normalize3(vals: list[float]) -> list[float]:
+    """Clamp negatives to 0 and scale to sum 1; uniform when degenerate."""
+    clamped = [v if v > 0 else 0.0 for v in vals]
+    total = sum(clamped)
+    if total <= 0:
+        return [1 / 3, 1 / 3, 1 / 3]
+    return [v / total for v in clamped]
+
+
+class RouteResult(BaseModel):
+    """The query router's answer-strategy decision.
+
+    ``p_a``/``p_b``/``p_c`` sum to 1 (deterministic single scenario /
+    multi-scenario pipeline / RAG-generative). ``strategy`` is the argmax;
+    ``confidence`` is the expected correctness of that answer (A weighted
+    highest, C lowest).
+    """
+    p_a: float
+    p_b: float
+    p_c: float
+    strategy: Literal["deterministic", "pipeline", "rag"]
+    confidence: float
+    rationale: str = ""
+    basis: Literal["llm", "heuristic"] = "heuristic"
+
+
 # Confidence below this threshold → UI should offer top-K alternatives.
 SUGGEST_THRESHOLD = 0.7
 TOP_K = 3
@@ -118,6 +150,18 @@ Respond with strict JSON only:
   "rationale": string,
   "confidence": number
 }"""
+
+
+_ROUTER_SYSTEM = """You are the answer-strategy router for an enterprise supply-chain assistant.
+Given a user's question, decide HOW it is best answered, as a probability distribution over three strategies:
+  - A (deterministic): ONE governed scenario with a single definitive outcome — often answerable from the scenario definition itself. Favour A when one scenario clearly and fully covers the question.
+  - B (pipeline): one OR MORE governed scenarios answered over mapped ontologies, pulling from source systems, with human review and/or multiple possible outcomes. Favour B when a scenario fits but the answer is not a single deterministic value (it needs source data and/or review), or when the question spans several dependent scenarios.
+  - C (rag): a retrieval/generative answer from the policy corpus or general knowledge. Favour C when NO scenario fits well (open policy / how-to / definitional questions).
+
+You are told the best single-scenario match, whether that match is a deterministic scenario, and whether the planner found a multi-scenario pipeline. Weigh those signals.
+
+Respond with strict JSON only (p_a + p_b + p_c should total ~1.0):
+{ "p_a": number, "p_b": number, "p_c": number, "rationale": string }"""
 
 
 class AgentRuntime:
@@ -335,6 +379,95 @@ class AgentRuntime:
             steps=steps, rationale=rationale,
             confidence=min(1.0, 0.5 + 0.1 * chosen[0][0]),
         )
+
+    # -------------------------------------------------------------------------
+    # Step 1c — route the query across answer strategies (A / B / C)
+    # -------------------------------------------------------------------------
+    async def route_query(
+        self,
+        text: str,
+        interpreted: InterpretedRequest,
+        plan: Optional[PipelinePlan],
+        *,
+        top_is_deterministic: bool,
+    ) -> RouteResult:
+        """Score the question across the three answer strategies and pick one.
+
+        Hybrid: an LLM router when credentials are present, else a heuristic that
+        fuses the signals the two classifiers already produced (no extra call).
+        """
+        if self.llm.name == "fake":
+            return self._route_heuristic(interpreted, plan, top_is_deterministic)
+
+        multi = bool(plan and plan.multi)
+        top = interpreted.candidates[0] if interpreted.candidates else None
+        user_msg = (
+            f"Question: {text!r}\n"
+            f"Best scenario match: {top.scenario_id if top else 'none'} "
+            f"(confidence {interpreted.confidence:.2f}, deterministic={top_is_deterministic})\n"
+            f"Planner found a multi-scenario pipeline: {multi}\n\n"
+            "Return JSON only."
+        )
+        try:
+            raw = await self.llm.complete(
+                system=_ROUTER_SYSTEM, user=user_msg,
+                response_format="json", temperature=0.1,
+            )
+            parsed = json.loads(raw)
+            probs = _normalize3([
+                float(parsed.get("p_a", 0.0)),
+                float(parsed.get("p_b", 0.0)),
+                float(parsed.get("p_c", 0.0)),
+            ])
+            return self._build_route(probs, str(parsed.get("rationale", "")), basis="llm")
+        except Exception:
+            log.exception("LLM route_query failed; heuristic fallback")
+            return self._route_heuristic(interpreted, plan, top_is_deterministic)
+
+    def _route_heuristic(
+        self,
+        interpreted: InterpretedRequest,
+        plan: Optional[PipelinePlan],
+        top_is_deterministic: bool,
+    ) -> RouteResult:
+        """Fuse existing confidence signals into the 3-way distribution.
+
+        A wins for a confident deterministic single-scenario match; B for any
+        other confident scenario match (single-but-source/HITL, or a multi-step
+        plan — i.e. the ontology pipeline); C is the residual mass when no
+        scenario fits the question well.
+        """
+        c1 = float(interpreted.confidence or 0.0)
+        plan_conf = float(plan.confidence) if plan else 0.0
+        multi = bool(plan and plan.multi)
+        deterministic_single = top_is_deterministic and not multi
+        fit = max(c1, plan_conf if multi else 0.0)  # how well any scenario fits
+        a = c1 * (1.0 if deterministic_single else 0.15)
+        b = (plan_conf if multi else c1) * (0.15 if deterministic_single else 1.0)
+        c = max(0.0, 1.0 - fit)
+        probs = _normalize3([a, b, c])
+        return self._build_route(probs, self._heuristic_rationale(probs), basis="heuristic")
+
+    def _build_route(self, probs: list[float], rationale: str, *, basis: str) -> RouteResult:
+        # Keep full precision so the three probabilities sum to exactly 1 (the
+        # frontend formats them for display); only the scalar meter is rounded.
+        idx = max(range(3), key=lambda i: probs[i])
+        confidence = sum(p * w for p, w in zip(probs, _CORRECTNESS_WEIGHTS))
+        return RouteResult(
+            p_a=probs[0], p_b=probs[1], p_c=probs[2],
+            strategy=_STRATEGIES[idx],
+            confidence=round(confidence, 4),
+            rationale=rationale, basis=basis,
+        )
+
+    @staticmethod
+    def _heuristic_rationale(probs: list[float]) -> str:
+        idx = max(range(3), key=lambda i: probs[i])
+        return (
+            "A single deterministic scenario cleanly covers this question.",
+            "The question spans multiple scenarios that must be stitched together.",
+            "No scenario fits well; answering generatively from the policy corpus.",
+        )[idx]
 
     # -------------------------------------------------------------------------
     # Step 2 — draft the AgentAction. For the demo this just instantiates the

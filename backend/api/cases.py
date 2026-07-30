@@ -14,11 +14,14 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from .. import orchestrator
+from ..agent_runtime import RouteResult
 from ..auth import CurrentUser, current_user
 from ..case_history import decision_history_provider
 from ..outcome_plan import OutcomePlan
 from ..pipeline import PipelineRecord, PipelineStepState
+from ..rag_answerer import RagAnswer, answer_via_rag
 from ..scenario_composer import compose
+from ..scenario_determinism import is_deterministic
 from ..state import AppState, CaseRecord
 
 router = APIRouter(tags=["cases"])
@@ -81,6 +84,11 @@ class CreateCaseOut(BaseModel):
     # Populated only when the planner decides the question spans 2+
     # scenarios. Null for ordinary single-scenario questions (unchanged flow).
     pipeline: Optional[PipelineOut] = None
+    # The answer-strategy router's A/B/C distribution + chosen strategy. Always
+    # present; drives the 3-way bar shown the instant a question is sent.
+    routing: Optional[RouteResult] = None
+    # The generative answer, present only when the router chose Strategy C (RAG).
+    rag: Optional[RagAnswer] = None
 
 
 class ReplayIn(BaseModel):
@@ -223,14 +231,18 @@ async def create_case(
     still the entry point; Phase 2 will drive the real chained execution.
     """
     state: AppState = request.app.state.app_state
-    interpreted = await state.agent_runtime.interpret_prompt(payload.prompt)
+    # Classify (single-scenario) and plan (multi-scenario) concurrently — both
+    # depend only on the prompt and fall back internally (never raise), so this
+    # halves the classification latency before the routing step.
+    interpreted, plan = await asyncio.gather(
+        state.agent_runtime.interpret_prompt(payload.prompt),
+        state.agent_runtime.plan_pipeline(payload.prompt),
+    )
 
-    # Auto-detect a multi-scenario question and project its Outcome DAG.
-    plan = None
+    # Project the Outcome DAG only when the plan is genuinely multi-scenario.
     forecast = None
-    try:
-        plan = await state.agent_runtime.plan_pipeline(payload.prompt)
-        if plan.multi:
+    if plan.multi:
+        try:
             forecast = compose(
                 payload.prompt,
                 [s.scenario_id for s in plan.steps],
@@ -238,12 +250,26 @@ async def create_case(
                 history_provider=decision_history_provider(state.database),
                 context={},
             )
-    except Exception:
-        log.exception("pipeline planning failed; continuing as single case")
-        plan = None
-        forecast = None
+        except Exception:
+            log.exception("outcome forecast failed; continuing as single case")
+            forecast = None
 
-    is_multi = plan is not None and plan.multi and forecast is not None
+    is_multi = plan.multi and forecast is not None
+
+    # Answer-strategy router: score A/B/C, then auto-run the winner. C answers
+    # generatively here; A forces the single deterministic scenario; B keeps the
+    # multi-scenario pipeline. route_query never raises (heuristic fallback).
+    top_sc = state.scenarios.get(interpreted.scenario_id) if interpreted.scenario_id else None
+    route = await state.agent_runtime.route_query(
+        payload.prompt, interpreted, plan,
+        top_is_deterministic=bool(top_sc) and is_deterministic(top_sc),
+    )
+    rag_answer: Optional[RagAnswer] = None
+    if route.strategy == "rag":
+        is_multi = False
+        rag_answer = await answer_via_rag(state, payload.prompt)
+    elif route.strategy == "deterministic":
+        is_multi = False
 
     case_id = f"case-{uuid.uuid4().hex[:10]}"
     pipeline_id = f"pipe-{uuid.uuid4().hex[:10]}" if is_multi else None
@@ -325,6 +351,8 @@ async def create_case(
         confidence=interpreted.confidence,
         candidates=[CandidateOut(**c) for c in candidates_payload],
         pipeline=pipeline_out,
+        routing=route,
+        rag=rag_answer,
     )
 
 
