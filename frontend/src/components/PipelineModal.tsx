@@ -22,7 +22,7 @@ const DECISION_LABEL: Record<string, string> = {
 
 // Distinct colours assigned to each scenario in the pipeline (used both to
 // band the graph nodes and as the legend swatches).
-const SCENARIO_PALETTE = ["#0d6e7f", "#a16207", "#7c3aed", "#0e7490", "#b45309", "#4d7c0f"];
+const SCENARIO_PALETTE = ["#0d9aae", "#c026d3", "#2563eb", "#ea580c", "#4d7c0f", "#0e7490"];
 
 export function PipelineModal({
   pipeline,

@@ -115,8 +115,9 @@ const STYLESHEET: any[] = [
     selector: "node.kind-question",
     style: {
       shape: "round-rectangle",
-      "background-color": "#0d6e7f",
-      "border-color": "#0a4f5c",
+      // Neutral dark slate (not teal) so teal reads only as scenario 1.
+      "background-color": "#334155",
+      "border-color": "#1e293b",
       color: "#ffffff",
       "font-weight": 600,
       "font-size": 9,
@@ -145,9 +146,11 @@ const STYLESHEET: any[] = [
     selector: "node.kind-decision",
     style: {
       shape: "diamond",
-      "background-color": "#d4a93a",
-      "border-color": "#8a6d20",
-      color: "#3a2e08",
+      // Neutral fill so the per-scenario ring colour (teal / yellow) stays
+      // clearly visible on decision diamonds instead of blending into amber.
+      "background-color": "#eef2f6",
+      "border-color": "#94a3b8",
+      color: "#334155",
       width: 42,
       height: 42,
       // Label sits below the diamond so it isn't cramped inside the shape.
@@ -175,7 +178,13 @@ const STYLESHEET: any[] = [
   // Scenario band: colour a node's border by which scenario it belongs to
   // (the legend maps colour -> scenario). Placed after the per-kind rules so
   // it wins; the dynamic taken/active/highlight classes below still override.
-  { selector: "node[scenarioColor]", style: { "border-color": "data(scenarioColor)", "border-width": 3.5 } },
+  { selector: "node[scenarioColor]", style: { "border-color": "data(scenarioColor)", "border-width": 5 } },
+  // The scenario's step node is filled in its colour so the banding is
+  // unmistakably ON the node (decision/outcome nodes keep semantic fills + the ring).
+  {
+    selector: "node.kind-scenario_step[scenarioColor]",
+    style: { "background-color": "data(scenarioColor)", color: "#ffffff", "text-outline-width": 0 },
+  },
   {
     selector: "edge.otree-edge",
     style: {
@@ -257,10 +266,12 @@ export function OutcomeTreeGraph({
 
   const elements = useMemo(() => (plan ? toElements(plan, scenarioColors) : []), [plan, scenarioColors]);
 
-  // Reset selection to the most-probable outcome whenever the plan changes —
-  // unless a live run is in progress / overlaying its actual path.
+  // No auto-highlight on open: keep every node at full opacity showing its
+  // scenario colour band. The most-probable/selected-path highlight (which
+  // dims the rest) is opt-in — via clicking an outcome, or the live-run
+  // actual-path overlay.
   useEffect(() => {
-    setSelectedOutcome(suppressHighlight ? null : plan?.outcomes[0]?.id ?? null);
+    setSelectedOutcome(null);
   }, [plan, suppressHighlight]);
 
   // Overlay the actual path taken by the live run: paint each resolved
