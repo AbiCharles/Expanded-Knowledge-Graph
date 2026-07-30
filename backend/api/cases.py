@@ -260,15 +260,15 @@ async def create_case(
     # generatively here; A forces the single deterministic scenario; B keeps the
     # multi-scenario pipeline. route_query never raises (heuristic fallback).
     top_sc = state.scenarios.get(interpreted.scenario_id) if interpreted.scenario_id else None
-    route = await state.agent_runtime.route_query(
-        payload.prompt, interpreted, plan,
+    route = state.agent_runtime.route_query(
+        interpreted, plan,
         top_is_deterministic=bool(top_sc) and is_deterministic(top_sc),
     )
     rag_answer: Optional[RagAnswer] = None
     if route.strategy == "rag":
         is_multi = False
         rag_answer = await answer_via_rag(state, payload.prompt)
-    elif route.strategy == "deterministic":
+    elif route.strategy == "single":
         is_multi = False
 
     case_id = f"case-{uuid.uuid4().hex[:10]}"

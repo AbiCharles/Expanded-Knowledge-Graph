@@ -324,18 +324,24 @@ export default function App() {
   // Answer-strategy router output (A/B/C bar) + the RAG answer when Strategy C.
   const [routing, setRouting] = useState<Routing | null>(null);
   const [rag, setRag] = useState<RagAnswer | null>(null);
+  // The routing bar stays hidden until the user commits to an answer: for a
+  // scenario that asks "Proceed? / Cancel" it appears once they confirm; for a
+  // RAG answer (no proceed step) it appears immediately.
+  const [showRouting, setShowRouting] = useState(false);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
     setPipeline(null);
     setRouting(null);
     setRag(null);
+    setShowRouting(false);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
       setPipeline(result.pipeline ?? null);
       setRouting(result.routing ?? null);
       setRag(result.rag ?? null);
+      setShowRouting(!!result.rag); // RAG has no proceed step — show at once
       refreshCases();
     } catch (e) {
       console.error(e);
@@ -348,6 +354,7 @@ export default function App() {
   const onConfirm = async () => {
     if (!active) return;
     setIsSubmitting(true);
+    setShowRouting(true); // user chose to proceed → reveal how it's being answered
     try {
       await api.confirmCase(active.case_id);
       refreshActive();
@@ -561,7 +568,7 @@ export default function App() {
           }
         }}
       />
-      {routing && <RouteProbabilityBar routing={routing} />}
+      {routing && showRouting && <RouteProbabilityBar routing={routing} />}
       {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
       {pipeline && (
         <PipelineForecastPanel

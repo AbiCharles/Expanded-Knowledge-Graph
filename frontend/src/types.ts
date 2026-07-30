@@ -118,7 +118,7 @@ export interface CreateCaseResponse {
 }
 
 // Answer-strategy router decision (mirrors RouteResult in backend/agent_runtime.py).
-export type RouteStrategy = "deterministic" | "pipeline" | "rag";
+export type RouteStrategy = "single" | "pipeline" | "rag";
 export interface Routing {
   p_a: number; // deterministic single scenario
   p_b: number; // multi-scenario ontology pipeline

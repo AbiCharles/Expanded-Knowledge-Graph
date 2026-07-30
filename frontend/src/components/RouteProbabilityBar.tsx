@@ -12,35 +12,35 @@ const STRATEGY: Record<
   RouteStrategy,
   { label: string; short: string; color: string; blurb: string; reliability: string }
 > = {
-  deterministic: {
-    label: "Deterministic scenario",
+  single: {
+    label: "Single scenario",
     short: "A",
     color: "#0d9488",
-    blurb: "One governed scenario with a single definitive answer — often answered from the scenario itself, no data pull.",
+    blurb: "One governed scenario answers it directly — it may still need review or a live data pull.",
     reliability: "Most reliable",
   },
   pipeline: {
-    label: "Multi-scenario pipeline",
+    label: "Multiple scenarios",
     short: "B",
     color: "#7c3aed",
-    blurb: "One or more ontology-mapped scenarios that pull live data and/or need review; can have several outcomes.",
+    blurb: "Several governed scenarios stitched into a pipeline; can have several outcomes.",
     reliability: "Usually reliable",
   },
   rag: {
     label: "RAG / generative",
     short: "C",
     color: "#b45309",
-    blurb: "Retrieval + generation over the policy corpus (or general knowledge) when no scenario fits.",
+    blurb: "No scenario matches — retrieval + generation over the policy corpus (or general knowledge).",
     reliability: "Least deterministic",
   },
 };
 
-const ORDER: RouteStrategy[] = ["deterministic", "pipeline", "rag"];
+const ORDER: RouteStrategy[] = ["single", "pipeline", "rag"];
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 export function RouteProbabilityBar({ routing }: { routing: Routing }) {
   const probOf = (k: RouteStrategy) =>
-    k === "deterministic" ? routing.p_a : k === "pipeline" ? routing.p_b : routing.p_c;
+    k === "single" ? routing.p_a : k === "pipeline" ? routing.p_b : routing.p_c;
 
   return (
     <section className="route-bar" aria-label="Answer-strategy routing">
@@ -96,8 +96,9 @@ export function RouteProbabilityBar({ routing }: { routing: Routing }) {
 
       <div className="route-foot">
         The highest-probability strategy runs — <strong>{STRATEGY[routing.strategy].label}</strong> here.
-        {routing.rationale ? ` ${routing.rationale}` : ""} The meter weights A → B → C by how
-        deterministic each is, so more mass on A means a more trustworthy answer.
+        {routing.rationale ? ` ${routing.rationale}` : ""} RAG is used only when no scenario
+        matches. The meter weights A → B → C by reliability, so more mass on A means a more
+        trustworthy answer.
       </div>
     </section>
   );

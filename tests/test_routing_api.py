@@ -15,7 +15,7 @@ def test_create_case_always_returns_routing(client: TestClient, admin_headers: d
     assert routing is not None
     assert abs(routing["p_a"] + routing["p_b"] + routing["p_c"] - 1.0) < 1e-6
     assert 0.0 <= routing["confidence"] <= 1.0
-    assert routing["strategy"] in ("deterministic", "pipeline", "rag")
+    assert routing["strategy"] in ("single", "pipeline", "rag")
 
 
 def test_offcatalog_prompt_routes_rag_with_answer(client: TestClient, admin_headers: dict):
