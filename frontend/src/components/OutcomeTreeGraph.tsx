@@ -56,6 +56,8 @@ function toElements(plan: OutcomePlan, scenarioColors?: Record<string, string>):
     const label =
       n.kind === "outcome" && n.probability != null
         ? `${n.label}\n(${pct(n.probability)})`
+        : n.kind === "question" && n.label.length > 90
+        ? `${n.label.slice(0, 88)}…` // keep the root box a readable size
         : n.label;
     const data: any = { id: n.id, label, kind: n.kind, accent, prob: n.probability ?? null };
     // Colour-band nodes by which scenario they belong to.
@@ -119,13 +121,19 @@ const STYLESHEET: any[] = [
       "background-color": "#334155",
       "border-color": "#1e293b",
       color: "#ffffff",
+      // The base white text-outline would turn white text into an illegible
+      // blob — drop it here and use a clean sans-serif for the question.
+      "text-outline-width": 0,
+      "font-family": "ui-sans-serif, system-ui, -apple-system, sans-serif",
+      "font-style": "normal",
       "font-weight": 600,
-      "font-size": 9,
+      "font-size": 11.5,
       "text-valign": "center",
+      "text-halign": "center",
       width: "label",
       height: "label",
-      padding: 10,
-      "text-max-width": 150,
+      padding: 12,
+      "text-max-width": 200,
     },
   },
   {

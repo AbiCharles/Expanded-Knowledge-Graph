@@ -356,9 +356,14 @@ export default function App() {
 
   const onConfirm = async () => {
     if (!active) return;
+    setShowRouting(true);    // reveal the routing bar (+ pathway panel for multi)
+    setRouteModalOpen(true); // pop the routing modal (every query)
+    if (routing?.strategy === "pipeline") {
+      // Multi-scenario: revealing the pathway panel IS the "proceed"; the user
+      // then approves a pathway there. Don't run the entry case as a single case.
+      return;
+    }
     setIsSubmitting(true);
-    setShowRouting(true);    // reveal the inline routing bar
-    setRouteModalOpen(true); // and pop the routing modal (every query)
     try {
       if (routing?.strategy === "rag") {
         // RAG has no governed scenario to run — generate the deferred answer.
@@ -588,7 +593,7 @@ export default function App() {
         <RouteModal routing={routing} onClose={() => setRouteModalOpen(false)} />
       )}
       {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
-      {pipeline && (
+      {pipeline && showRouting && (
         <PipelineForecastPanel
           pipeline={pipeline}
           onClose={() => setPipeline(null)}
@@ -610,6 +615,7 @@ export default function App() {
           onConfirm={onConfirm}
           onCancel={onCancel}
           ragProceed={routing?.strategy === "rag" && !rag}
+          proceeded={showRouting}
           onSelectCase={setActiveId}
           onReplay={onReplay}
           onBaselineReplay={onBaselineReplay}

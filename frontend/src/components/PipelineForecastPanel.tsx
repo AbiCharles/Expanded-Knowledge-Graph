@@ -32,7 +32,10 @@ export function PipelineForecastPanel({
 }) {
   const [pstate, setPstate] = useState<PipelineState | null>(null);
   const [approving, setApproving] = useState(false);
-  const [modalOpen, setModalOpen] = useState(true); // auto-open so it isn't missed
+  // The panel appears only after the user proceeds; it shows the banner with a
+  // "View pathways" button rather than auto-opening the full-screen graph (which
+  // would collide with the routing modal that pops on the same Proceed).
+  const [modalOpen, setModalOpen] = useState(false);
   const pollRef = useRef<number | undefined>(undefined);
   const lastActiveCase = useRef<string | null>(null);
 
@@ -63,12 +66,13 @@ export function PipelineForecastPanel({
     }
   };
 
-  // New pipeline (new question) → reset + fetch its viable paths, auto-open.
+  // New pipeline (new question) → reset + fetch its viable paths. The graph
+  // modal stays closed until the user opens it via "View pathways".
   useEffect(() => {
     stopPolling();
     setPstate(null);
     setApproving(false);
-    setModalOpen(true);
+    setModalOpen(false);
     lastActiveCase.current = null;
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps

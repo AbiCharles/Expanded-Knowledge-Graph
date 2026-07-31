@@ -14,6 +14,9 @@ interface Props {
   // True for a RAG (Strategy C) case that has no scenario but still needs a
   // Proceed/Cancel gate before the generative answer is produced.
   ragProceed?: boolean;
+  // True once the user has proceeded — hides the Proceed/Cancel clarifier (e.g.
+  // for a multi-scenario case whose entry case stays awaiting_clarification).
+  proceeded?: boolean;
   onSelectCase: (caseId: string | null) => void;
   onReplay: (caseId: string, decision: DecisionKind) => void;
   onBaselineReplay: (caseId: string) => void;
@@ -36,6 +39,7 @@ export function Console({
   onConfirm,
   onCancel,
   ragProceed,
+  proceeded,
   onSelectCase,
   onReplay,
   onBaselineReplay,
@@ -98,6 +102,7 @@ export function Console({
           onConfirm={onConfirm}
           onCancel={onCancel}
           ragProceed={ragProceed}
+          proceeded={proceeded}
           onBack={() => onSelectCase(null)}
           onOpenReview={onOpenReview}
           onReplay={(d) => onReplay(active.case_id, d)}
@@ -411,6 +416,7 @@ function ChatThread({
   onConfirm,
   onCancel,
   ragProceed,
+  proceeded,
   onBack,
   onOpenReview,
   onReplay,
@@ -422,6 +428,7 @@ function ChatThread({
   onConfirm: () => void;
   onCancel: () => void;
   ragProceed?: boolean;
+  proceeded?: boolean;
   onBack: () => void;
   onOpenReview: () => void;
   onReplay: (d: DecisionKind) => void;
@@ -482,7 +489,7 @@ function ChatThread({
           actions={
             active.phase === "awaiting_clarification" ? (
               <>
-                {(sc || ragProceed) && (
+                {(sc || ragProceed) && !proceeded && (
                   <div className="chat-confirm-row">
                     <button className="confirm-yes" onClick={onConfirm}>Yes, proceed</button>
                     <button className="confirm-no" onClick={onCancel}>Cancel</button>
