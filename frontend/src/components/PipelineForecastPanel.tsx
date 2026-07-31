@@ -23,10 +23,13 @@ const DECISION_MARK: Record<string, { icon: string; cls: string }> = {
 
 export function PipelineForecastPanel({
   pipeline,
+  openGraph,
   onClose,
   onActiveCase,
 }: {
   pipeline: PipelineForecast;
+  // Flips true when the routing modal is dismissed → open the pathway graph.
+  openGraph?: boolean;
   onClose?: () => void;
   onActiveCase?: (caseId: string) => void;
 }) {
@@ -77,6 +80,11 @@ export function PipelineForecastPanel({
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pipeline.pipeline_id]);
+
+  // Parent dismissed the routing modal → open the pathway graph.
+  useEffect(() => {
+    if (openGraph) setModalOpen(true);
+  }, [openGraph]);
 
   const approve = async (pathId: string) => {
     setApproving(true);

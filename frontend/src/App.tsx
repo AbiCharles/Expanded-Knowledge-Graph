@@ -331,6 +331,9 @@ export default function App() {
   const [showRouting, setShowRouting] = useState(false);
   // The routing shown as a dismissible modal, popped once on Proceed.
   const [routeModalOpen, setRouteModalOpen] = useState(false);
+  // For a multi-scenario question: open the pathway graph modal after the
+  // routing modal is dismissed (Proceed → routing modal → pathway graph).
+  const [openGraph, setOpenGraph] = useState(false);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
@@ -339,6 +342,7 @@ export default function App() {
     setRag(null);
     setShowRouting(false);
     setRouteModalOpen(false);
+    setOpenGraph(false);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
@@ -403,6 +407,7 @@ export default function App() {
     setRag(null);
     setShowRouting(false);
     setRouteModalOpen(false);
+    setOpenGraph(false);
     await api.cancelCase(active.case_id);
     refreshActive();
     refreshCases();
@@ -590,12 +595,20 @@ export default function App() {
       />
       {routing && showRouting && <RouteProbabilityBar routing={routing} />}
       {routing && routeModalOpen && (
-        <RouteModal routing={routing} onClose={() => setRouteModalOpen(false)} />
+        <RouteModal
+          routing={routing}
+          onClose={() => {
+            setRouteModalOpen(false);
+            // Multi-scenario: reveal the pathway graph modal next.
+            if (routing.strategy === "pipeline") setOpenGraph(true);
+          }}
+        />
       )}
       {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
       {pipeline && showRouting && (
         <PipelineForecastPanel
           pipeline={pipeline}
+          openGraph={openGraph}
           onClose={() => setPipeline(null)}
           onActiveCase={(cid) => {
             setActiveId(cid);
