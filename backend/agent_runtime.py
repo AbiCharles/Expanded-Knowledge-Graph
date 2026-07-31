@@ -403,11 +403,14 @@ class AgentRuntime:
             probs = _normalize3([c1 * 0.3, 0.05, max(0.5, 1.0 - c1)])
 
         idx = max(range(3), key=lambda i: probs[i])
-        # Expected correctness: A (one governed scenario) reads highest, nudged
-        # down when that scenario needs review/data rather than a definitive
-        # one-shot answer; B mid; C (generative) lowest.
-        weights = (1.0 if top_is_deterministic else 0.9, 0.75, 0.45)
-        confidence = sum(p * w for p, w in zip(probs, weights))
+        # Expected correctness. A single AUTONOMOUS (deterministic) scenario is
+        # treated as fully reliable — 100%. Otherwise weight A > B > C by
+        # reliability (A a single governed scenario; C a generative answer).
+        if idx == 0 and top_is_deterministic:
+            confidence = 1.0
+        else:
+            weights = (0.9, 0.75, 0.45)
+            confidence = sum(p * w for p, w in zip(probs, weights))
         return RouteResult(
             p_a=probs[0], p_b=probs[1], p_c=probs[2],
             strategy=_STRATEGIES[idx],

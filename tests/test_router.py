@@ -88,6 +88,20 @@ def test_probs_normalized_and_confidence_ordering():
     assert r_a.confidence > r_c.confidence
 
 
+def test_autonomous_single_is_full_confidence():
+    # A single deterministic (autonomous) scenario reads as 100% correct.
+    r = _route(_interp(0.9), _plan(False, 0.1), det=True)
+    assert r.strategy == "single"
+    assert r.confidence == 1.0
+
+
+def test_hitl_single_is_below_full_confidence():
+    # A single but review-based scenario is high, not full.
+    r = _route(_interp(0.9), _plan(False, 0.0), det=False)
+    assert r.strategy == "single"
+    assert r.confidence < 1.0
+
+
 def test_normalize3_handles_degenerate_input():
     assert _normalize3([0, 0, 0]) == [1 / 3, 1 / 3, 1 / 3]
     assert abs(sum(_normalize3([2, 0, -5])) - 1.0) < 1e-9
