@@ -60,7 +60,7 @@ export function RouteProbabilityBar({ routing }: { routing: Routing }) {
           <div
             key={k}
             className={`route-seg${routing.strategy === k ? " chosen" : ""}`}
-            style={{ width: `${Math.max(probOf(k) * 100, 2)}%`, background: STRATEGY[k].color }}
+            style={{ width: probOf(k) <= 0.005 ? "0%" : `${Math.max(probOf(k) * 100, 2)}%`, background: STRATEGY[k].color }}
             title={`${STRATEGY[k].label} · ${pct(probOf(k))}`}
           >
             {probOf(k) >= 0.12 && (

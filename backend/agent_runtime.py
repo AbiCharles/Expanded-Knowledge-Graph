@@ -403,14 +403,14 @@ class AgentRuntime:
             probs = _normalize3([c1 * 0.3, 0.05, max(0.5, 1.0 - c1)])
 
         idx = max(range(3), key=lambda i: probs[i])
-        # Expected correctness. A single AUTONOMOUS (deterministic) scenario is
-        # treated as fully reliable — 100%. Otherwise weight A > B > C by
-        # reliability (A a single governed scenario; C a generative answer).
         if idx == 0 and top_is_deterministic:
+            # A single AUTONOMOUS scenario answers deterministically: pin the
+            # whole mass to A (an all-green bar) and the correctness meter to
+            # 100%. Other strategies keep the A>B>C reliability weighting.
+            probs = [1.0, 0.0, 0.0]
             confidence = 1.0
         else:
-            weights = (0.9, 0.75, 0.45)
-            confidence = sum(p * w for p, w in zip(probs, weights))
+            confidence = sum(p * w for p, w in zip(probs, (0.9, 0.75, 0.45)))
         return RouteResult(
             p_a=probs[0], p_b=probs[1], p_c=probs[2],
             strategy=_STRATEGIES[idx],

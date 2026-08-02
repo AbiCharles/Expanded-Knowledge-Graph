@@ -89,10 +89,13 @@ def test_probs_normalized_and_confidence_ordering():
 
 
 def test_autonomous_single_is_full_confidence():
-    # A single deterministic (autonomous) scenario reads as 100% correct.
+    # A single deterministic (autonomous) scenario reads as 100% correct and
+    # pins the whole distribution to A (an all-green bar).
     r = _route(_interp(0.9), _plan(False, 0.1), det=True)
     assert r.strategy == "single"
     assert r.confidence == 1.0
+    assert r.p_a == 1.0
+    assert r.p_b == 0.0 and r.p_c == 0.0
 
 
 def test_hitl_single_is_below_full_confidence():
