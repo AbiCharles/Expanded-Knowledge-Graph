@@ -146,8 +146,22 @@ export function Console({
       {/* Multi-scenario demo — a natural question that spans two scenarios, so
           the question-driven Outcome-pathways flow is one click away in a demo.
           Not tied to a single scenario (it's the planner that fans it out). */}
+      {/* Router demo prompts — one per answer-strategy (A single / B multi /
+          C RAG) so each routing path is a single click in a live demo. */}
       <div className="demo-row">
-        <div className="demo-label">Multi-scenario</div>
+        <div className="demo-label">Single (A)</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() => onSendPrompt("Update the reorder point on SKU-EL-2210 from 150 to 200")}
+          title="A deterministic autonomous scenario — routes to A at 100% expected correctness"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          Update the reorder point on SKU-EL-2210 from 150 to 200
+        </button>
+      </div>
+      <div className="demo-row">
+        <div className="demo-label">Multi (B)</div>
         <button
           className="chip chip-demo"
           disabled={composerLocked}
@@ -156,10 +170,22 @@ export function Console({
               "A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?"
             )
           }
-          title="Spans supply-assurance + PO auto-release — opens the Outcome-pathways flow"
+          title="Spans supply-assurance + PO auto-release — routes to B, the Outcome-pathways flow"
         >
           <span className="chip-pin-marker" aria-hidden="true">⚡</span>
           A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?
+        </button>
+      </div>
+      <div className="demo-row">
+        <div className="demo-label">RAG (C)</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() => onSendPrompt("What is our two-person rule for high-risk overrides?")}
+          title="A policy question no scenario covers — routes to C, a grounded RAG answer"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          What is our two-person rule for high-risk overrides?
         </button>
       </div>
 
