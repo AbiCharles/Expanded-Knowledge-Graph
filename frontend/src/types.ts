@@ -109,6 +109,91 @@ export interface CreateCaseResponse {
   clarifying_question: string;
   confidence: number;
   candidates: ScenarioCandidate[];
+  // Present only when the planner detected a multi-scenario question.
+  pipeline?: PipelineForecast | null;
+  // The answer-strategy router's A/B/C decision (always present).
+  routing?: Routing | null;
+  // The generative answer, present only when the router chose Strategy C (RAG).
+  rag?: RagAnswer | null;
+}
+
+// Answer-strategy router decision (mirrors RouteResult in backend/agent_runtime.py).
+export type RouteStrategy = "single" | "pipeline" | "rag";
+export interface Routing {
+  p_a: number; // deterministic single scenario
+  p_b: number; // multi-scenario ontology pipeline
+  p_c: number; // RAG / generative
+  strategy: RouteStrategy;
+  confidence: number; // expected correctness of the chosen answer
+  rationale: string;
+  basis: "llm" | "heuristic";
+}
+
+// Strategy-C generative answer (mirrors RagAnswer in backend/rag_answerer.py).
+export interface RagCitation {
+  n: number;
+  source: string;
+  id: string;
+  title: string;
+  snippet: string;
+  score: number;
+}
+export interface RagAnswer {
+  answer: string;
+  citations: RagCitation[];
+  grounded: boolean;
+  confidence: number;
+}
+
+// The planner's ordered pipeline + projected Outcome DAG (mirrors
+// PipelineOut in backend/api/cases.py). Rendered by PipelineForecastPanel.
+export interface PipelineStepPlan {
+  scenario_id: string;
+  title: string;
+  why: string;
+}
+export interface PipelineForecast {
+  pipeline_id: string;
+  steps: PipelineStepPlan[];
+  rationale: string;
+  confidence: number;
+  forecast: OutcomePlan;
+}
+
+// Live pipeline state from GET /api/pipelines/{id} (Phase 2). Drives the
+// per-step status + the actual-path overlay on the forecast graph.
+export type PipelineStatus = "planned" | "running" | "complete" | "error";
+
+export interface PipelineStepState {
+  scenario_id: string;
+  title: string;
+  why: string;
+  case_id: string | null;
+  decision: string | null;
+}
+
+// One actionable pathway the reviewer can approve (from viable_paths).
+export interface ViablePath {
+  path_id: string;
+  label: string;
+  outcome_kind: string | null;
+  probability: number;
+  recommended: boolean;
+  steps: { scenario_id: string; decision: string; step_index: number | null }[];
+}
+
+export interface PipelineState {
+  pipeline_id: string;
+  prompt: string;
+  status: PipelineStatus;
+  current_step: number;
+  terminal_decision: string | null;
+  error: string | null;
+  chosen_path_id: string | null;
+  viable_paths: ViablePath[];
+  steps: PipelineStepState[];
+  actual_path: { step: number; scenario_id: string; decision: string }[];
+  forecast: OutcomePlan;
 }
 
 export interface ScenarioCandidate {
@@ -307,4 +392,54 @@ export interface AutoApprovedEvent {
   outcome: { headline: string; detail: string };
   closing_message: string;
   lineage: LineageEvent[];
+}
+
+// =============================================================================
+// Multi-scenario Outcome DAG — mirrors backend/outcome_plan.py. Returned by
+// POST /api/graph/outcome-tree. Nodes/edges render on Cytoscape; `outcomes`
+// is the ranked side-panel list.
+// =============================================================================
+export type OutcomeNodeKind = "question" | "scenario_step" | "decision" | "outcome";
+export type EdgeBasis = "author" | "history" | "default" | "agent" | "structural";
+
+export interface OutcomeNode {
+  id: string;
+  label: string;
+  kind: OutcomeNodeKind;
+  scenario_id?: string | null;
+  step_index?: number | null;
+  outcome_kind?: string | null;
+  // Aggregate probability of reaching this node (outcome terminals only).
+  probability?: number | null;
+  accent: string;
+}
+
+export interface OutcomeEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  probability: number;
+  basis: EdgeBasis;
+  rationale: string;
+  accent: string;
+}
+
+export interface OutcomeSummary {
+  id: string;
+  label: string;
+  outcome_kind?: string | null;
+  scenario_id?: string | null;
+  probability: number;
+  // One entry per distinct root→outcome path (list of edge ids).
+  path_edge_ids: string[][];
+}
+
+export interface OutcomePlan {
+  question: string;
+  scenario_ids: string[];
+  nodes: OutcomeNode[];
+  edges: OutcomeEdge[];
+  outcomes: OutcomeSummary[];
+  stats: Record<string, number>;
 }

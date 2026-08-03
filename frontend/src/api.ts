@@ -8,7 +8,10 @@ import {
   CreateCaseResponse,
   DataSourceRow,
   DecisionKind,
+  OutcomePlan,
+  PipelineState,
   QueueRow,
+  RagAnswer,
   SampleFact,
   ScenarioRow,
 } from "./types";
@@ -23,6 +26,52 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
 
 export async function listScenarios(): Promise<ScenarioRow[]> {
   return jsonOrThrow(await authedFetch("/api/scenarios"));
+}
+
+// Multi-scenario pipeline (Phase 2). `confirmPipeline` kicks off the real
+// chained HITL execution; `getPipeline` returns live state for polling.
+export async function confirmPipeline(
+  pipelineId: string
+): Promise<{ pipeline_id: string; status: string }> {
+  return jsonOrThrow(
+    await authedFetch(`/api/pipelines/${pipelineId}/confirm`, { method: "POST" })
+  );
+}
+
+export async function getPipeline(pipelineId: string): Promise<PipelineState> {
+  return jsonOrThrow(await authedFetch(`/api/pipelines/${pipelineId}`));
+}
+
+// Approve one whole pathway; the backend executes it end-to-end, auto-applying
+// that path's decisions and firing each step's action (no per-step prompts).
+export async function approvePath(
+  pipelineId: string,
+  pathId: string
+): Promise<{ pipeline_id: string; status: string; path_id: string }> {
+  return jsonOrThrow(
+    await authedFetch(`/api/pipelines/${pipelineId}/approve-path`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path_id: pathId }),
+    })
+  );
+}
+
+// Stitch several scenarios into one probability-weighted Outcome DAG.
+// `context` can carry optional signals for the hybrid probability model,
+// e.g. { reliability_score: 0.8 }.
+export async function outcomeTree(
+  question: string,
+  scenarioIds: string[],
+  context: Record<string, unknown> = {}
+): Promise<OutcomePlan> {
+  return jsonOrThrow(
+    await authedFetch("/api/graph/outcome-tree", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, scenario_ids: scenarioIds, context }),
+    })
+  );
 }
 
 export async function listCases(): Promise<CaseSummary[]> {
@@ -46,6 +95,13 @@ export async function createCase(prompt: string): Promise<CreateCaseResponse> {
 export async function confirmCase(caseId: string): Promise<void> {
   await jsonOrThrow(
     await authedFetch(`/api/cases/${caseId}/confirm`, { method: "POST" })
+  );
+}
+
+// Generate the deferred RAG (Strategy C) answer once the user proceeds.
+export async function answerRag(caseId: string): Promise<RagAnswer> {
+  return jsonOrThrow(
+    await authedFetch(`/api/cases/${caseId}/answer-rag`, { method: "POST" })
   );
 }
 
@@ -404,6 +460,12 @@ export async function getScenario(scenarioId: string): Promise<any> {
   return jsonOrThrow(
     await authedFetch(`/api/scenarios/${scenarioId}`)
   );
+}
+
+// Full scenario dict (stages, ontology_queries, facts, outcomes) — used by the
+// pathway legend to drill into a scenario's ontology + attributes.
+export async function getScenarioSpec(scenarioId: string): Promise<any> {
+  return jsonOrThrow(await authedFetch(`/api/scenarios/${scenarioId}?full=1`));
 }
 
 // Full parsed scenario dict (stages, ontology_queries, outcomes,

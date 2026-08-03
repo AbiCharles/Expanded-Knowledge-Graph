@@ -105,3 +105,8 @@ class CaseRecord:
     # demoted to HITL. `None` for cases that don't have risk_bands
     # configured or where no band matched.
     risk_band: Optional[dict] = None
+    # Multi-scenario pipeline linkage (Phase 2). Set when this case is one
+    # step of a planned pipeline (compose-then-branch); None for standalone
+    # single-scenario cases. `pipeline_step` is the 0-based position.
+    pipeline_id: Optional[str] = None
+    pipeline_step: Optional[int] = None

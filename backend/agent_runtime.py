@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 from tcs_hitl_context import AgentAction, LLMClient
@@ -47,9 +47,67 @@ class InterpretedRequest(BaseModel):
     candidates: list[ScenarioCandidate] = Field(default_factory=list)
 
 
+class PipelineStep(BaseModel):
+    """One scenario in a planned multi-scenario pipeline (in run order)."""
+    scenario_id: str
+    title: str
+    why: str = ""
+
+
+class PipelinePlan(BaseModel):
+    """Result of `plan_pipeline` — an ordered pipeline of 1..N scenarios.
+
+    `steps` is the compose order: the first is the entry point; each later
+    step is reached only if the prior step's decision lets the workflow
+    proceed. `len(steps) >= 2` means the question is genuinely multi-scenario.
+    """
+    steps: list[PipelineStep] = Field(default_factory=list)
+    rationale: str = ""
+    confidence: float = 0.0
+
+    @property
+    def multi(self) -> bool:
+        return len(self.steps) >= 2
+
+
+# Answer-strategy names by probability index [A, B, C]:
+#   single   — one governed scenario answers it;
+#   pipeline — several scenarios stitched together;
+#   rag      — generative fallback when no scenario matches.
+_STRATEGIES: tuple[str, str, str] = ("single", "pipeline", "rag")
+
+
+def _normalize3(vals: list[float]) -> list[float]:
+    """Clamp negatives to 0 and scale to sum 1; uniform when degenerate."""
+    clamped = [v if v > 0 else 0.0 for v in vals]
+    total = sum(clamped)
+    if total <= 0:
+        return [1 / 3, 1 / 3, 1 / 3]
+    return [v / total for v in clamped]
+
+
+class RouteResult(BaseModel):
+    """The query router's answer-strategy decision.
+
+    ``p_a``/``p_b``/``p_c`` sum to 1 (deterministic single scenario /
+    multi-scenario pipeline / RAG-generative). ``strategy`` is the argmax;
+    ``confidence`` is the expected correctness of that answer (A weighted
+    highest, C lowest).
+    """
+    p_a: float
+    p_b: float
+    p_c: float
+    strategy: Literal["single", "pipeline", "rag"]
+    confidence: float
+    rationale: str = ""
+    basis: Literal["rule", "heuristic", "llm"] = "rule"
+
+
 # Confidence below this threshold → UI should offer top-K alternatives.
 SUGGEST_THRESHOLD = 0.7
 TOP_K = 3
+# Max scenarios the keyword-chain fallback will stitch together.
+MAX_PIPELINE_STEPS = 4
 
 
 _CLASSIFY_SYSTEM = """You are the intake stage of a Human-in-the-Loop agent runtime for an enterprise supply-chain platform.
@@ -76,6 +134,22 @@ Respond with strict JSON only, matching this schema:
     {"scenario_id": string, "confidence": number},
     {"scenario_id": string, "confidence": number}
   ]
+}"""
+
+
+_PLAN_SYSTEM = """You are the pipeline planner for a Human-in-the-Loop supply-chain agent runtime.
+Given an operator's natural-language question and the scenario catalog, decide whether answering it requires a SEQUENCE of scenarios ("compose then branch") or a single scenario.
+
+Rules:
+  - Return an ORDERED pipeline. The first step is the entry point; each later step is one the workflow only reaches if the prior step's decision lets it proceed (e.g. the reviewer approves, then a follow-on action is triggered).
+  - Return MULTIPLE steps ONLY when the question genuinely spans multiple dependent decisions (e.g. "if we approve a mitigation for the failing supplier, what happens to the follow-on bulk PO?"). If it's a single ask, return exactly one step.
+  - Use only scenario_ids that exist in the catalog. Give a short `why` for each step.
+
+Respond with strict JSON only:
+{
+  "steps": [ {"scenario_id": string, "why": string} ],
+  "rationale": string,
+  "confidence": number
 }"""
 
 
@@ -217,6 +291,141 @@ class AgentRuntime:
             confidence=candidates[0].confidence,
             candidates=candidates,
         )
+
+    # -------------------------------------------------------------------------
+    # Step 1b — plan a (possibly multi-scenario) pipeline from the prompt
+    # -------------------------------------------------------------------------
+    async def plan_pipeline(self, text: str) -> PipelinePlan:
+        """Plan an ordered pipeline of scenarios for a natural-language question.
+
+        With a real LLM this reasons over the catalog and returns a chain when
+        the question spans dependent decisions. With the fake LLM (or on any
+        failure) it falls back to keyword-chaining: scenarios whose
+        `match_keywords` hit the prompt, ordered by hit count.
+        """
+        if self.llm.name == "fake":
+            return self._keyword_chain(text)
+
+        catalog_lines = [
+            f"  - {sc['id']}: {sc['title']} ({sc.get('domain', '')}) — keywords: "
+            + ", ".join(sc.get("match_keywords", []))
+            for sc in self.scenarios.all()
+        ]
+        user_msg = (
+            "Scenario catalog:\n" + "\n".join(catalog_lines)
+            + f"\n\nOperator question: {text!r}\n\nReturn JSON only."
+        )
+        try:
+            raw = await self.llm.complete(
+                system=_PLAN_SYSTEM, user=user_msg,
+                response_format="json", temperature=0.1,
+            )
+            parsed = json.loads(raw)
+            steps: list[PipelineStep] = []
+            seen: set[str] = set()
+            for s in parsed.get("steps", []) or []:
+                sid = s.get("scenario_id")
+                sc = self.scenarios.get(sid) if sid else None
+                if sc is None or sid in seen:
+                    continue
+                seen.add(sid)
+                steps.append(PipelineStep(scenario_id=sid, title=sc["title"], why=s.get("why", "")))
+                if len(steps) >= MAX_PIPELINE_STEPS:
+                    break
+            if not steps:
+                return self._keyword_chain(text)
+            return PipelinePlan(
+                steps=steps,
+                rationale=parsed.get("rationale", ""),
+                confidence=float(parsed.get("confidence", 0.0)),
+            )
+        except Exception:
+            log.exception("LLM plan_pipeline failed; keyword-chain fallback")
+            return self._keyword_chain(text)
+
+    def _keyword_chain(self, text: str) -> PipelinePlan:
+        """Keyword-match fallback. 2+ matching scenarios → a chained pipeline."""
+        lower = text.lower()
+        scored: list[tuple[int, dict]] = []
+        for sc in self.scenarios.all():
+            score = sum(1 for kw in sc.get("match_keywords", []) if kw and kw in lower)
+            if score > 0:
+                scored.append((score, sc))
+        scored.sort(key=lambda t: -t[0])
+        if not scored:
+            return PipelinePlan(steps=[], rationale="No scenario keywords matched the question.")
+        if len(scored) >= 2:
+            chosen = scored[:MAX_PIPELINE_STEPS]
+            rationale = "Keyword-chain fallback — multiple scenarios matched the question."
+        else:
+            chosen = scored[:1]
+            rationale = "Keyword fallback — a single scenario matched."
+        steps = [
+            PipelineStep(scenario_id=sc["id"], title=sc["title"], why=f"{score} keyword match(es)")
+            for score, sc in chosen
+        ]
+        return PipelinePlan(
+            steps=steps, rationale=rationale,
+            confidence=min(1.0, 0.5 + 0.1 * chosen[0][0]),
+        )
+
+    # -------------------------------------------------------------------------
+    # Step 1c — route the query across answer strategies (A / B / C)
+    # -------------------------------------------------------------------------
+    def route_query(
+        self,
+        interpreted: InterpretedRequest,
+        plan: Optional[PipelinePlan],
+        *,
+        top_is_deterministic: bool,
+    ) -> RouteResult:
+        """Route a query across the three answer strategies by a deterministic
+        rule over the two classifiers' outputs — reliable, and no extra LLM call:
+
+          - a genuinely multi-scenario plan   → B (several scenarios stitched);
+          - a CONFIDENT single-scenario match → A (one scenario answers it);
+          - no confident scenario match       → C (RAG, strictly last resort).
+
+        RAG can never win while a scenario matches confidently, so a strong
+        single match (e.g. supply-assurance) is never answered generatively.
+        """
+        c1 = float(interpreted.confidence or 0.0)
+        plan_conf = float(plan.confidence) if plan else 0.0
+        multi = bool(plan and plan.multi)
+        confident_match = interpreted.scenario_id is not None and c1 >= SUGGEST_THRESHOLD
+
+        if multi:
+            probs = _normalize3([0.15, max(plan_conf, 0.7), 0.05])
+        elif confident_match:
+            probs = _normalize3([c1, 0.10, max(0.05, 1.0 - c1) * 0.5])
+        else:
+            # No confident scenario match → generative fallback dominates.
+            probs = _normalize3([c1 * 0.3, 0.05, max(0.5, 1.0 - c1)])
+
+        idx = max(range(3), key=lambda i: probs[i])
+        if idx == 0 and top_is_deterministic:
+            # A single AUTONOMOUS scenario answers deterministically: pin the
+            # whole mass to A (an all-green bar) and the correctness meter to
+            # 100%. Other strategies keep the A>B>C reliability weighting.
+            probs = [1.0, 0.0, 0.0]
+            confidence = 1.0
+        else:
+            confidence = sum(p * w for p, w in zip(probs, (0.9, 0.75, 0.45)))
+        return RouteResult(
+            p_a=probs[0], p_b=probs[1], p_c=probs[2],
+            strategy=_STRATEGIES[idx],
+            confidence=round(confidence, 4),
+            rationale=self._route_rationale(idx),
+            basis="rule",
+        )
+
+    @staticmethod
+    def _route_rationale(idx: int) -> str:
+        return (
+            "One governed scenario matches this question directly.",
+            "The question spans multiple scenarios that must be stitched together.",
+            "No scenario matches; answering generatively from the policy corpus.",
+        )[idx]
 
     # -------------------------------------------------------------------------
     # Step 2 — draft the AgentAction. For the demo this just instantiates the

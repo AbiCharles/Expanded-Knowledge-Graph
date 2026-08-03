@@ -81,8 +81,16 @@ jobs:
             '+refs/heads/launcher:refs/heads/launcher'
 
           AZURE_URL="https://${AZURE_DEVOPS_PAT}@dev.azure.com/agentic-ai/ai-agent/_git/tcs_knowledge_fabric"
+          # Authoritative mirror — every branch + tag, plus main→dev. A real
+          # failure here SHOULD still fail the job, so no `|| true`.
           git push "${AZURE_URL}" \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*' \
-            '+refs/heads/main:refs/heads/dev' \
-            '+refs/heads/main:refs/heads/Development'
+            '+refs/heads/main:refs/heads/dev'
+          # main→Development is best-effort. Azure's `Development` branch has a
+          # policy that denies ForcePush to the mirror PAT identity (TF401027),
+          # so this ref is rejected on every run. That rejection must NOT fail
+          # the whole mirror — every other ref above has already synced. Emit a
+          # warning instead of exiting non-zero under `set -e`.
+          git push "${AZURE_URL}" '+refs/heads/main:refs/heads/Development' \
+            || echo "::warning::main->Development force-push denied by Azure branch policy (non-fatal; all other refs mirrored)"

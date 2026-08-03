@@ -11,6 +11,12 @@ interface Props {
   onSendPrompt: (text: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  // True for a RAG (Strategy C) case that has no scenario but still needs a
+  // Proceed/Cancel gate before the generative answer is produced.
+  ragProceed?: boolean;
+  // True once the user has proceeded — hides the Proceed/Cancel clarifier (e.g.
+  // for a multi-scenario case whose entry case stays awaiting_clarification).
+  proceeded?: boolean;
   onSelectCase: (caseId: string | null) => void;
   onReplay: (caseId: string, decision: DecisionKind) => void;
   onBaselineReplay: (caseId: string) => void;
@@ -32,6 +38,8 @@ export function Console({
   onSendPrompt,
   onConfirm,
   onCancel,
+  ragProceed,
+  proceeded,
   onSelectCase,
   onReplay,
   onBaselineReplay,
@@ -93,6 +101,8 @@ export function Console({
           isSubmitting={isSubmitting}
           onConfirm={onConfirm}
           onCancel={onCancel}
+          ragProceed={ragProceed}
+          proceeded={proceeded}
           onBack={() => onSelectCase(null)}
           onOpenReview={onOpenReview}
           onReplay={(d) => onReplay(active.case_id, d)}
@@ -132,6 +142,52 @@ export function Console({
         />
       )}
       {showWelcome && <WelcomeState historyCount={historyCount} />}
+
+      {/* Multi-scenario demo — a natural question that spans two scenarios, so
+          the question-driven Outcome-pathways flow is one click away in a demo.
+          Not tied to a single scenario (it's the planner that fans it out). */}
+      {/* Router demo prompts — one per answer-strategy (A single / B multi /
+          C RAG) so each routing path is a single click in a live demo. */}
+      <div className="demo-row">
+        <div className="demo-label">Single (A)</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() => onSendPrompt("Update the reorder point on SKU-EL-2210 from 150 to 200")}
+          title="A deterministic autonomous scenario — routes to A at 100% expected correctness"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          Update the reorder point on SKU-EL-2210 from 150 to 200
+        </button>
+      </div>
+      <div className="demo-row">
+        <div className="demo-label">Multi (B)</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() =>
+            onSendPrompt(
+              "A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?"
+            )
+          }
+          title="Spans supply-assurance + PO auto-release — routes to B, the Outcome-pathways flow"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          A key supplier is failing. Can we still safely auto-release the pending Q1 bulk PO?
+        </button>
+      </div>
+      <div className="demo-row">
+        <div className="demo-label">RAG (C)</div>
+        <button
+          className="chip chip-demo"
+          disabled={composerLocked}
+          onClick={() => onSendPrompt("What is our two-person rule for high-risk overrides?")}
+          title="A policy question no scenario covers — routes to C, a grounded RAG answer"
+        >
+          <span className="chip-pin-marker" aria-hidden="true">⚡</span>
+          What is our two-person rule for high-risk overrides?
+        </button>
+      </div>
 
       {/* Pinned row — demo-headline scenarios that should always be one click
           away without expanding the full catalogue. Renders ABOVE the
@@ -385,6 +441,8 @@ function ChatThread({
   isSubmitting,
   onConfirm,
   onCancel,
+  ragProceed,
+  proceeded,
   onBack,
   onOpenReview,
   onReplay,
@@ -395,6 +453,8 @@ function ChatThread({
   isSubmitting: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  ragProceed?: boolean;
+  proceeded?: boolean;
   onBack: () => void;
   onOpenReview: () => void;
   onReplay: (d: DecisionKind) => void;
@@ -455,7 +515,7 @@ function ChatThread({
           actions={
             active.phase === "awaiting_clarification" ? (
               <>
-                {sc && (
+                {(sc || ragProceed) && !proceeded && (
                   <div className="chat-confirm-row">
                     <button className="confirm-yes" onClick={onConfirm}>Yes, proceed</button>
                     <button className="confirm-no" onClick={onCancel}>Cancel</button>

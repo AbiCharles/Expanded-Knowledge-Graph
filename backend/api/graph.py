@@ -17,7 +17,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..auth import CurrentUser, current_user
+from ..case_history import decision_history_provider
 from ..datasources.neo4j_source import Neo4jResolver
+from ..outcome_plan import OutcomePlan
+from ..scenario_composer import compose
 
 log = logging.getLogger(__name__)
 
@@ -272,3 +275,47 @@ def supplier_subgraph(
             "alliance_peers": alliance_peer_count,
         },
     )
+
+
+# =============================================================================
+# Outcome tree — stitch multiple scenarios into a probability-weighted DAG
+# =============================================================================
+class OutcomeTreeRequest(BaseModel):
+    question: str = Field(..., min_length=1, description="The complex user question")
+    scenario_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=8,
+        description="Scenarios to stitch together, in pipeline (compose) order",
+    )
+    # Optional signals the hybrid probability model can fold in, e.g.
+    # {"reliability_score": 0.82} or
+    # {"reliability_by_scenario": {"SC-PP-AERONOVA-026": 0.82}}.
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/outcome-tree", response_model=OutcomePlan)
+def outcome_tree(
+    payload: OutcomeTreeRequest,
+    request: Request,
+    _user: CurrentUser = Depends(current_user),
+) -> OutcomePlan:
+    """Compose several scenarios into one probability-weighted Outcome DAG.
+
+    The scenarios chain into a pipeline; each decision fans out into
+    branches whose weights come from author overrides, then historical
+    case frequencies, then defaults (see backend/probability.py). Returns
+    the nodes/edges the frontend renders plus a ranked ``outcomes`` list.
+    """
+    state = request.app.state.app_state
+    provider = decision_history_provider(state.database)
+    try:
+        return compose(
+            payload.question,
+            payload.scenario_ids,
+            scenarios=state.scenarios,
+            history_provider=provider,
+            context=payload.context or {},
+        )
+    except KeyError as exc:
+        raise HTTPException(404, f"unknown scenario_id: {exc}")

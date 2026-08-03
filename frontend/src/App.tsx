@@ -9,6 +9,11 @@ import { CaseSpecModal } from "./components/CaseSpecModal";
 import { LineagePanel } from "./components/LineagePanel";
 import { KnowledgeModal, KnowledgeTab } from "./components/KnowledgeModal";
 import { InsightsModal } from "./components/InsightsModal";
+import { OutcomeTreeModal } from "./components/OutcomeTreeModal";
+import { PipelineForecastPanel } from "./components/PipelineForecastPanel";
+import { RouteProbabilityBar } from "./components/RouteProbabilityBar";
+import { RouteModal } from "./components/RouteModal";
+import { RagAnswerPanel } from "./components/RagAnswerPanel";
 import { MetricsDashboard } from "./components/MetricsDashboard";
 import { ScenarioEditModal } from "./components/ScenarioEditModal";
 import { ScenariosHelp } from "./components/ScenariosHelp";
@@ -22,7 +27,7 @@ import {
 import { StatusBar } from "./components/StatusBar";
 import { AgentRun } from "./components/AgentRun";
 import { useCaseStream } from "./hooks/useCaseStream";
-import { CaseFull, CaseSummary, DecisionKind, ScenarioRow } from "./types";
+import { CaseFull, CaseSummary, DecisionKind, PipelineForecast, RagAnswer, Routing, ScenarioRow } from "./types";
 
 type ModalState =
   | { kind: "none" }
@@ -36,6 +41,7 @@ type ModalState =
   | { kind: "edit-scenario"; scenarioId: string }
   | { kind: "metrics" }
   | { kind: "insights" }
+  | { kind: "outcome-tree" }
   | { kind: "platform-flow" }
   | { kind: "case-spec"; tab?: "scenario" | "ontology"; anchor?: string };
 
@@ -313,12 +319,36 @@ export default function App() {
   // in the Console so the user gets feedback BEFORE the case's own `binding`
   // phase event arrives via SSE.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set when the planner detects a multi-scenario question — drives the
+  // projected-pathways panel above the main workspace.
+  const [pipeline, setPipeline] = useState<PipelineForecast | null>(null);
+  // Answer-strategy router output (A/B/C bar) + the RAG answer when Strategy C.
+  const [routing, setRouting] = useState<Routing | null>(null);
+  const [rag, setRag] = useState<RagAnswer | null>(null);
+  // The routing bar stays hidden until the user commits to an answer: for a
+  // scenario that asks "Proceed? / Cancel" it appears once they confirm; for a
+  // RAG answer (no proceed step) it appears immediately.
+  const [showRouting, setShowRouting] = useState(false);
+  // The routing shown as a dismissible modal, popped once on Proceed.
+  const [routeModalOpen, setRouteModalOpen] = useState(false);
+  // For a multi-scenario question: open the pathway graph modal after the
+  // routing modal is dismissed (Proceed → routing modal → pathway graph).
+  const [openGraph, setOpenGraph] = useState(false);
 
   const onSendPrompt = async (text: string) => {
     setIsSubmitting(true);
+    setPipeline(null);
+    setRouting(null);
+    setRag(null);
+    setShowRouting(false);
+    setRouteModalOpen(false);
+    setOpenGraph(false);
     try {
       const result = await api.createCase(text);
       setActiveId(result.case_id);
+      setPipeline(result.pipeline ?? null);
+      setRouting(result.routing ?? null);
+      setRag(null); // RAG answer is deferred — generated on Proceed
       refreshCases();
     } catch (e) {
       console.error(e);
@@ -330,11 +360,24 @@ export default function App() {
 
   const onConfirm = async () => {
     if (!active) return;
+    setShowRouting(true);    // reveal the routing bar (+ pathway panel for multi)
+    setRouteModalOpen(true); // pop the routing modal (every query)
+    if (routing?.strategy === "pipeline") {
+      // Multi-scenario: revealing the pathway panel IS the "proceed"; the user
+      // then approves a pathway there. Don't run the entry case as a single case.
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await api.confirmCase(active.case_id);
-      refreshActive();
-      refreshCases();
+      if (routing?.strategy === "rag") {
+        // RAG has no governed scenario to run — generate the deferred answer.
+        setRag(await api.answerRag(active.case_id));
+        refreshCases();
+      } else {
+        await api.confirmCase(active.case_id);
+        refreshActive();
+        refreshCases();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -359,6 +402,12 @@ export default function App() {
   };
   const onCancel = async () => {
     if (!active) return;
+    // Cancelled → nothing runs; clear the routing display too.
+    setRouting(null);
+    setRag(null);
+    setShowRouting(false);
+    setRouteModalOpen(false);
+    setOpenGraph(false);
     await api.cancelCase(active.case_id);
     refreshActive();
     refreshCases();
@@ -534,6 +583,7 @@ export default function App() {
         onOpenScenariosHelp={() => setModal({ kind: "scenarios-help" })}
         onOpenMetrics={() => setModal({ kind: "metrics" })}
         onOpenInsights={() => setModal({ kind: "insights" })}
+        onOpenOutcomeTree={() => setModal({ kind: "outcome-tree" })}
         onOpenPlatformFlow={() => setModal({ kind: "platform-flow" })}
         onOpenCaseSpec={() => setModal({ kind: "case-spec" })}
         onOpenAgentRun={() => {
@@ -543,6 +593,29 @@ export default function App() {
           }
         }}
       />
+      {routing && showRouting && <RouteProbabilityBar routing={routing} />}
+      {routing && routeModalOpen && (
+        <RouteModal
+          routing={routing}
+          onClose={() => {
+            setRouteModalOpen(false);
+            // Multi-scenario: reveal the pathway graph modal next.
+            if (routing.strategy === "pipeline") setOpenGraph(true);
+          }}
+        />
+      )}
+      {rag && <RagAnswerPanel rag={rag} onClose={() => { setRag(null); setRouting(null); }} />}
+      {pipeline && showRouting && (
+        <PipelineForecastPanel
+          pipeline={pipeline}
+          openGraph={openGraph}
+          onClose={() => setPipeline(null)}
+          onActiveCase={(cid) => {
+            setActiveId(cid);
+            refreshCases();
+          }}
+        />
+      )}
       <div className="main">
         <Console
           scenarios={scenarios}
@@ -554,6 +627,8 @@ export default function App() {
           onSendPrompt={onSendPrompt}
           onConfirm={onConfirm}
           onCancel={onCancel}
+          ragProceed={routing?.strategy === "rag" && !rag}
+          proceeded={showRouting}
           onSelectCase={setActiveId}
           onReplay={onReplay}
           onBaselineReplay={onBaselineReplay}
@@ -629,6 +704,9 @@ export default function App() {
       )}
       {modal.kind === "insights" && (
         <InsightsModal onClose={() => setModal({ kind: "none" })} />
+      )}
+      {modal.kind === "outcome-tree" && (
+        <OutcomeTreeModal scenarios={scenarios} onClose={() => setModal({ kind: "none" })} />
       )}
       {modal.kind === "platform-flow" && (
         <PlatformFlowModal active={active} onClose={() => setModal({ kind: "none" })} />
